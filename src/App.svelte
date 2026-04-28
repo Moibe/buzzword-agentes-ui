@@ -1621,7 +1621,7 @@
               <h3>{agenteEditandoId ? '✏️ Editar Agente' : '➕ Crear Nuevo Agente'}</h3>
             </button>
             {#if agenteFormAbierto}
-              <div class="crear-contexto-form">
+              <div class="crear-contexto-form" style="flex-direction: column; align-items: stretch; max-width: 720px;">
                 <div class="form-field">
                   <label for="agente-slug">Slug {agenteEditandoId ? '(no modificable)' : ''}</label>
                   <input
@@ -1632,7 +1632,9 @@
                     disabled={cargandoGuardarAgente || !!agenteEditandoId}
                     class="contexto-input"
                   />
-                  <p class="field-hint">Identidad estable cross-ambiente. Lowercase, dígitos y guiones, 2-64 chars.</p>
+                  <small style="font-size: 0.75rem; color: rgba(255,255,255,0.6); line-height: 1.3; display: block; margin-top: 0.25rem;">
+                    Identidad estable cross-ambiente. Lowercase, dígitos y guiones, 2-64 chars.
+                  </small>
                 </div>
                 <div class="form-field">
                   <label for="agente-nombre">Nombre</label>
