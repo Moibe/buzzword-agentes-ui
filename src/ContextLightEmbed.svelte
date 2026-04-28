@@ -1,7 +1,7 @@
 <script>
   // ─── Config ──────────────────────────────────────────
   const AMBIENTES = {
-    desarrollo: { url: 'http://127.0.0.1:8000', proxy: '/api-desarrollo' },
+    desarrollo: { url: 'http://127.0.0.1:8077', proxy: '/api-desarrollo' },
     staging: { url: 'http://172.10.30.15:8080', proxy: '/api-staging' },
     producción: { url: 'http://172.10.30.16:8080', proxy: '/api-produccion' },
   };
@@ -223,7 +223,7 @@
   </main>
 
   <footer class="embed-footer">
-    <p class="embed-disclaimer">MIDE · Museo Interactivo de Economía</p>
+    <p class="embed-disclaimer">Constructor Agente</p>
   </footer>
 
   {#if confirmarBorrar}

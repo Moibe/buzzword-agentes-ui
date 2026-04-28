@@ -65,7 +65,7 @@
   }
 
   const AMBIENTES = {
-    desarrollo: { url: 'http://127.0.0.1:8000', proxy: '/api-desarrollo', frontend: 'http://localhost:5173' },
+    desarrollo: { url: 'http://127.0.0.1:8077', proxy: '/api-desarrollo', frontend: 'http://localhost:5173' },
     staging: { url: 'http://172.10.30.15:8080', proxy: '/api-staging', frontend: 'http://172.10.30.15:4173' },
     producción: { url: 'http://172.10.30.16:8080', proxy: '/api-produccion', frontend: 'http://172.10.30.16:4173' },
   };
@@ -150,7 +150,7 @@
     {
       id: 1,
       role: 'bot',
-      text: '¡Hola! Soy el asistente del MIDE. ¿En qué puedo ayudarte hoy?',
+      text: '¡Hola! Soy el asistente. ¿En qué puedo ayudarte hoy?',
       time: formatTime(new Date()),
     },
   ]);
@@ -385,11 +385,11 @@
   let nuevoContextoEmbedding = $state('');
   let nuevoContextoChunkSize = $state('1500');
 
-  // Nombre auto-generado: mide-<alias_modelo>-<chunk>
+  // Nombre auto-generado: bzz-<alias_modelo>-<chunk>
   const nombreContextoGenerado = $derived.by(() => {
     const alias = aliasModeloEmbedding(nuevoContextoEmbedding);
     const chunk = nuevoContextoChunkSize || '1500';
-    return alias ? `mide-${alias}-${chunk}` : 'mide--1500';
+    return alias ? `bzz-${alias}-${chunk}` : 'bzz--1500';
   });
   let cargandoCrearContexto = $state(false);
   let mensajeCrearContexto = $state('');
@@ -417,6 +417,170 @@
   let modeloSeleccionado = $state(null);
   let infoModeloSeleccionado = $state(null);
   let cargandoInfoModelo = $state(false);
+
+  // ─── Agentes (CRUD) ───────────────────────────────────────────
+  const SLUG_REGEX = /^[a-z][a-z0-9-]{1,63}$/;
+  let agentes = $state([]);
+  let cargandoAgentes = $state(false);
+  let errorCargarAgentes = $state('');
+  let agenteFormAbierto = $state(false);
+  let agenteEditandoId = $state(null);
+  let agenteFormSlug = $state('');
+  let agenteFormNombre = $state('');
+  let agenteFormInstrucciones = $state('');
+  let agenteFormContexto = $state('');
+  let agenteFormModelo = $state('mistral');
+  let agenteFormHistorialMax = $state(5);
+  let cargandoGuardarAgente = $state(false);
+  let mensajeAgente = $state('');
+  let agenteABorrar = $state(null);
+  let mostrarConfirmacionBorrarAgente = $state(false);
+  let cargandoBorrarAgente = $state(false);
+
+  function resetAgenteForm() {
+    agenteEditandoId = null;
+    agenteFormSlug = '';
+    agenteFormNombre = '';
+    agenteFormInstrucciones = '';
+    agenteFormContexto = '';
+    agenteFormModelo = 'mistral';
+    agenteFormHistorialMax = 5;
+    mensajeAgente = '';
+  }
+
+  function abrirFormCrearAgente() {
+    resetAgenteForm();
+    agenteFormAbierto = true;
+  }
+
+  function abrirFormEditarAgente(agente) {
+    agenteEditandoId = agente.id;
+    agenteFormSlug = agente.slug;
+    agenteFormNombre = agente.nombre;
+    agenteFormInstrucciones = agente.instrucciones;
+    agenteFormContexto = agente.contexto;
+    agenteFormModelo = agente.modelo_llm;
+    agenteFormHistorialMax = agente.historial_max;
+    mensajeAgente = '';
+    agenteFormAbierto = true;
+  }
+
+  function cerrarFormAgente() {
+    agenteFormAbierto = false;
+    resetAgenteForm();
+  }
+
+  async function cargarAgentes() {
+    cargandoAgentes = true;
+    errorCargarAgentes = '';
+    try {
+      const res = await fetch(`${apiUrl.base}/agentes`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      agentes = await res.json();
+    } catch (err) {
+      errorCargarAgentes = `No se pudieron cargar los agentes: ${err.message}`;
+      agentes = [];
+    } finally {
+      cargandoAgentes = false;
+    }
+  }
+
+  async function guardarAgente() {
+    const slug = agenteFormSlug.trim();
+    const nombre = agenteFormNombre.trim();
+    const instrucciones = agenteFormInstrucciones.trim();
+    const contexto = agenteFormContexto.trim();
+    const modelo_llm = agenteFormModelo.trim();
+    const historial_max = parseInt(agenteFormHistorialMax, 10);
+
+    if (!agenteEditandoId && !SLUG_REGEX.test(slug)) {
+      mensajeAgente = '❌ Slug inválido. Usa minúsculas, dígitos y guiones (2-64 chars, empieza con letra).';
+      return;
+    }
+    if (!nombre || nombre.length > 80) {
+      mensajeAgente = '❌ Nombre requerido, máximo 80 caracteres.';
+      return;
+    }
+    if (!instrucciones) {
+      mensajeAgente = '❌ Instrucciones no pueden estar vacías.';
+      return;
+    }
+    if (!contexto) {
+      mensajeAgente = '❌ Selecciona un contexto.';
+      return;
+    }
+    if (!modelo_llm) {
+      mensajeAgente = '❌ Selecciona un modelo LLM.';
+      return;
+    }
+    if (isNaN(historial_max) || historial_max < 0 || historial_max > 50) {
+      mensajeAgente = '❌ Historial max debe ser entero entre 0 y 50.';
+      return;
+    }
+
+    cargandoGuardarAgente = true;
+    mensajeAgente = '';
+
+    try {
+      const editando = !!agenteEditandoId;
+      const url = editando
+        ? `${apiUrl.base}/agentes/${encodeURIComponent(agenteEditandoId)}`
+        : `${apiUrl.base}/agentes`;
+      const body = editando
+        ? { nombre, instrucciones, contexto, modelo_llm, historial_max }
+        : { slug, nombre, instrucciones, contexto, modelo_llm, historial_max };
+
+      const res = await fetch(url, {
+        method: editando ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        let msg = txt;
+        try {
+          const j = JSON.parse(txt);
+          msg = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail ?? j);
+        } catch {}
+        if (res.status === 409) throw new Error(`Ya existe un agente con ese slug.`);
+        throw new Error(`HTTP ${res.status}: ${msg}`);
+      }
+
+      mensajeAgente = editando ? '✅ Agente actualizado' : '✅ Agente creado';
+      await cargarAgentes();
+      setTimeout(() => {
+        cerrarFormAgente();
+      }, 800);
+    } catch (err) {
+      mensajeAgente = `❌ ${err.message}`;
+    } finally {
+      cargandoGuardarAgente = false;
+    }
+  }
+
+  function pedirConfirmacionBorrarAgente(agente) {
+    agenteABorrar = agente;
+    mostrarConfirmacionBorrarAgente = true;
+  }
+
+  async function borrarAgenteConfirmado() {
+    if (!agenteABorrar) return;
+    cargandoBorrarAgente = true;
+    try {
+      const res = await fetch(`${apiUrl.base}/agentes/${encodeURIComponent(agenteABorrar.id)}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok && res.status !== 204) throw new Error(`HTTP ${res.status}`);
+      await cargarAgentes();
+      mostrarConfirmacionBorrarAgente = false;
+      agenteABorrar = null;
+    } catch (err) {
+      mensajeAgente = `❌ Error al borrar: ${err.message}`;
+    } finally {
+      cargandoBorrarAgente = false;
+    }
+  }
   // Cache por ambiente para modelos de embedding
   let cacheModelosEmbedding = {};
   let chunkSugeridoPorModelo = {
@@ -1062,7 +1226,7 @@
   const MENSAJE_INICIAL = {
     id: 1,
     role: 'bot',
-    text: '¡Hola! Soy el asistente del MIDE. ¿En qué puedo ayudarte hoy?',
+    text: '¡Hola! Soy el asistente. ¿En qué puedo ayudarte hoy?',
     time: formatTime(new Date()),
   };
 
@@ -1194,7 +1358,7 @@
         </svg>
       </div>
       <div class="header-info">
-        <h1 class="header-title">Asistente MIDE</h1>
+        <h1 class="header-title">Constructor Agente</h1>
         <span class="header-status" onclick={verificarSalud} onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && verificarSalud()} title="Click para verificar conexión" role="button" tabindex="0">
           <span class="status-dot" class:online={estadoSalud === 'online'} class:offline={estadoSalud === 'offline'} class:checking={estadoSalud === 'checking'}></span>
           {#if estadoSalud === 'online'}
@@ -1364,7 +1528,7 @@
         </svg>
       </button>
     </div>
-    <p class="disclaimer">MIDE · Museo Interactivo de Economía</p>
+    <p class="disclaimer">Constructor Agente</p>
   </footer>
   {/if}
 
@@ -1394,6 +1558,13 @@
 
         <!-- Sub-tab bar -->
         <div class="vectorizacion-subtabs">
+          <button
+            class="vectorizacion-subtab-btn"
+            class:active={vectorizacionTab === 'agente'}
+            onclick={() => { vectorizacionTab = 'agente'; cargarAgentes(); cargarContextos(); }}
+          >
+            🧠 Agente
+          </button>
           <button
             class="vectorizacion-subtab-btn"
             class:active={vectorizacionTab === 'contextos'}
@@ -1443,6 +1614,180 @@
         </div>
 
         <!-- Dashboard -->
+        <!-- Agente -->
+        {#if vectorizacionTab === 'agente'}
+          <div class="crear-contexto-wrap" class:abierto={agenteFormAbierto}>
+            <button class="crear-contexto-toggle" onclick={() => agenteFormAbierto ? cerrarFormAgente() : abrirFormCrearAgente()}>
+              <h3>{agenteEditandoId ? '✏️ Editar Agente' : '➕ Crear Nuevo Agente'}</h3>
+            </button>
+            {#if agenteFormAbierto}
+              <div class="crear-contexto-form">
+                <div class="form-field">
+                  <label for="agente-slug">Slug {agenteEditandoId ? '(no modificable)' : ''}</label>
+                  <input
+                    id="agente-slug"
+                    type="text"
+                    placeholder="ej: soporte-ventas"
+                    bind:value={agenteFormSlug}
+                    disabled={cargandoGuardarAgente || !!agenteEditandoId}
+                    class="contexto-input"
+                  />
+                  <p class="field-hint">Identidad estable cross-ambiente. Lowercase, dígitos y guiones, 2-64 chars.</p>
+                </div>
+                <div class="form-field">
+                  <label for="agente-nombre">Nombre</label>
+                  <input
+                    id="agente-nombre"
+                    type="text"
+                    placeholder="ej: Soporte Ventas"
+                    bind:value={agenteFormNombre}
+                    disabled={cargandoGuardarAgente}
+                    maxlength="80"
+                    class="contexto-input"
+                  />
+                </div>
+                <div class="form-field">
+                  <label for="agente-instrucciones">Instrucciones (system prompt)</label>
+                  <textarea
+                    id="agente-instrucciones"
+                    bind:value={agenteFormInstrucciones}
+                    disabled={cargandoGuardarAgente}
+                    rows="6"
+                    class="contexto-input"
+                    style="font-family: inherit; resize: vertical;"
+                    placeholder="Eres un asistente experto en..."
+                  ></textarea>
+                </div>
+                <div class="form-field">
+                  <label for="agente-contexto">Contexto</label>
+                  <select
+                    id="agente-contexto"
+                    bind:value={agenteFormContexto}
+                    disabled={cargandoGuardarAgente}
+                    class="contexto-input"
+                    style="display: block; width: 100%;"
+                  >
+                    <option value="">-- Selecciona Contexto --</option>
+                    {#each contextos as ctx (ctx)}
+                      <option value={ctx}>{ctx}</option>
+                    {/each}
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label for="agente-modelo">Modelo LLM</label>
+                  <select
+                    id="agente-modelo"
+                    bind:value={agenteFormModelo}
+                    disabled={cargandoGuardarAgente}
+                    class="contexto-input"
+                    style="display: block; width: 100%;"
+                  >
+                    {#each MODELOS as m (m)}
+                      <option value={m}>{m}</option>
+                    {/each}
+                    {#each MODELOS_OPENAI as m (m)}
+                      <option value={m}>{m}</option>
+                    {/each}
+                  </select>
+                </div>
+                <div class="form-field">
+                  <label for="agente-historial">Historial Max (turnos)</label>
+                  <input
+                    id="agente-historial"
+                    type="number"
+                    min="0"
+                    max="50"
+                    bind:value={agenteFormHistorialMax}
+                    disabled={cargandoGuardarAgente}
+                    class="contexto-input"
+                  />
+                </div>
+                <div style="display: flex; gap: 0.5rem;">
+                  <button
+                    onclick={guardarAgente}
+                    disabled={cargandoGuardarAgente}
+                    class="crear-contexto-btn"
+                  >
+                    {cargandoGuardarAgente ? '⟳ Guardando...' : (agenteEditandoId ? '✓ Actualizar' : '✓ Crear')}
+                  </button>
+                  <button
+                    onclick={cerrarFormAgente}
+                    disabled={cargandoGuardarAgente}
+                    class="crear-contexto-btn"
+                    style="background: rgba(255,255,255,0.15);"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+                {#if mensajeAgente}
+                  <p class="mensaje-contexto" class:success={mensajeAgente.includes('✅')}>
+                    {mensajeAgente}
+                  </p>
+                {/if}
+              </div>
+            {/if}
+          </div>
+
+          <div class="contextos-table-wrap">
+            <div class="seccion-header">
+              <h3>🧠 Agentes Existentes</h3>
+              <button onclick={cargarAgentes} class="vectorizacion-action-btn contextos-recargar-btn" disabled={cargandoAgentes} aria-label="Recargar agentes" title="Recargar agentes">
+                ↻
+              </button>
+            </div>
+            {#if errorCargarAgentes}
+              <p class="mensaje-contexto" style="margin-top: 0.5rem;">❌ {errorCargarAgentes}</p>
+            {/if}
+            {#if cargandoAgentes}
+              <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando agentes...</p>
+            {:else if agentes.length === 0}
+              <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">No hay agentes creados todavía.</p>
+            {:else}
+              <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.5rem;">
+                {#each agentes as agente (agente.id)}
+                  <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 1rem; display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;">
+                    <div style="flex: 1; min-width: 0;">
+                      <div style="display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap;">
+                        <strong style="color: #fff; font-size: 1rem;">{agente.nombre}</strong>
+                        <code style="background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; color: rgba(255,255,255,0.75);">{agente.slug}</code>
+                      </div>
+                      <p style="color: rgba(255,255,255,0.7); font-size: 0.85rem; margin: 0.5rem 0 0 0; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
+                        {agente.instrucciones}
+                      </p>
+                      <div style="display: flex; gap: 1rem; margin-top: 0.5rem; font-size: 0.75rem; color: rgba(255,255,255,0.55);">
+                        <span>📂 {agente.contexto}</span>
+                        <span>🤖 {agente.modelo_llm}</span>
+                        <span>🔁 {agente.historial_max} turnos</span>
+                      </div>
+                    </div>
+                    <div style="display: flex; gap: 0.4rem; flex-shrink: 0;">
+                      <button onclick={() => abrirFormEditarAgente(agente)} class="vectorizacion-action-btn" title="Editar agente">✏️</button>
+                      <button onclick={() => pedirConfirmacionBorrarAgente(agente)} class="vectorizacion-action-btn" title="Borrar agente">🗑️</button>
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          </div>
+
+          {#if mostrarConfirmacionBorrarAgente && agenteABorrar}
+            <div class="confirmacion-borrar">
+              <h3>⚠️ Confirmar Borrado de Agente</h3>
+              <p style="color: rgba(255,255,255,0.85);">
+                ¿Estás seguro de borrar el agente <strong>{agenteABorrar.nombre}</strong> (<code>{agenteABorrar.slug}</code>)? Esta acción no se puede deshacer.
+              </p>
+              <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                <button onclick={borrarAgenteConfirmado} disabled={cargandoBorrarAgente} class="crear-contexto-btn" style="background: #c8102e;">
+                  {cargandoBorrarAgente ? '⟳ Borrando...' : '🗑️ Sí, borrar'}
+                </button>
+                <button onclick={() => { mostrarConfirmacionBorrarAgente = false; agenteABorrar = null; }} disabled={cargandoBorrarAgente} class="crear-contexto-btn" style="background: rgba(255,255,255,0.15);">
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          {/if}
+        {/if}
+
         <!-- Contextos -->
         {#if vectorizacionTab === 'contextos'}
           <div class="crear-contexto-wrap" class:abierto={crearContextoAbierto}>
@@ -2032,7 +2377,7 @@
         {/if}
 
       </div>
-      <p class="disclaimer">MIDE · Museo Interactivo de Economía</p>
+      <p class="disclaimer">Constructor Agente</p>
     </main>
   {/if}
 
@@ -2127,7 +2472,7 @@
             </button>
           </div>
           <p style="color: rgba(255,255,255,0.7); font-size: 0.9rem; margin: 0.25rem 0 1rem 0; line-height: 1.5;">
-            Cada contexto se nombra como <code style="background:rgba(0,0,0,0.25); padding:2px 6px; border-radius:4px;">mide-&lt;alias&gt;-&lt;chunk&gt;</code>.
+            Cada contexto se nombra como <code style="background:rgba(0,0,0,0.25); padding:2px 6px; border-radius:4px;">bzz-&lt;alias&gt;-&lt;chunk&gt;</code>.
             Si dejas el alias vacío se usa la regla por defecto (texto antes del primer <code>-</code>, <code>_</code> o <code>:</code>),
             lo cual puede causar colisiones entre modelos parecidos. Edita el alias para evitarlas.
           </p>
@@ -2149,7 +2494,7 @@
                 value={MODELO_ALIAS[modelo] ?? ''}
                 oninput={(e) => { MODELO_ALIAS[modelo] = e.currentTarget.value; guardarAlias(); }}
               />
-              <span class="alias-preview">→ mide-<strong>{aliasModeloEmbedding(modelo)}</strong>-1500</span>
+              <span class="alias-preview">→ bzz-<strong>{aliasModeloEmbedding(modelo)}</strong>-1500</span>
             </div>
           {/snippet}
 

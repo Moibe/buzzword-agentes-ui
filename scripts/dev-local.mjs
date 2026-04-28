@@ -4,9 +4,9 @@ import net from 'node:net';
 import { resolve } from 'node:path';
 
 const rootDir = process.cwd();
-const apiDir = resolve(rootDir, '..', 'mide-chatbot');
+const apiDir = resolve(rootDir, '..', 'constructor-agente-rag');
 const API_HOST = '127.0.0.1';
-const API_PORT = 8000;
+const API_PORT = 8077;
 
 function pickPythonCommand() {
   const winVenvPython = resolve(apiDir, 'venv', 'Scripts', 'python.exe');
@@ -56,7 +56,7 @@ function shutdown(signal = 'SIGTERM') {
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 
-function waitForApiReady(host, port, timeoutMs = 20000) {
+function waitForApiReady(host, port, timeoutMs = 90000) {
   const start = Date.now();
 
   return new Promise((resolveReady, rejectReady) => {

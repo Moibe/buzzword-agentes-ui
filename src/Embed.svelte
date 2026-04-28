@@ -3,7 +3,7 @@
 
   // ─── Config ──────────────────────────────────────────
   const AMBIENTES = {
-    desarrollo: { url: 'http://127.0.0.1:8000', proxy: '/api-desarrollo' },
+    desarrollo: { url: 'http://127.0.0.1:8077', proxy: '/api-desarrollo' },
     staging: { url: 'http://172.10.30.15:8080', proxy: '/api-staging' },
     producción: { url: 'http://172.10.30.16:8080', proxy: '/api-produccion' },
   };
@@ -47,7 +47,7 @@
   const MENSAJE_INICIAL = {
     id: 1,
     role: 'bot',
-    text: '¡Hola! Soy el asistente del MIDE. ¿En qué puedo ayudarte hoy?',
+    text: '¡Hola! Soy un asistente. ¿En qué puedo ayudarte hoy?',
     time: formatTime(new Date()),
   };
 
@@ -190,7 +190,7 @@
       </svg>
     </div>
     <div class="embed-header-info">
-      <span class="embed-title">Asistente MIDE</span>
+      <span class="embed-title">Asistente</span>
       {#if contextoSeleccionado}
         <span class="embed-context">{contextoSeleccionado}</span>
       {/if}
@@ -257,7 +257,7 @@
         </svg>
       </button>
     </div>
-    <p class="embed-disclaimer">MIDE · Museo Interactivo de Economía</p>
+    <p class="embed-disclaimer">Constructor Agente</p>
   </footer>
 </div>
 
