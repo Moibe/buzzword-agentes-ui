@@ -18,6 +18,7 @@ export default defineConfig(({ mode }) => {
     },
     preview: {
       port: 4175,
+      host: true,
     },
     server: {
       proxy: {
