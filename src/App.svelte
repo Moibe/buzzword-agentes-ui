@@ -159,22 +159,56 @@
   ]);
 
   const MODELOS = ['mistral', 'llama3.1'];
-  const MODELOS_OPENAI = ['gpt-4o-mini', 'gpt-4o', 'gpt-3.5-turbo'];
+  const MODELOS_OPENAI = ['gpt-5.5', 'gpt-5.5-pro', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano', 'gpt-4o', 'gpt-4o-mini'];
 
   // Plantillas de instrucciones sugeridas por modelo. Modelos pequeños/locales
   // necesitan más explicitud; modelos grandes (OpenAI) responden bien a prosa.
+  const _PROMPT_OPENAI_BASIC = `[regla critica]
+
+Eres un asistente experto en [tu dominio]. Responde de forma concisa y profesional. Si la consulta sale de tu dominio, indica amablemente que no es tu especialidad.`;
+  const _PROMPT_OPENAI_PREMIUM = `[regla critica]
+
+Eres un asistente experto en [tu dominio]. Responde con precisión, adaptando el tono a la situación del usuario. Si la consulta sale de tu dominio, redirígela educadamente sugiriendo dónde podría obtener ayuda.`;
   const PLACEHOLDER_INSTRUCCIONES = {
-    mistral: `*** REGLA CRÍTICA: Responde en máximo 2 oraciones. ***
+    mistral: `[regla critica]
 
 Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionados a [tu dominio]. Si te preguntan otra cosa, di brevemente que no es tu especialidad.`,
-    'llama3.1': `*** REGLA CRÍTICA: Responde en máximo 2 oraciones. ***
+    'llama3.1': `[regla critica]
 
 Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionados a [tu dominio]. Si la pregunta sale del tema, dilo y no inventes información.`,
-    'gpt-4o-mini': `Eres un asistente experto en [tu dominio]. Responde de forma concisa y profesional. Si la consulta sale de tu dominio, indica amablemente que no es tu especialidad.`,
-    'gpt-4o': `Eres un asistente experto en [tu dominio]. Responde con precisión, adaptando el tono a la situación del usuario. Si la consulta sale de tu dominio, redirígela educadamente sugiriendo dónde podría obtener ayuda.`,
-    'gpt-3.5-turbo': `Eres un asistente experto en [tu dominio]. Responde en máximo 3 oraciones, de forma directa. Si te preguntan algo fuera del tema, di que no es tu especialidad.`,
+    'gpt-5.5': _PROMPT_OPENAI_PREMIUM,
+    'gpt-5.5-pro': _PROMPT_OPENAI_PREMIUM,
+    'gpt-5': _PROMPT_OPENAI_PREMIUM,
+    'gpt-5-mini': _PROMPT_OPENAI_BASIC,
+    'gpt-5-nano': _PROMPT_OPENAI_BASIC,
+    'gpt-4o': _PROMPT_OPENAI_PREMIUM,
+    'gpt-4o-mini': _PROMPT_OPENAI_BASIC,
   };
   const PLACEHOLDER_INSTRUCCIONES_FALLBACK = 'Eres un asistente experto en [tu dominio]...';
+
+  // Metadatos por variable. Las variables que no aparezcan aquí son requeridas
+  // (vacías dejan [xxx] literal en el prompt). Las marcadas como opcional, si
+  // se dejan vacías, se quitan del prompt limpiamente.
+  const PLACEHOLDER_VARIABLES_META = {
+    'regla critica': {
+      optional: true,
+      placeholder: '*** REGLA CRÍTICA: Responde en máximo 2 oraciones. ***',
+      wrap: '***',
+    },
+    'tu dominio': {
+      description: 'el área de especialización del agente (ej. ventas, soporte técnico, recursos humanos)',
+    },
+  };
+
+  // Envuelve el valor con el delimitador (ej. '***') si el usuario no lo
+  // incluyó. Idempotente: si ya empieza/termina con el delimitador, no se duplica.
+  function aplicarWrap(valor, wrap) {
+    if (!wrap) return valor;
+    let v = valor.trim();
+    if (!v.startsWith(wrap)) v = `${wrap} ${v}`;
+    if (!v.endsWith(wrap)) v = `${v} ${wrap}`;
+    return v;
+  }
 
   let contextos = $state([]);
   let cargandoContextos = $state(false);
@@ -322,6 +356,93 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   const placeholderInstrucciones = $derived(
     PLACEHOLDER_INSTRUCCIONES[agenteFormModelo] ?? PLACEHOLDER_INSTRUCCIONES_FALLBACK
   );
+
+  // Extrae nombres únicos de variables tipo [xxx] de un template.
+  function extraerVariables(template) {
+    if (!template) return [];
+    const seen = new Set();
+    for (const m of template.matchAll(/\[([^\]]+)\]/g)) seen.add(m[1].trim());
+    return [...seen];
+  }
+  const placeholderVariables = $derived(extraerVariables(placeholderInstrucciones));
+  let agenteFormVariables = $state({});
+
+  // Sincroniza el mapa de variables cuando cambia el modelo: conserva valores
+  // de variables que mantengan el mismo nombre, e inicializa las nuevas en ''.
+  function sincronizarVariablesAgente() {
+    const nombres = extraerVariables(
+      PLACEHOLDER_INSTRUCCIONES[agenteFormModelo] ?? PLACEHOLDER_INSTRUCCIONES_FALLBACK
+    );
+    const prev = agenteFormVariables;
+    const next = {};
+    for (const n of nombres) next[n] = prev[n] ?? '';
+    agenteFormVariables = next;
+  }
+
+  // Construye el texto plano de instrucciones a partir de la plantilla.
+  // Variables llenas → sustituye con el valor.
+  // Variables opcionales vacías → quita el placeholder.
+  // Variables requeridas vacías → deja [xxx] literal como cue de "te falta llenar esto".
+  function construirInstruccionesPlain() {
+    let texto = placeholderInstrucciones;
+    for (const [nombre, valor] of Object.entries(agenteFormVariables)) {
+      const meta = PLACEHOLDER_VARIABLES_META[nombre];
+      const valorTrim = (valor ?? '').trim();
+      if (valorTrim) {
+        const valorFinal = aplicarWrap(valorTrim, meta?.wrap);
+        texto = texto.split(`[${nombre}]`).join(valorFinal);
+      } else if (meta?.optional) {
+        texto = texto.split(`[${nombre}]`).join('');
+      }
+    }
+    // Limpia leading whitespace y colapsa más de 2 newlines consecutivos a 2.
+    return texto.replace(/^\s+/, '').replace(/\n{3,}/g, '\n\n');
+  }
+
+  // Auto-sincroniza el textarea con la plantilla + variables en modo creación.
+  // En modo edición no toca nada — el usuario maneja libremente las instrucciones
+  // existentes del agente.
+  $effect(() => {
+    if (!agenteFormAbierto || agenteEditandoId) return;
+    agenteFormInstrucciones = construirInstruccionesPlain();
+  });
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  // Construye la vista previa con valores de variables en <strong>.
+  // Variables requeridas sin llenar → [xxx] atenuado.
+  // Variables opcionales sin llenar → no se muestra nada (espejo del comportamiento del prompt final).
+  const previewInstruccionesHtml = $derived.by(() => {
+    const tpl = placeholderInstrucciones;
+    if (!tpl) return '';
+    const partes = tpl.split(/(\[[^\]]+\])/g);
+    const html = partes.map((parte) => {
+      const m = parte.match(/^\[(.+)\]$/);
+      if (m) {
+        const nombre = m[1].trim();
+        const valor = agenteFormVariables[nombre];
+        const meta = PLACEHOLDER_VARIABLES_META[nombre];
+        if (valor && valor.trim()) {
+          const valorFinal = aplicarWrap(valor.trim(), meta?.wrap);
+          return `<strong>${escapeHtml(valorFinal)}</strong>`;
+        }
+        if (meta?.optional) {
+          return '';
+        }
+        return `<span style="opacity:0.5">${escapeHtml(parte)}</span>`;
+      }
+      return escapeHtml(parte);
+    }).join('');
+    return html.replace(/^\s+/, '').replace(/\n{3,}/g, '\n\n');
+  });
+
   let cargandoGuardarAgente = $state(false);
   let mensajeAgente = $state('');
   let agenteABorrar = $state(null);
@@ -337,6 +458,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     agenteFormModelo = 'mistral';
     agenteFormHistorialMax = 5;
     mensajeAgente = '';
+    sincronizarVariablesAgente();
   }
 
   function abrirFormCrearAgente() {
@@ -353,6 +475,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     agenteFormModelo = agente.modelo_llm;
     agenteFormHistorialMax = agente.historial_max;
     mensajeAgente = '';
+    sincronizarVariablesAgente();
     agenteFormAbierto = true;
   }
 
@@ -396,10 +519,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       mensajeAgente = '❌ Instrucciones no pueden estar vacías.';
       return;
     }
-    if (!contexto) {
-      mensajeAgente = '❌ Selecciona una base de conocimiento.';
-      return;
-    }
+    // contexto es opcional: vacío = agente sin RAG (chat puro, solo instrucciones + LLM).
     if (!modelo_llm) {
       mensajeAgente = '❌ Selecciona un modelo LLM.';
       return;
@@ -1342,7 +1462,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     </div>
     {#if agenteSeleccionado}
       <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; font-size: 0.78rem; color: rgba(255,255,255,0.7);">
-        <span title="Base de Conocimiento">📚 {agenteSeleccionado.contexto}</span>
+        {#if agenteSeleccionado.contexto}
+          <span title="Base de Conocimiento">📚 {agenteSeleccionado.contexto}</span>
+        {:else}
+          <span title="Sin base de conocimiento — agente conversacional puro" style="opacity:0.7;">🧠 sin RAG</span>
+        {/if}
         <span title="Modelo LLM">🤖 {agenteSeleccionado.modelo_llm}</span>
         <span title="Historial">🔁 {agenteSeleccionado.historial_max} turnos</span>
       </div>
@@ -1461,13 +1585,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         <div class="vectorizacion-subtabs">
           <button
             class="vectorizacion-subtab-btn"
-            class:active={vectorizacionTab === 'agente'}
-            onclick={() => { vectorizacionTab = 'agente'; cargarAgentes(); cargarContextos(); }}
-          >
-            🧠 Agente
-          </button>
-          <button
-            class="vectorizacion-subtab-btn"
             class:active={vectorizacionTab === 'contextos'}
             onclick={() => { vectorizacionTab = 'contextos'; vinoDeEditarContexto = false; }}
           >
@@ -1483,6 +1600,13 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             title="Accede desde el ✏️ de una base de conocimiento"
           >
             📄 Documentos
+          </button>
+          <button
+            class="vectorizacion-subtab-btn"
+            class:active={vectorizacionTab === 'agente'}
+            onclick={() => { vectorizacionTab = 'agente'; cargarAgentes(); cargarContextos(); }}
+          >
+            🧠 Agente
           </button>
           <button
             class="vectorizacion-subtab-btn"
@@ -1550,10 +1674,26 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   />
                 </div>
                 <div class="form-field">
+                  <label for="agente-contexto">Base de Conocimiento</label>
+                  <select
+                    id="agente-contexto"
+                    bind:value={agenteFormContexto}
+                    disabled={cargandoGuardarAgente}
+                    class="contexto-input"
+                    style="display: block; width: 100%;"
+                  >
+                    <option value="">— Sin base de conocimiento —</option>
+                    {#each contextos as ctx (ctx)}
+                      <option value={ctx}>{ctx}</option>
+                    {/each}
+                  </select>
+                </div>
+                <div class="form-field">
                   <label for="agente-modelo">Modelo LLM</label>
                   <select
                     id="agente-modelo"
                     bind:value={agenteFormModelo}
+                    onchange={sincronizarVariablesAgente}
                     disabled={cargandoGuardarAgente}
                     class="contexto-input"
                     style="display: block; width: 100%;"
@@ -1569,6 +1709,51 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     El modelo que elijas determina el estilo de prompt sugerido abajo.
                   </small>
                 </div>
+
+                {#if placeholderVariables.length > 0}
+                  <div class="form-field">
+                    <label>Variables de la plantilla</label>
+                    <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                      {#each placeholderVariables as varName (varName)}
+                        {@const meta = PLACEHOLDER_VARIABLES_META[varName]}
+                        <div>
+                          <div style="font-size: 0.7rem; color: rgba(0,0,0,0.7); margin-bottom: 0.25rem; font-weight: 600;">
+                            <code style="background: rgba(0,0,0,0.08); padding: 1px 5px; border-radius: 3px;">[{varName}]</code>
+                            {#if meta?.optional}
+                              <em style="color: rgba(0,0,0,0.55); font-style: italic; font-size: 0.7rem; margin-left: 0.4rem; font-weight: normal;">— opcional, déjalo vacío para omitir{#if meta.wrap}; los <code>{meta.wrap}</code> se añaden automáticamente{/if}</em>
+                            {:else if meta?.description}
+                              <em style="color: rgba(0,0,0,0.55); font-style: italic; font-size: 0.7rem; margin-left: 0.4rem; font-weight: normal;">— {meta.description}</em>
+                            {/if}
+                          </div>
+                          <input
+                            type="text"
+                            placeholder={meta?.placeholder ?? varName}
+                            bind:value={agenteFormVariables[varName]}
+                            disabled={cargandoGuardarAgente}
+                            class="contexto-input"
+                            style="width: 100%; box-sizing: border-box;{meta?.optional ? ' border-style: dashed;' : ''}"
+                            aria-label={`Valor para [${varName}]`}
+                          />
+                        </div>
+                      {/each}
+                    </div>
+                    <small style="font-size: 0.75rem; color: rgba(0,0,0,0.6); line-height: 1.3; display: block; margin-top: 0.4rem;">
+                      Llena las variables y las instrucciones se generan automáticamente abajo. Las variables marcadas como <em>opcional</em> se pueden vaciar para omitirlas del prompt. Puedes editar el textarea manualmente como ajuste final.
+                    </small>
+                  </div>
+
+                  <div class="form-field">
+                    <label>Vista previa</label>
+                    <div
+                      style="padding: 0.75rem 1rem; background: rgba(0,0,0,0.18); border: 1px dashed rgba(255,255,255,0.25); border-radius: 8px; white-space: pre-wrap; font-family: inherit; font-size: 0.85rem; line-height: 1.5; color: rgba(255,255,255,0.9); max-height: 240px; overflow-y: auto;"
+                      aria-live="polite"
+                    >{@html previewInstruccionesHtml}</div>
+                    <small style="font-size: 0.75rem; color: rgba(0,0,0,0.6); line-height: 1.3; display: block; margin-top: 0.4rem;">
+                      Los valores que insertaste aparecen en negrita. Las variables sin llenar quedan atenuadas como <code>[xxx]</code>.
+                    </small>
+                  </div>
+                {/if}
+
                 <div class="form-field">
                   <label for="agente-instrucciones">Instrucciones (system prompt)</label>
                   <textarea
@@ -1580,21 +1765,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     style="font-family: inherit; resize: vertical;"
                     placeholder={placeholderInstrucciones}
                   ></textarea>
-                </div>
-                <div class="form-field">
-                  <label for="agente-contexto">Base de Conocimiento</label>
-                  <select
-                    id="agente-contexto"
-                    bind:value={agenteFormContexto}
-                    disabled={cargandoGuardarAgente}
-                    class="contexto-input"
-                    style="display: block; width: 100%;"
-                  >
-                    <option value="">-- Selecciona Base de Conocimiento --</option>
-                    {#each contextos as ctx (ctx)}
-                      <option value={ctx}>{ctx}</option>
-                    {/each}
-                  </select>
                 </div>
                 <div class="form-field">
                   <label for="agente-historial">Historial Max (turnos)</label>
@@ -1661,7 +1831,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                         {agente.instrucciones}
                       </p>
                       <div style="display: flex; gap: 1rem; margin-top: 0.5rem; font-size: 0.75rem; color: rgba(255,255,255,0.55);">
-                        <span>📚 {agente.contexto}</span>
+                        {#if agente.contexto}
+                          <span>📚 {agente.contexto}</span>
+                        {:else}
+                          <span style="opacity:0.7;">🧠 sin RAG</span>
+                        {/if}
                         <span>🤖 {agente.modelo_llm}</span>
                         <span>🔁 {agente.historial_max} turnos</span>
                       </div>
