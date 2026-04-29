@@ -23,13 +23,13 @@
   const SESSION_ID = generateSessionId();
   let logs = $state([]);
 
-  async function registrarLog({ pregunta, historial, respuesta, ms, error }) {
+  async function registrarLog({ pregunta, historial, respuesta, ms, error, contexto, modelo }) {
     const entry = {
       fecha: new Date().toISOString(),
       sesion: SESSION_ID,
       ambiente: ambienteSeleccionado,
-      modelo,
-      contexto: contextoSeleccionado,
+      modelo: modelo ?? '',
+      contexto: contexto ?? '',
       pregunta,
       historial: JSON.stringify(historial),
       respuesta: respuesta ?? '',
@@ -114,6 +114,9 @@
     console.log(`🔄 Ambiente cambiado a: ${nuevoAmbiente}`);
     console.log(`📍 API URL: ${apiUrl.real}/chatbot`);
     cargarContextos();
+    cargarAgentes();
+    lightbotAgenteSlug = '';
+    contextlightAgenteSlug = '';
     if (activeTab === 'vectorizacion') {
       cargarContextosVectorizacion();
     }
@@ -158,9 +161,22 @@
   const MODELOS = ['mistral', 'llama3.1'];
   const MODELOS_OPENAI = ['gpt-4o-mini', 'gpt-4o', 'gpt-3.5-turbo'];
 
-  let modelo = $state('mistral');
+  // Plantillas de instrucciones sugeridas por modelo. Modelos pequeños/locales
+  // necesitan más explicitud; modelos grandes (OpenAI) responden bien a prosa.
+  const PLACEHOLDER_INSTRUCCIONES = {
+    mistral: `*** REGLA CRÍTICA: Responde en máximo 2 oraciones. ***
+
+Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionados a [tu dominio]. Si te preguntan otra cosa, di brevemente que no es tu especialidad.`,
+    'llama3.1': `*** REGLA CRÍTICA: Responde en máximo 2 oraciones. ***
+
+Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionados a [tu dominio]. Si la pregunta sale del tema, dilo y no inventes información.`,
+    'gpt-4o-mini': `Eres un asistente experto en [tu dominio]. Responde de forma concisa y profesional. Si la consulta sale de tu dominio, indica amablemente que no es tu especialidad.`,
+    'gpt-4o': `Eres un asistente experto en [tu dominio]. Responde con precisión, adaptando el tono a la situación del usuario. Si la consulta sale de tu dominio, redirígela educadamente sugiriendo dónde podría obtener ayuda.`,
+    'gpt-3.5-turbo': `Eres un asistente experto en [tu dominio]. Responde en máximo 3 oraciones, de forma directa. Si te preguntan algo fuera del tema, di que no es tu especialidad.`,
+  };
+  const PLACEHOLDER_INSTRUCCIONES_FALLBACK = 'Eres un asistente experto en [tu dominio]...';
+
   let contextos = $state([]);
-  let contextoSeleccionado = $state('');
   let cargandoContextos = $state(false);
   let inputText = $state('');
   let isLoading = $state(false);
@@ -183,146 +199,18 @@
     defaultContextFlashTimer = setTimeout(() => { defaultContextGuardadoFlash = false; }, 2500);
   }
 
-  // Lightbot config (defaults para embed) — persistidos en backend por ambiente
-  const LIGHTBOT_DEFAULTS_FALLBACK = { contexto: '', modelo: 'mistral', historial: 3 };
+  // Lightbot/ContextLight: ambiente + slug de agente para construir URLs de embed
   let lightbotAmbiente = $state('staging');
-  let lightbotContexto = $state(LIGHTBOT_DEFAULTS_FALLBACK.contexto);
-  let lightbotModelo = $state(LIGHTBOT_DEFAULTS_FALLBACK.modelo);
-  let lightbotHistorial = $state(LIGHTBOT_DEFAULTS_FALLBACK.historial);
-  let lightbotGuardado = $state({ ...LIGHTBOT_DEFAULTS_FALLBACK });
-  let lightbotGuardadoFlash = $state(false);
-  let lightbotFlashTimer = null;
-  let lightbotCargando = $state(false);
-  let lightbotErrorCargar = $state('');
-  let lightbotErrorGuardar = $state('');
-
-  async function cargarLightbotDefaults() {
-    lightbotCargando = true;
-    lightbotErrorCargar = '';
-    try {
-      const res = await fetch(`${apiUrl.base}/configLightbot`);
-      if (res.status === 404) {
-        lightbotGuardado = { ...LIGHTBOT_DEFAULTS_FALLBACK };
-        lightbotContexto = LIGHTBOT_DEFAULTS_FALLBACK.contexto;
-        lightbotModelo = LIGHTBOT_DEFAULTS_FALLBACK.modelo;
-        lightbotHistorial = LIGHTBOT_DEFAULTS_FALLBACK.historial;
-        return;
-      }
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      const cfg = {
-        contexto: data.contexto ?? '',
-        modelo: data.modelo ?? LIGHTBOT_DEFAULTS_FALLBACK.modelo,
-        historial: data.historial ?? LIGHTBOT_DEFAULTS_FALLBACK.historial,
-      };
-      lightbotGuardado = cfg;
-      lightbotContexto = cfg.contexto;
-      lightbotModelo = cfg.modelo;
-      lightbotHistorial = cfg.historial;
-    } catch (err) {
-      lightbotErrorCargar = `No se pudo cargar la config: ${err.message}`;
-    } finally {
-      lightbotCargando = false;
-    }
-  }
-
-  async function guardarLightbotDefaults() {
-    lightbotErrorGuardar = '';
-    const snap = { contexto: lightbotContexto, modelo: lightbotModelo, historial: lightbotHistorial };
-    try {
-      const res = await fetch(`${apiUrl.base}/configLightbot`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(snap),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      lightbotGuardado = snap;
-      lightbotGuardadoFlash = true;
-      if (lightbotFlashTimer) clearTimeout(lightbotFlashTimer);
-      lightbotFlashTimer = setTimeout(() => { lightbotGuardadoFlash = false; }, 2500);
-    } catch (err) {
-      lightbotErrorGuardar = `No se pudo guardar: ${err.message}`;
-    }
-  }
-
-  function lightbotIgualAlGuardado() {
-    return lightbotContexto === lightbotGuardado.contexto
-        && lightbotModelo === lightbotGuardado.modelo
-        && lightbotHistorial === lightbotGuardado.historial;
-  }
-
-  // ContextLight config (defaults para embed) — persistidos en backend por ambiente
-  const CONTEXTLIGHT_DEFAULTS_FALLBACK = { contexto: '' };
+  let lightbotAgenteSlug = $state('');
   let contextlightAmbiente = $state('staging');
-  let contextlightContexto = $state(CONTEXTLIGHT_DEFAULTS_FALLBACK.contexto);
-  let contextlightGuardado = $state({ ...CONTEXTLIGHT_DEFAULTS_FALLBACK });
-  let contextlightGuardadoFlash = $state(false);
-  let contextlightFlashTimer = null;
-  let contextlightCargando = $state(false);
-  let contextlightErrorCargar = $state('');
-  let contextlightErrorGuardar = $state('');
+  let contextlightAgenteSlug = $state('');
 
-  async function cargarContextlightDefaults() {
-    contextlightCargando = true;
-    contextlightErrorCargar = '';
-    try {
-      const res = await fetch(`${apiUrl.base}/configContextlight`);
-      if (res.status === 404) {
-        contextlightGuardado = { ...CONTEXTLIGHT_DEFAULTS_FALLBACK };
-        contextlightContexto = CONTEXTLIGHT_DEFAULTS_FALLBACK.contexto;
-        return;
-      }
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      const cfg = { contexto: data.contexto ?? '' };
-      contextlightGuardado = cfg;
-      contextlightContexto = cfg.contexto;
-    } catch (err) {
-      contextlightErrorCargar = `No se pudo cargar la config: ${err.message}`;
-    } finally {
-      contextlightCargando = false;
-    }
-  }
-
-  async function guardarContextlightDefaults() {
-    contextlightErrorGuardar = '';
-    const snap = { contexto: contextlightContexto };
-    try {
-      const res = await fetch(`${apiUrl.base}/configContextlight`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(snap),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      contextlightGuardado = snap;
-      contextlightGuardadoFlash = true;
-      if (contextlightFlashTimer) clearTimeout(contextlightFlashTimer);
-      contextlightFlashTimer = setTimeout(() => { contextlightGuardadoFlash = false; }, 2500);
-    } catch (err) {
-      contextlightErrorGuardar = `No se pudo guardar: ${err.message}`;
-    }
-  }
-
-  function contextlightIgualAlGuardado() {
-    return contextlightContexto === contextlightGuardado.contexto;
-  }
-
-  // Sincronizar lightbotAmbiente con el ambiente seleccionado en el navbar
+  // Sincronizar ambientes de embed con el ambiente seleccionado en el navbar
   $effect(() => {
     lightbotAmbiente = ambienteSeleccionado;
   });
-
-  // Sincronizar contextlightAmbiente con el ambiente seleccionado en el navbar
   $effect(() => {
     contextlightAmbiente = ambienteSeleccionado;
-  });
-
-  // Cargar config del ambiente activo (al montar y cuando el ambiente cambia)
-  $effect(() => {
-    if (ambienteSeleccionado) {
-      cargarLightbotDefaults();
-      cargarContextlightDefaults();
-    }
   });
 
   let vectorizacionContextos = $state([]);
@@ -431,6 +319,9 @@
   let agenteFormContexto = $state('');
   let agenteFormModelo = $state('mistral');
   let agenteFormHistorialMax = $state(5);
+  const placeholderInstrucciones = $derived(
+    PLACEHOLDER_INSTRUCCIONES[agenteFormModelo] ?? PLACEHOLDER_INSTRUCCIONES_FALLBACK
+  );
   let cargandoGuardarAgente = $state(false);
   let mensajeAgente = $state('');
   let agenteABorrar = $state(null);
@@ -506,7 +397,7 @@
       return;
     }
     if (!contexto) {
-      mensajeAgente = '❌ Selecciona un contexto.';
+      mensajeAgente = '❌ Selecciona una base de conocimiento.';
       return;
     }
     if (!modelo_llm) {
@@ -722,7 +613,6 @@
   async function cargarContextos() {
     cargandoContextos = true;
     contextos = [];
-    contextoSeleccionado = '';
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 10000);
@@ -731,27 +621,23 @@
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       console.log('%c📂 Respuesta /listarContextos:', 'color:#c8102e;font-weight:bold', data);
-      
+
       // Soportar múltiples formatos de respuesta
       let mapa = {};
       if (data['Contextos existentes para este chatbot']) {
         mapa = data['Contextos existentes para este chatbot'];
       } else if (Array.isArray(data)) {
-        // Si devuelve un array directo de nombres
         contextos = data;
-        contextoSeleccionado = contextos[0] ?? '';
         console.log('%c📂 Contextos cargados:', 'color:#c8102e;font-weight:bold', contextos);
         return;
       } else if (data.contextos && typeof data.contextos === 'object') {
         mapa = data.contextos;
       } else {
-        // Último recurso: usar las keys del primer objeto que encuentre
         const firstObjKey = Object.keys(data).find(k => typeof data[k] === 'object' && data[k] !== null);
         if (firstObjKey) mapa = data[firstObjKey];
       }
-      
+
       contextos = Array.isArray(mapa) ? mapa : Object.keys(mapa);
-      contextoSeleccionado = contextos[0] ?? '';
       console.log('%c📂 Contextos cargados:', 'color:#c8102e;font-weight:bold', contextos);
     } catch (err) {
       if (err.name === 'AbortError') {
@@ -960,7 +846,7 @@
       console.log('Respuesta   :', data);
       console.groupEnd();
 
-      mensajeCrearContexto = `✅ ${data.Mensaje ?? `Contexto "${nuevoContextoNombre}" creado exitosamente`}`;
+      mensajeCrearContexto = `✅ ${data.Mensaje ?? `Base de conocimiento "${nuevoContextoNombre}" creada exitosamente`}`;
       nuevoContextoNombre = '';
       nuevoContextoEmbedding = '';
       nuevoContextoChunkSize = '1500';
@@ -980,7 +866,7 @@
 
   async function borrarContextoConfirmado() {
     if (!contextoABorrar.trim()) {
-      mensajeBorrarContexto = '❌ Selecciona un contexto para borrar';
+      mensajeBorrarContexto = '❌ Selecciona una base de conocimiento para borrar';
       return;
     }
 
@@ -1010,7 +896,7 @@
       console.log('Respuesta   :', data);
       console.groupEnd();
 
-      mensajeBorrarContexto = `✅ ${data.Mensaje ?? `Contexto "${contextoABorrar}" borrado exitosamente`}`;
+      mensajeBorrarContexto = `✅ ${data.Mensaje ?? `Base de conocimiento "${contextoABorrar}" borrada exitosamente`}`;
       contextoABorrar = '';
       mostrarConfirmacionBorrar = false;
 
@@ -1029,7 +915,7 @@
 
   async function cargarDocumentosVectorizacion(contexto) {
     if (!contexto.trim()) {
-      mensajeIntegrarDocumento = '❌ Selecciona un contexto primero';
+      mensajeIntegrarDocumento = '❌ Selecciona una base de conocimiento primero';
       return;
     }
 
@@ -1052,7 +938,7 @@
 
   async function integrarDocumento() {
     if (!contextoSeleccionadoParaDocumentos.trim()) {
-      mensajeIntegrarDocumento = '❌ Selecciona un contexto';
+      mensajeIntegrarDocumento = '❌ Selecciona una base de conocimiento';
       return;
     }
     if (!archivoParaIntegrar) {
@@ -1192,10 +1078,24 @@
     }
   }
 
-  let maxTurnos = $state(5);
+  // Agente seleccionado en el Chatbot tab. Persiste en localStorage.
+  let agenteSeleccionadoId = $state(
+    typeof localStorage !== 'undefined' ? localStorage.getItem('mide_agente_id') || '' : ''
+  );
+  const agenteSeleccionado = $derived(
+    agentes.find((a) => a.id === agenteSeleccionadoId) ?? null
+  );
+  const maxTurnos = $derived(agenteSeleccionado?.historial_max ?? 5);
+
+  $effect(() => {
+    if (typeof localStorage !== 'undefined' && agenteSeleccionadoId) {
+      localStorage.setItem('mide_agente_id', agenteSeleccionadoId);
+    }
+  });
 
   // Construye el historial en formato role/content (últimos N turnos)
   function buildHistorial() {
+    if (maxTurnos === 0) return [];
     const historial = [];
     const convo = messages.filter((m) => m.role === 'user' || m.role === 'bot');
     let i = 0;
@@ -1239,6 +1139,20 @@
     const text = inputText.trim();
     if (!text || isLoading) return;
 
+    if (!agenteSeleccionado) {
+      messages = [
+        ...messages,
+        {
+          id: Date.now() + 1,
+          role: 'bot',
+          text: '⚠️ Selecciona un agente primero (o créalo en Construcción → Agente).',
+          time: formatTime(new Date()),
+          isError: true,
+        },
+      ];
+      return;
+    }
+
     inputText = '';
 
     messages = [
@@ -1251,8 +1165,7 @@
 
     try {
       const payload = {
-        contexto: contextoSeleccionado,
-        modelo_llm: modelo,
+        agente_id: agenteSeleccionado.id,
         pregunta: text,
         historial: buildHistorial(),
       };
@@ -1302,6 +1215,8 @@
         historial: payload.historial,
         respuesta: botText,
         ms: elapsed,
+        contexto: agenteSeleccionado.contexto,
+        modelo: agenteSeleccionado.modelo_llm,
       });
 
       messages = [
@@ -1322,6 +1237,8 @@
         respuesta: null,
         ms: null,
         error: err.message,
+        contexto: agenteSeleccionado?.contexto,
+        modelo: agenteSeleccionado?.modelo_llm,
       });
 
       messages = [
@@ -1392,7 +1309,7 @@
       <button
         class="tab-btn"
         class:active={activeTab === 'chat'}
-        onclick={() => { activeTab = 'chat'; cargarContextos(); verificarSalud(); }}
+        onclick={() => { activeTab = 'chat'; cargarAgentes(); verificarSalud(); }}
         aria-pressed={activeTab === 'chat'}
       >💬 Chatbot</button>
       <button
@@ -1409,29 +1326,28 @@
   {#if activeTab === 'chat'}
   <nav class="chat-subnav">
     <div class="context-select-wrap">
-      <label for="ctx-select">Contexto</label>
-      {#if cargandoContextos}
+      <label for="agente-chat-select">Agente</label>
+      {#if cargandoAgentes}
         <span class="ctx-loading">cargando...</span>
-      {:else if contextos.length === 0}
-        <span class="ctx-loading">sin contextos</span>
+      {:else if agentes.length === 0}
+        <span class="ctx-loading">sin agentes — créalo en Construcción</span>
       {:else}
-        <select id="ctx-select" bind:value={contextoSeleccionado}>
-          {#each contextos as ctx}
-            <option value={ctx}>{ctx}</option>
+        <select id="agente-chat-select" bind:value={agenteSeleccionadoId}>
+          <option value="">-- Selecciona Agente --</option>
+          {#each agentes as a (a.id)}
+            <option value={a.id}>{a.nombre}</option>
           {/each}
         </select>
       {/if}
     </div>
-    <div class="context-select-wrap">
-      <label for="historial-select">Historial</label>
-      <select id="historial-select" bind:value={maxTurnos}>
-        <option value={0}>Sin historial</option>
-        <option value={1}>1 turno</option>
-        <option value={3}>3 turnos</option>
-        <option value={5}>5 turnos</option>
-        <option value={10}>10 turnos</option>
-        <option value={20}>20 turnos</option>
-      </select>
+    {#if agenteSeleccionado}
+      <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; font-size: 0.78rem; color: rgba(255,255,255,0.7);">
+        <span title="Base de Conocimiento">📚 {agenteSeleccionado.contexto}</span>
+        <span title="Modelo LLM">🤖 {agenteSeleccionado.modelo_llm}</span>
+        <span title="Historial">🔁 {agenteSeleccionado.historial_max} turnos</span>
+      </div>
+    {/if}
+    <div class="context-select-wrap" style="margin-left: auto;">
       <button
         class="clear-chat-btn"
         onclick={resetChat}
@@ -1439,21 +1355,6 @@
         title="Limpiar conversación"
         aria-label="Limpiar conversación"
       >&#x1F5D1;</button>
-    </div>
-    <div class="context-select-wrap model-select-wrap">
-      <label for="modelo-select">Modelo</label>
-      <select id="modelo-select" bind:value={modelo}>
-        <optgroup label="Local">
-          {#each MODELOS as m}
-            <option value={m}>{m}</option>
-          {/each}
-        </optgroup>
-        <optgroup label="OpenAI">
-          {#each MODELOS_OPENAI as m}
-            <option value={m}>{m.replace('gpt-', '')}</option>
-          {/each}
-        </optgroup>
-      </select>
     </div>
   </nav>
   {/if}
@@ -1514,13 +1415,13 @@
       <textarea
         bind:value={inputText}
         onkeydown={handleKeydown}
-        placeholder="Escribe tu mensaje..."
+        placeholder={agenteSeleccionado ? "Escribe tu mensaje..." : "Selecciona un agente primero"}
         rows="1"
-        disabled={isLoading}
+        disabled={isLoading || !agenteSeleccionado}
       ></textarea>
       <button
         onclick={sendMessage}
-        disabled={!inputText.trim() || isLoading}
+        disabled={!inputText.trim() || isLoading || !agenteSeleccionado}
         aria-label="Enviar mensaje"
       >
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1543,7 +1444,7 @@
             <div class="banner-integracion-icon">⏳</div>
             <div class="banner-integracion-text">
               <strong>Integración en curso</strong>
-              <p>El documento <strong>"{integracionEnCurso.archivo}"</strong> se está procesando en el contexto <strong>"{integracionEnCurso.contexto}"</strong>. La API puede tardar en responder a otras peticiones.</p>
+              <p>El documento <strong>"{integracionEnCurso.archivo}"</strong> se está procesando en la base de conocimiento <strong>"{integracionEnCurso.contexto}"</strong>. La API puede tardar en responder a otras peticiones.</p>
               <button class="banner-dismiss-btn" onclick={() => { localStorage.removeItem('mide_integracion_pendiente'); integracionEnCurso = null; }}>✕ Descartar</button>
             </div>
           </div>
@@ -1570,7 +1471,7 @@
             class:active={vectorizacionTab === 'contextos'}
             onclick={() => { vectorizacionTab = 'contextos'; vinoDeEditarContexto = false; }}
           >
-            📂 Contextos
+            📚 Base de Conocimiento
           </button>
           {#if vinoDeEditarContexto}
             <span class="subtab-arrow-indicator" aria-hidden="true">»</span>
@@ -1579,14 +1480,14 @@
             class="vectorizacion-subtab-btn"
             class:active={vectorizacionTab === 'documentos'}
             disabled
-            title="Accede desde el ✏️ de un contexto"
+            title="Accede desde el ✏️ de una base de conocimiento"
           >
             📄 Documentos
           </button>
           <button
             class="vectorizacion-subtab-btn"
             class:active={vectorizacionTab === 'lightbot'}
-            onclick={() => { vectorizacionTab = 'lightbot'; cargarContextos(); }}
+            onclick={() => { vectorizacionTab = 'lightbot'; cargarAgentes(); }}
           >
             💬 LightbotEmbedder
           </button>
@@ -1600,7 +1501,7 @@
           <button
             class="vectorizacion-subtab-btn"
             class:active={vectorizacionTab === 'contextlightembedder'}
-            onclick={() => { vectorizacionTab = 'contextlightembedder'; cargarContextos(); }}
+            onclick={() => { vectorizacionTab = 'contextlightembedder'; cargarAgentes(); }}
           >
             📦 ContextLightEmbedder
           </button>
@@ -1632,7 +1533,7 @@
                     disabled={cargandoGuardarAgente || !!agenteEditandoId}
                     class="contexto-input"
                   />
-                  <small style="font-size: 0.75rem; color: rgba(255,255,255,0.6); line-height: 1.3; display: block; margin-top: 0.25rem;">
+                  <small style="font-size: 0.75rem; color: rgba(0,0,0,0.6); line-height: 1.3; display: block; margin-top: 0.25rem;">
                     Identidad estable cross-ambiente. Lowercase, dígitos y guiones, 2-64 chars.
                   </small>
                 </div>
@@ -1649,33 +1550,6 @@
                   />
                 </div>
                 <div class="form-field">
-                  <label for="agente-instrucciones">Instrucciones (system prompt)</label>
-                  <textarea
-                    id="agente-instrucciones"
-                    bind:value={agenteFormInstrucciones}
-                    disabled={cargandoGuardarAgente}
-                    rows="6"
-                    class="contexto-input"
-                    style="font-family: inherit; resize: vertical;"
-                    placeholder="Eres un asistente experto en..."
-                  ></textarea>
-                </div>
-                <div class="form-field">
-                  <label for="agente-contexto">Contexto</label>
-                  <select
-                    id="agente-contexto"
-                    bind:value={agenteFormContexto}
-                    disabled={cargandoGuardarAgente}
-                    class="contexto-input"
-                    style="display: block; width: 100%;"
-                  >
-                    <option value="">-- Selecciona Contexto --</option>
-                    {#each contextos as ctx (ctx)}
-                      <option value={ctx}>{ctx}</option>
-                    {/each}
-                  </select>
-                </div>
-                <div class="form-field">
                   <label for="agente-modelo">Modelo LLM</label>
                   <select
                     id="agente-modelo"
@@ -1689,6 +1563,36 @@
                     {/each}
                     {#each MODELOS_OPENAI as m (m)}
                       <option value={m}>{m}</option>
+                    {/each}
+                  </select>
+                  <small style="font-size: 0.75rem; color: rgba(0,0,0,0.6); line-height: 1.3; display: block; margin-top: 0.25rem;">
+                    El modelo que elijas determina el estilo de prompt sugerido abajo.
+                  </small>
+                </div>
+                <div class="form-field">
+                  <label for="agente-instrucciones">Instrucciones (system prompt)</label>
+                  <textarea
+                    id="agente-instrucciones"
+                    bind:value={agenteFormInstrucciones}
+                    disabled={cargandoGuardarAgente}
+                    rows="8"
+                    class="contexto-input"
+                    style="font-family: inherit; resize: vertical;"
+                    placeholder={placeholderInstrucciones}
+                  ></textarea>
+                </div>
+                <div class="form-field">
+                  <label for="agente-contexto">Base de Conocimiento</label>
+                  <select
+                    id="agente-contexto"
+                    bind:value={agenteFormContexto}
+                    disabled={cargandoGuardarAgente}
+                    class="contexto-input"
+                    style="display: block; width: 100%;"
+                  >
+                    <option value="">-- Selecciona Base de Conocimiento --</option>
+                    {#each contextos as ctx (ctx)}
+                      <option value={ctx}>{ctx}</option>
                     {/each}
                   </select>
                 </div>
@@ -1757,7 +1661,7 @@
                         {agente.instrucciones}
                       </p>
                       <div style="display: flex; gap: 1rem; margin-top: 0.5rem; font-size: 0.75rem; color: rgba(255,255,255,0.55);">
-                        <span>📂 {agente.contexto}</span>
+                        <span>📚 {agente.contexto}</span>
                         <span>🤖 {agente.modelo_llm}</span>
                         <span>🔁 {agente.historial_max} turnos</span>
                       </div>
@@ -1794,12 +1698,12 @@
         {#if vectorizacionTab === 'contextos'}
           <div class="crear-contexto-wrap" class:abierto={crearContextoAbierto}>
             <button class="crear-contexto-toggle" onclick={() => crearContextoAbierto = !crearContextoAbierto}>
-              <h3>➕ Crear Nuevo Contexto</h3>
+              <h3>➕ Crear Nueva Base de Conocimiento</h3>
             </button>
             {#if crearContextoAbierto}
             <div class="crear-contexto-form">
               <div class="form-field">
-                <label for="contexto-nombre">Nombre del Contexto</label>
+                <label for="contexto-nombre">Nombre de la Base de Conocimiento</label>
                 <input
                   id="contexto-nombre"
                   type="text"
@@ -1881,15 +1785,15 @@
 
           <div class="contextos-table-wrap">
             <div class="seccion-header">
-              <h3>📂 Contextos Existentes</h3>
-              <button onclick={cargarContextosVectorizacion} class="vectorizacion-action-btn contextos-recargar-btn" disabled={cargandoVectorizacionContextos} aria-label="Recargar contextos" title="Recargar contextos">
+              <h3>📚 Bases de Conocimiento Existentes</h3>
+              <button onclick={cargarContextosVectorizacion} class="vectorizacion-action-btn contextos-recargar-btn" disabled={cargandoVectorizacionContextos} aria-label="Recargar bases de conocimiento" title="Recargar bases de conocimiento">
                 ↻
               </button>
             </div>
             {#if cargandoVectorizacionContextos}
-              <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando contextos...</p>
+              <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando bases de conocimiento...</p>
             {:else if vectorizacionContextos.length === 0}
-              <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">No hay contextos disponibles</p>
+              <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">No hay bases de conocimiento disponibles</p>
             {:else}
               <div class="contextos-table">
                 {#each vectorizacionContextos as contexto (contexto.nombre)}
@@ -1897,7 +1801,7 @@
                     <span class="contexto-nombre">{contexto.nombre}</span>
                     <button
                       class="contexto-editar-btn"
-                      title="Editar contexto (ir a Documentos)"
+                      title="Editar base de conocimiento (ir a Documentos)"
                       onclick={() => {
                         contextoSeleccionadoParaDocumentos = contexto.nombre;
                         vinoDeEditarContexto = true;
@@ -1909,7 +1813,7 @@
                     </button>
                     <button
                       class="contexto-borrar-btn"
-                      title="Borrar contexto"
+                      title="Borrar base de conocimiento"
                       disabled={cargandoBorrarContexto}
                       onclick={() => { contextoABorrar = contexto.nombre; mostrarConfirmacionBorrar = true; }}
                     >
@@ -1926,7 +1830,7 @@
         {#if vectorizacionTab === 'documentos'}
           <div class="documentos-wrap">
             <div class="seccion-header">
-              <h3>� {contextoSeleccionadoParaDocumentos || 'Documentos'}</h3>
+              <h3>📚 {contextoSeleccionadoParaDocumentos || 'Documentos'}</h3>
               <button onclick={() => cargarDocumentosVectorizacion(contextoSeleccionadoParaDocumentos)} class="vectorizacion-action-btn contextos-recargar-btn" disabled={cargandoVectorizacionDocumentos} title="Recargar documentos" aria-label="Recargar documentos">
                 ↻
               </button>
@@ -1934,14 +1838,14 @@
 
             <!-- Selector de contexto -->
             <div class="documentos-contexto-select">
-              <label for="doc-contexto">Selecciona contexto:</label>
+              <label for="doc-contexto">Selecciona base de conocimiento:</label>
               <select
                 id="doc-contexto"
                 bind:value={contextoSeleccionadoParaDocumentos}
                 onchange={() => cargarDocumentosVectorizacion(contextoSeleccionadoParaDocumentos)}
                 class="contexto-select"
               >
-                <option value="">-- Selecciona un contexto --</option>
+                <option value="">-- Selecciona una base de conocimiento --</option>
                 {#each vectorizacionContextos as contexto (contexto.nombre)}
                   <option value={contexto.nombre}>{contexto.nombre}</option>
                 {/each}
@@ -1951,11 +1855,11 @@
             <!-- Lista de documentos -->
             {#if contextoSeleccionadoParaDocumentos}
               <div class="documentos-list-wrap">
-                <h4>Documentos del contexto: <strong>{contextoSeleccionadoParaDocumentos}</strong></h4>
+                <h4>Documentos de la base de conocimiento: <strong>{contextoSeleccionadoParaDocumentos}</strong></h4>
                 {#if cargandoVectorizacionDocumentos}
                   <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando documentos...</p>
                 {:else if vectorizacionDocumentos.length === 0}
-                  <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">No hay documentos en este contexto</p>
+                  <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">No hay documentos en esta base de conocimiento</p>
                 {:else}
                   <div class="documentos-table">
                     {#each vectorizacionDocumentos as doc (doc)}
@@ -1987,14 +1891,14 @@
             <h3>📤 Integrar Nuevo Documento</h3>
             <div class="integrar-documento-form">
               <div class="form-field">
-                <label for="doc-contexto-integrar">Contexto destino</label>
+                <label for="doc-contexto-integrar">Base de Conocimiento destino</label>
                 <select
                   id="doc-contexto-integrar"
                   bind:value={contextoSeleccionadoParaDocumentos}
                   disabled={cargandoIntegrarDocumento}
                   class="contexto-select"
                 >
-                  <option value="">-- Selecciona un contexto --</option>
+                  <option value="">-- Selecciona una base de conocimiento --</option>
                   {#each vectorizacionContextos as contexto (contexto.nombre)}
                     <option value={contexto.nombre}>{contexto.nombre}</option>
                   {/each}
@@ -2050,7 +1954,7 @@
             <div class="modal-content">
               <h3>⚠️ Confirmar Borrado de Documento</h3>
               <p>
-                ¿Estás seguro de que deseas borrar el documento <strong>"{documentoSeleccionadoParaBorrar}"</strong> del contexto <strong>"{contextoSeleccionadoParaDocumentos}"</strong>?
+                ¿Estás seguro de que deseas borrar el documento <strong>"{documentoSeleccionadoParaBorrar}"</strong> de la base de conocimiento <strong>"{contextoSeleccionadoParaDocumentos}"</strong>?
               </p>
               <p style="font-size: 0.85rem; color: rgba(255,255,255,0.6);">
                 Esta acción es irreversible.
@@ -2129,89 +2033,33 @@
         {#if vectorizacionTab === 'lightbot'}
           <div class="lightbot-wrap">
             <div class="seccion-header">
-              <h3>💬 Configuración Lightbot</h3>
+              <h3>💬 LightbotEmbedder</h3>
             </div>
-            <p class="lightbot-desc">Define los valores por defecto del widget embebible. Estos se usarán cuando no se pasen parámetros por URL.</p>
+            <p class="lightbot-desc">Genera la URL del widget de chat para incrustarlo en otro sitio. El agente seleccionado decide la base de conocimiento, modelo, historial e instrucciones.</p>
 
             <div class="lightbot-form">
               <div class="lightbot-field">
-                <label for="lb-contexto">Contexto</label>
-                <select id="lb-contexto" bind:value={lightbotContexto}>
-                  <option value="">— Seleccionar —</option>
-                  {#each contextos as ctx}
-                    <option value={ctx}>{ctx}</option>
-                  {/each}
-                </select>
-              </div>
-
-              <div class="lightbot-field">
-                <label for="lb-modelo">Modelo LLM</label>
-                <select id="lb-modelo" bind:value={lightbotModelo}>
-                  <optgroup label="Ollama">
-                    {#each MODELOS as m}
-                      <option value={m}>{m}</option>
-                    {/each}
-                  </optgroup>
-                  <optgroup label="OpenAI">
-                    {#each MODELOS_OPENAI as m}
-                      <option value={m}>{m}</option>
-                    {/each}
-                  </optgroup>
-                </select>
-              </div>
-
-              <div class="lightbot-field">
-                <label for="lb-historial">Historial (turnos)</label>
-                <select id="lb-historial" bind:value={lightbotHistorial}>
-                  {#each [0, 1, 2, 3, 5, 10, 15, 20] as n}
-                    <option value={n}>{n === 0 ? 'Sin historial' : `${n} turnos`}</option>
-                  {/each}
-                </select>
-              </div>
-            </div>
-
-            <div class="lightbot-preview">
-              <h4>📋 URL del widget</h4>
-              <code class="lightbot-url">{AMBIENTES[lightbotAmbiente]?.frontend ?? window.location.origin}/embed/index.html?ambiente={lightbotAmbiente}</code>
-            </div>
-
-            <!-- Default actual + guardar -->
-            <div style="display:flex; align-items:center; gap:0.6rem; padding:0.75rem 1rem; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius:8px; margin-top:1rem; flex-wrap:wrap;">
-              <span style="color:rgba(255,255,255,0.6); font-size:0.85rem;">Default actual ({lightbotAmbiente}):</span>
-              {#if lightbotCargando}
-                <span style="color:rgba(255,255,255,0.6); font-size:0.9rem;">⟳ Cargando...</span>
-              {:else if lightbotGuardado.contexto}
-                <span style="color:#fff; font-weight:600; font-size:0.9rem;">⭐ {lightbotGuardado.contexto} · {lightbotGuardado.modelo} · {lightbotGuardado.historial === 0 ? 'sin historial' : `${lightbotGuardado.historial} turnos`}</span>
-              {:else}
-                <span style="color:rgba(255,255,255,0.5); font-style:italic; font-size:0.9rem;">— Sin definir —</span>
-              {/if}
-            </div>
-
-            {#if lightbotErrorCargar}
-              <p style="color: #fff; font-size: 0.85rem; padding: 0.6rem 0.9rem; background: rgba(200,40,40,0.9); border-radius: 6px; margin-top: 0.6rem; font-weight: 500;">❌ {lightbotErrorCargar}</p>
-            {/if}
-
-            <div style="display:flex; align-items:center; gap:0.75rem; margin-top:0.75rem; flex-wrap:wrap;">
-              <button
-                class="vectorizacion-action-btn"
-                onclick={guardarLightbotDefaults}
-                disabled={!lightbotContexto || lightbotIgualAlGuardado() || lightbotCargando}
-                style="background:#198754; border-color:#198754;"
-              >
-                {#if lightbotIgualAlGuardado() && lightbotGuardado.contexto}
-                  ✓ Ya son los defaults
+                <label for="lb-agente">Agente</label>
+                {#if cargandoAgentes}
+                  <span style="color:rgba(255,255,255,0.6); font-size:0.9rem;">⟳ Cargando agentes...</span>
+                {:else if agentes.length === 0}
+                  <span style="color:rgba(255,255,255,0.6); font-size:0.9rem;">Sin agentes — créalos en 🧠 Agente.</span>
                 {:else}
-                  ⭐ Guardar como defaults
+                  <select id="lb-agente" bind:value={lightbotAgenteSlug}>
+                    <option value="">— Seleccionar agente —</option>
+                    {#each agentes as a (a.id)}
+                      <option value={a.slug}>{a.nombre}</option>
+                    {/each}
+                  </select>
                 {/if}
-              </button>
-
-              {#if lightbotGuardadoFlash}
-                <span style="color:#4ade80; font-weight:600; font-size:0.9rem;">✓ Guardado</span>
-              {/if}
+              </div>
             </div>
 
-            {#if lightbotErrorGuardar}
-              <p style="color: #fff; font-size: 0.85rem; padding: 0.6rem 0.9rem; background: rgba(200,40,40,0.9); border-radius: 6px; margin-top: 0.6rem; font-weight: 500;">❌ {lightbotErrorGuardar}</p>
+            {#if lightbotAgenteSlug}
+              <div class="lightbot-preview">
+                <h4>📋 URL del widget</h4>
+                <code class="lightbot-url">{AMBIENTES[lightbotAmbiente]?.frontend ?? window.location.origin}/embed/index.html?ambiente={encodeURIComponent(lightbotAmbiente)}&amp;agente={encodeURIComponent(lightbotAgenteSlug)}</code>
+              </div>
             {/if}
           </div>
         {/if}
@@ -2224,20 +2072,16 @@
             </div>
             <p class="lightbot-desc">Visualizador del widget configurado en LightbotEmbedder.</p>
 
-            {#if !lightbotContexto}
+            {#if !lightbotAgenteSlug}
               <p style="color: rgba(255,255,255,0.7); padding: 1rem; background: rgba(255,255,255,0.05); border-radius: 8px;">
-                Selecciona un contexto en <strong>💬 LightbotEmbedder</strong> para ver el widget.
+                Selecciona un agente en <strong>💬 LightbotEmbedder</strong> para ver el widget.
               </p>
             {:else}
-              {@const lightbotEmbedUrl = `${AMBIENTES[lightbotAmbiente]?.frontend ?? window.location.origin}/embed/index.html?ambiente=${encodeURIComponent(lightbotAmbiente)}`}
+              {@const lightbotEmbedUrl = `${AMBIENTES[lightbotAmbiente]?.frontend ?? window.location.origin}/embed/index.html?ambiente=${encodeURIComponent(lightbotAmbiente)}&agente=${encodeURIComponent(lightbotAgenteSlug)}`}
               <div style="display:flex; align-items:center; gap:0.6rem; padding:0.6rem 1rem; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius:8px; margin-bottom:1rem; flex-wrap:wrap; font-size:0.85rem; color:rgba(255,255,255,0.75);">
                 <span><strong>Ambiente:</strong> {lightbotAmbiente}</span>
                 <span>·</span>
-                <span><strong>Contexto:</strong> {lightbotContexto}</span>
-                <span>·</span>
-                <span><strong>Modelo:</strong> {lightbotModelo}</span>
-                <span>·</span>
-                <span><strong>Historial:</strong> {lightbotHistorial}</span>
+                <span><strong>Agente:</strong> {lightbotAgenteSlug}</span>
               </div>
               <div style="width:100%; max-width:420px; height:70vh; min-height:520px; border:1px solid rgba(255,255,255,0.12); border-radius:12px; overflow:hidden; background:#fff; margin: 0 auto;">
                 <iframe
@@ -2257,62 +2101,31 @@
             <div class="seccion-header">
               <h3>📦 ContextLightEmbedder</h3>
             </div>
-            <p class="lightbot-desc">Genera la URL embebible de ContextLight (Gestión de Chatbot). Estos parámetros configuran el widget cuando se incrusta en otra página.</p>
+            <p class="lightbot-desc">Genera la URL del widget de gestión de documentos. La base de conocimiento se resuelve a partir del agente seleccionado.</p>
 
             <div class="lightbot-form">
               <div class="lightbot-field">
-                <label for="cle-contexto">Contexto</label>
-                <select id="cle-contexto" bind:value={contextlightContexto}>
-                  <option value="">— Seleccionar —</option>
-                  {#each contextos as ctx}
-                    <option value={ctx}>{ctx}</option>
-                  {/each}
-                </select>
+                <label for="cle-agente">Agente</label>
+                {#if cargandoAgentes}
+                  <span style="color:rgba(255,255,255,0.6); font-size:0.9rem;">⟳ Cargando agentes...</span>
+                {:else if agentes.length === 0}
+                  <span style="color:rgba(255,255,255,0.6); font-size:0.9rem;">Sin agentes — créalos en 🧠 Agente.</span>
+                {:else}
+                  <select id="cle-agente" bind:value={contextlightAgenteSlug}>
+                    <option value="">— Seleccionar agente —</option>
+                    {#each agentes as a (a.id)}
+                      <option value={a.slug}>{a.nombre}</option>
+                    {/each}
+                  </select>
+                {/if}
               </div>
             </div>
 
-            <div class="lightbot-preview">
-              <h4>📋 URL del widget</h4>
-              <code class="lightbot-url">{AMBIENTES[contextlightAmbiente]?.frontend ?? window.location.origin}/embed/contextlight.html?ambiente={contextlightAmbiente}</code>
-            </div>
-
-            <!-- Default actual + guardar -->
-            <div style="display:flex; align-items:center; gap:0.6rem; padding:0.75rem 1rem; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius:8px; margin-top:1rem; flex-wrap:wrap;">
-              <span style="color:rgba(255,255,255,0.6); font-size:0.85rem;">Default actual ({contextlightAmbiente}):</span>
-              {#if contextlightCargando}
-                <span style="color:rgba(255,255,255,0.6); font-size:0.9rem;">⟳ Cargando...</span>
-              {:else if contextlightGuardado.contexto}
-                <span style="color:#fff; font-weight:600; font-size:0.95rem;">⭐ {contextlightGuardado.contexto}</span>
-              {:else}
-                <span style="color:rgba(255,255,255,0.5); font-style:italic; font-size:0.9rem;">— Sin definir —</span>
-              {/if}
-            </div>
-
-            {#if contextlightErrorCargar}
-              <p style="color: #fff; font-size: 0.85rem; padding: 0.6rem 0.9rem; background: rgba(200,40,40,0.9); border-radius: 6px; margin-top: 0.6rem; font-weight: 500;">❌ {contextlightErrorCargar}</p>
-            {/if}
-
-            <div style="display:flex; align-items:center; gap:0.75rem; margin-top:0.75rem; flex-wrap:wrap;">
-              <button
-                class="vectorizacion-action-btn"
-                onclick={guardarContextlightDefaults}
-                disabled={!contextlightContexto || contextlightIgualAlGuardado() || contextlightCargando}
-                style="background:#198754; border-color:#198754;"
-              >
-                {#if contextlightIgualAlGuardado() && contextlightGuardado.contexto}
-                  ✓ Ya es el default
-                {:else}
-                  ⭐ Guardar como default
-                {/if}
-              </button>
-
-              {#if contextlightGuardadoFlash}
-                <span style="color:#4ade80; font-weight:600; font-size:0.9rem;">✓ Guardado: <strong>{contextlightGuardado.contexto}</strong></span>
-              {/if}
-            </div>
-
-            {#if contextlightErrorGuardar}
-              <p style="color: #fff; font-size: 0.85rem; padding: 0.6rem 0.9rem; background: rgba(200,40,40,0.9); border-radius: 6px; margin-top: 0.6rem; font-weight: 500;">❌ {contextlightErrorGuardar}</p>
+            {#if contextlightAgenteSlug}
+              <div class="lightbot-preview">
+                <h4>📋 URL del widget</h4>
+                <code class="lightbot-url">{AMBIENTES[contextlightAmbiente]?.frontend ?? window.location.origin}/embed/contextlight.html?ambiente={encodeURIComponent(contextlightAmbiente)}&amp;agente={encodeURIComponent(contextlightAgenteSlug)}</code>
+              </div>
             {/if}
           </div>
         {/if}
@@ -2321,20 +2134,20 @@
         {#if vectorizacionTab === 'contextlight'}
           <div class="lightbot-wrap">
             <div class="seccion-header">
-              <h3>Gestión de Chatbot</h3>
+              <h3>🪶 ContextLight</h3>
             </div>
             <p class="lightbot-desc">Visualizador del widget configurado en ContextLightEmbedder.</p>
 
-            {#if !contextlightContexto}
+            {#if !contextlightAgenteSlug}
               <p style="color: rgba(255,255,255,0.7); padding: 1rem; background: rgba(255,255,255,0.05); border-radius: 8px;">
-                Selecciona un contexto en <strong>📦 ContextLightEmbedder</strong> para ver el widget.
+                Selecciona un agente en <strong>📦 ContextLightEmbedder</strong> para ver el widget.
               </p>
             {:else}
-              {@const contextlightEmbedUrl = `${AMBIENTES[contextlightAmbiente]?.frontend ?? window.location.origin}/embed/contextlight.html?ambiente=${encodeURIComponent(contextlightAmbiente)}`}
+              {@const contextlightEmbedUrl = `${AMBIENTES[contextlightAmbiente]?.frontend ?? window.location.origin}/embed/contextlight.html?ambiente=${encodeURIComponent(contextlightAmbiente)}&agente=${encodeURIComponent(contextlightAgenteSlug)}`}
               <div style="display:flex; align-items:center; gap:0.6rem; padding:0.6rem 1rem; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius:8px; margin-bottom:1rem; flex-wrap:wrap; font-size:0.85rem; color:rgba(255,255,255,0.75);">
                 <span><strong>Ambiente:</strong> {contextlightAmbiente}</span>
                 <span>·</span>
-                <span><strong>Contexto:</strong> {contextlightContexto}</span>
+                <span><strong>Agente:</strong> {contextlightAgenteSlug}</span>
               </div>
               <div style="width:100%; max-width:720px; height:70vh; min-height:520px; border:1px solid rgba(255,255,255,0.12); border-radius:12px; overflow:hidden; background:#fff; margin: 0 auto;">
                 <iframe
@@ -2353,7 +2166,7 @@
             <div class="modal-content">
               <h3>⚠️ Confirmar Borrado</h3>
               <p>
-                ¿Estás seguro de que deseas borrar el contexto <strong>"{contextoABorrar}"</strong>?
+                ¿Estás seguro de que deseas borrar la base de conocimiento <strong>"{contextoABorrar}"</strong>?
               </p>
               <p style="font-size: 0.85rem; color: rgba(255,255,255,0.6);">
                 Esta acción es irreversible.
@@ -2474,7 +2287,7 @@
             </button>
           </div>
           <p style="color: rgba(255,255,255,0.7); font-size: 0.9rem; margin: 0.25rem 0 1rem 0; line-height: 1.5;">
-            Cada contexto se nombra como <code style="background:rgba(0,0,0,0.25); padding:2px 6px; border-radius:4px;">bzz-&lt;alias&gt;-&lt;chunk&gt;</code>.
+            Cada base de conocimiento se nombra como <code style="background:rgba(0,0,0,0.25); padding:2px 6px; border-radius:4px;">bzz-&lt;alias&gt;-&lt;chunk&gt;</code>.
             Si dejas el alias vacío se usa la regla por defecto (texto antes del primer <code>-</code>, <code>_</code> o <code>:</code>),
             lo cual puede causar colisiones entre modelos parecidos. Edita el alias para evitarlas.
           </p>
@@ -2543,7 +2356,7 @@
             </button>
           </div>
           <p style="color: rgba(255,255,255,0.7); font-size: 0.9rem; margin: 0.25rem 0 1rem 0; line-height: 1.5;">
-            Selecciona el contexto que se usará por defecto.
+            Selecciona la base de conocimiento que se usará por defecto.
           </p>
 
           <!-- Badge: contexto default actual -->
@@ -2557,7 +2370,7 @@
           </div>
 
           <div class="lightbot-field" style="max-width: 420px;">
-            <label for="default-context-select">Contextos disponibles</label>
+            <label for="default-context-select">Bases de Conocimiento disponibles</label>
             <select
               id="default-context-select"
               bind:value={defaultContext}
@@ -2590,9 +2403,9 @@
           </div>
 
           {#if cargandoContextos}
-            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 0.75rem 0;">⏳ Cargando contextos...</p>
+            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 0.75rem 0;">⏳ Cargando bases de conocimiento...</p>
           {:else if contextos.length === 0}
-            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 0.75rem 0;">No hay contextos disponibles. Pulsa ↻ Recargar.</p>
+            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 0.75rem 0;">No hay bases de conocimiento disponibles. Pulsa ↻ Recargar.</p>
           {/if}
 
           <p style="color: rgba(255,255,255,0.5); font-size: 0.8rem; margin-top: 1rem;">

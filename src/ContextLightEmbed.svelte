@@ -14,6 +14,7 @@
 
   const params = new URLSearchParams(window.location.search);
   const ambienteParam = params.get('ambiente') || DEFAULT_AMBIENTE;
+  const agenteSlugParam = (params.get('agente') || '').trim();
 
   let ambienteSeleccionado = $state(
     Object.keys(AMBIENTES).includes(ambienteParam) ? ambienteParam : DEFAULT_AMBIENTE
@@ -28,9 +29,9 @@
   });
 
   // ─── Estado ──────────────────────────────────────────
-  let contexto = $state('');
+  let agente = $state(null);
+  const contexto = $derived(agente?.contexto ?? '');
   let configError = $state('');
-  let configCargada = $state(false);
   let documentos = $state([]);
   let cargando = $state(false);
   let archivo = $state(null);
@@ -41,28 +42,32 @@
   let cargandoBorrar = $state(false);
   let confirmarBorrar = $state(null);
 
-  async function cargarConfig() {
+  async function cargarAgente() {
     configError = '';
+    if (!agenteSlugParam) {
+      configError = 'Falta el parámetro ?agente=<slug> en la URL.';
+      return;
+    }
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 10000);
-      const res = await fetch(`${apiUrl.base}/configContextlight`, { signal: controller.signal });
+      const res = await fetch(`${apiUrl.base}/agentes`, { signal: controller.signal });
       clearTimeout(timeout);
-      if (res.status === 404) {
-        configError = `No hay configuración para el ambiente "${ambienteSeleccionado}". Defínela desde la administración.`;
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const lista = await res.json();
+      const found = Array.isArray(lista) ? lista.find((a) => a.slug === agenteSlugParam) : null;
+      if (!found) {
+        configError = `No existe un agente con slug "${agenteSlugParam}" en el ambiente "${ambienteSeleccionado}".`;
         return;
       }
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      contexto = data.contexto ?? '';
-      configCargada = true;
-      if (!contexto) {
-        configError = `La configuración del ambiente "${ambienteSeleccionado}" no tiene contexto.`;
+      agente = found;
+      if (!agente.contexto) {
+        configError = `El agente "${agenteSlugParam}" no tiene base de conocimiento definida.`;
         return;
       }
       cargarDocumentos();
     } catch (err) {
-      configError = `No se pudo cargar la configuración: ${err.message}`;
+      configError = `No se pudo cargar el agente: ${err.message}`;
     }
   }
 
@@ -139,7 +144,7 @@
     }
   }
 
-  cargarConfig();
+  cargarAgente();
 </script>
 
 <div class="embed-app">
@@ -151,7 +156,7 @@
       </svg>
     </div>
     <div class="embed-header-info">
-      <span class="embed-title">Gestión de Chatbot</span>
+      <span class="embed-title">{agente?.nombre ? `Documentos · ${agente.nombre}` : 'Documentos'}</span>
       {#if contexto}
         <span class="embed-context">{contexto}</span>
       {/if}
@@ -170,14 +175,14 @@
     {#if !configCargada && !configError}
       <p class="empty-msg">⟳ Cargando configuración...</p>
     {:else if !contexto}
-      <p class="empty-msg">No se pudo determinar el contexto. Verifica la administración del ambiente <strong>{ambienteSeleccionado}</strong>.</p>
+      <p class="empty-msg">No se pudo determinar la base de conocimiento. Verifica que el agente <strong>{agenteSlugParam || '(sin slug)'}</strong> exista en <strong>{ambienteSeleccionado}</strong> y tenga base de conocimiento definida.</p>
     {:else}
       <section class="card">
         <h3>📋 Documentos</h3>
         {#if cargando}
           <p class="muted">⟳ Cargando documentos...</p>
         {:else if documentos.length === 0}
-          <p class="muted">No hay documentos en este contexto.</p>
+          <p class="muted">No hay documentos en esta base de conocimiento.</p>
         {:else}
           <ul class="doc-list">
             {#each documentos as doc (doc)}

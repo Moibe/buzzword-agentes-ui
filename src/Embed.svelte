@@ -17,6 +17,7 @@
   // Leer SOLO el ambiente desde la URL: ?ambiente=producción
   const params = new URLSearchParams(window.location.search);
   const ambienteParam = params.get('ambiente') || DEFAULT_AMBIENTE;
+  const agenteSlugParam = (params.get('agente') || '').trim();
 
   let ambienteSeleccionado = $state(
     Object.keys(AMBIENTES).includes(ambienteParam) ? ambienteParam : DEFAULT_AMBIENTE
@@ -31,14 +32,13 @@
   });
 
   // ─── Estado ──────────────────────────────────────────
-  let contextoSeleccionado = $state('');
-  let modelo = $state('mistral');
-  let maxTurnos = $state(5);
+  let agente = $state(null);
   let inputText = $state('');
   let isLoading = $state(false);
   let chatContainer;
   let configError = $state('');
-  let configCargada = $state(false);
+
+  const maxTurnos = $derived(agente?.historial_max ?? 5);
 
   function formatTime(date) {
     return date.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
@@ -47,40 +47,40 @@
   const MENSAJE_INICIAL = {
     id: 1,
     role: 'bot',
-    text: '¡Hola! Soy un asistente. ¿En qué puedo ayudarte hoy?',
+    text: '¡Hola! ¿En qué puedo ayudarte hoy?',
     time: formatTime(new Date()),
   };
 
   let messages = $state([{ ...MENSAJE_INICIAL }]);
 
-  // ─── Cargar config del backend ───────────────────────
-  async function cargarConfig() {
+  // ─── Cargar agente del backend ───────────────────────
+  async function cargarAgente() {
     configError = '';
+    if (!agenteSlugParam) {
+      configError = 'Falta el parámetro ?agente=<slug> en la URL.';
+      return;
+    }
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 10000);
-      const res = await fetch(`${apiUrl.base}/configLightbot`, { signal: controller.signal });
+      const res = await fetch(`${apiUrl.base}/agentes`, { signal: controller.signal });
       clearTimeout(timeout);
-      if (res.status === 404) {
-        configError = `No hay configuración para el ambiente "${ambienteSeleccionado}". Defínela desde la administración.`;
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const lista = await res.json();
+      const found = Array.isArray(lista) ? lista.find((a) => a.slug === agenteSlugParam) : null;
+      if (!found) {
+        configError = `No existe un agente con slug "${agenteSlugParam}" en el ambiente "${ambienteSeleccionado}".`;
         return;
       }
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      contextoSeleccionado = data.contexto ?? '';
-      modelo = data.modelo ?? 'mistral';
-      maxTurnos = typeof data.historial === 'number' ? data.historial : 5;
-      configCargada = true;
-      if (!contextoSeleccionado) {
-        configError = `La configuración del ambiente "${ambienteSeleccionado}" no tiene contexto.`;
-      }
+      agente = found;
     } catch (err) {
-      configError = `No se pudo cargar la configuración: ${err.message}`;
+      configError = `No se pudo cargar el agente: ${err.message}`;
     }
   }
 
   // ─── Historial ───────────────────────────────────────
   function buildHistorial() {
+    if (maxTurnos === 0) return [];
     const historial = [];
     const convo = messages.filter((m) => m.role === 'user' || m.role === 'bot');
     let i = 0;
@@ -116,10 +116,24 @@
     await scrollToBottom();
     isLoading = true;
 
+    if (!agente) {
+      messages = [
+        ...messages,
+        {
+          id: Date.now() + 1,
+          role: 'bot',
+          text: configError || 'No hay agente cargado.',
+          time: formatTime(new Date()),
+          isError: true,
+        },
+      ];
+      isLoading = false;
+      return;
+    }
+
     try {
       const payload = {
-        contexto: contextoSeleccionado,
-        modelo_llm: modelo,
+        agente_id: agente.id,
         pregunta: text,
         historial: buildHistorial(),
       };
@@ -177,7 +191,7 @@
   }
 
   onMount(() => {
-    cargarConfig();
+    cargarAgente();
   });
 </script>
 
@@ -190,9 +204,9 @@
       </svg>
     </div>
     <div class="embed-header-info">
-      <span class="embed-title">Asistente</span>
-      {#if contextoSeleccionado}
-        <span class="embed-context">{contextoSeleccionado}</span>
+      <span class="embed-title">{agente?.nombre ?? 'Asistente'}</span>
+      {#if agente}
+        <span class="embed-context">{agente.contexto}</span>
       {/if}
     </div>
   </header>
