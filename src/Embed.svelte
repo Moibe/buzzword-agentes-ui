@@ -153,8 +153,16 @@
       const data = await response.json();
       const elapsed = Math.round(performance.now() - t0);
 
-      const candidato =
+      // Para GPT-5/GPT-5.5 (Responses API) el content viene como array de items
+      // {type: 'text', text: '...'} mezclados con items {type: 'reasoning'}. Aplanamos.
+      let candidato =
         data.Mensaje ?? data.respuesta ?? data.answer ?? data.response ?? data.message ?? data.content ?? data;
+      if (Array.isArray(candidato)) {
+        const textItems = candidato
+          .filter((it) => it && typeof it === 'object' && it.type === 'text' && typeof it.text === 'string')
+          .map((it) => it.text);
+        if (textItems.length > 0) candidato = textItems.join('\n').trim();
+      }
       const botText = typeof candidato === 'string' ? candidato : JSON.stringify(candidato, null, 2);
 
       messages = [
@@ -257,13 +265,13 @@
       <textarea
         bind:value={inputText}
         onkeydown={handleKeydown}
-        placeholder={configCargada ? "Escribe tu mensaje..." : "Cargando configuración..."}
+        placeholder={agente ? "Escribe tu mensaje..." : "Cargando agente..."}
         rows="1"
-        disabled={isLoading || !configCargada || !!configError}
+        disabled={isLoading || !agente || !!configError}
       ></textarea>
       <button
         onclick={sendMessage}
-        disabled={!inputText.trim() || isLoading || !configCargada || !!configError}
+        disabled={!inputText.trim() || isLoading || !agente || !!configError}
         aria-label="Enviar mensaje"
       >
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -271,7 +279,6 @@
         </svg>
       </button>
     </div>
-    <p class="embed-disclaimer">Constructor Agente</p>
   </footer>
 </div>
 

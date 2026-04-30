@@ -228,7 +228,6 @@
   </main>
 
   <footer class="embed-footer">
-    <p class="embed-disclaimer">Constructor Agente</p>
   </footer>
 
   {#if confirmarBorrar}

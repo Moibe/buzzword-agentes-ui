@@ -1,5 +1,6 @@
 <script>
   import { tick, onMount, untrack } from 'svelte';
+  import Icon from './lib/Icon.svelte';
 
   // ─── Sesión & Logs ───────────────────────────────────────────────
   function generateSessionId() {
@@ -113,10 +114,16 @@
     localStorage.setItem('mide_ambiente', nuevoAmbiente);
     console.log(`🔄 Ambiente cambiado a: ${nuevoAmbiente}`);
     console.log(`📍 API URL: ${apiUrl.real}/chatbot`);
+    // Los proyectos son per-ambiente (cada API tiene su propia tabla),
+    // así que recargamos para que el selector del header refleje los del nuevo ambiente.
+    cargarProyectos();
     cargarContextos();
     cargarAgentes();
-    lightbotAgenteSlug = '';
-    contextlightAgenteSlug = '';
+    // No reseteamos lightbotAgenteSlug ni contextlightAgenteSlug — los slugs
+    // son cross-ambiente (mismo nombre en dev/staging/prod), así que la
+    // selección persiste al cambiar de ambiente. Si el slug no existe en el
+    // nuevo ambiente, el dropdown lo muestra como no-match y el usuario puede
+    // re-seleccionar.
     if (activeTab === 'vectorizacion') {
       cargarContextosVectorizacion();
     }
@@ -136,8 +143,22 @@
     console.log('API URL    :', apiUrl.real);
     console.log('Endpoint   :', `${apiUrl.real}/chatbot`);
     console.groupEnd();
-    // Carga inicial de contextos al montar
+    // Carga inicial de proyectos y contextos al montar.
+    // Proyectos primero porque el resto filtra por proyecto activo.
+    cargarProyectos();
     cargarContextos();
+  });
+
+  // Cuando cambia el proyecto activo, recargar listas filtradas.
+  $effect(() => {
+    proyectoActivoId; // dependencia explícita (no operación, solo tracking)
+    untrack(() => {
+      cargarContextos();
+      cargarAgentes();
+      if (activeTab === 'vectorizacion') {
+        cargarContextosVectorizacion();
+      }
+    });
   });
 
   // Carga contextos en vectorización cuando cambia el tab
@@ -216,7 +237,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let isLoading = $state(false);
   let chatContainer = $state(null);
   let activeTab = $state('vectorizacion');
-  let vectorizacionTab = $state('contextos');
+  let vectorizacionTab = $state('proyectos');
   let adminTab = $state('modelos');
   let defaultContextGuardado = $state(
     typeof localStorage !== 'undefined' ? (localStorage.getItem('mide_default_context') || '') : ''
@@ -233,11 +254,17 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     defaultContextFlashTimer = setTimeout(() => { defaultContextGuardadoFlash = false; }, 2500);
   }
 
-  // Lightbot/ContextLight: ambiente + slug de agente para construir URLs de embed
+  // Lightbot/ContextLight: ambiente + slug de agente para construir URLs de embed.
+  // Los slugs persisten en localStorage para que cuando vuelvas a abrir la admin
+  // (o el LightBot) ya haya un agente seleccionado por defecto.
   let lightbotAmbiente = $state('staging');
-  let lightbotAgenteSlug = $state('');
+  let lightbotAgenteSlug = $state(
+    typeof localStorage !== 'undefined' ? localStorage.getItem('bzz_lightbot_agente') || '' : ''
+  );
   let contextlightAmbiente = $state('staging');
-  let contextlightAgenteSlug = $state('');
+  let contextlightAgenteSlug = $state(
+    typeof localStorage !== 'undefined' ? localStorage.getItem('bzz_contextlight_agente') || '' : ''
+  );
 
   // Sincronizar ambientes de embed con el ambiente seleccionado en el navbar
   $effect(() => {
@@ -246,6 +273,197 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   $effect(() => {
     contextlightAmbiente = ambienteSeleccionado;
   });
+
+  // Persistir slugs seleccionados en localStorage. Si se vacía la selección,
+  // se borra la entrada para que la siguiente sesión arranque limpia.
+  $effect(() => {
+    if (typeof localStorage === 'undefined') return;
+    if (lightbotAgenteSlug) localStorage.setItem('bzz_lightbot_agente', lightbotAgenteSlug);
+    else localStorage.removeItem('bzz_lightbot_agente');
+  });
+  $effect(() => {
+    if (typeof localStorage === 'undefined') return;
+    if (contextlightAgenteSlug) localStorage.setItem('bzz_contextlight_agente', contextlightAgenteSlug);
+    else localStorage.removeItem('bzz_contextlight_agente');
+  });
+
+  // ─── Proyectos (CRUD) ─────────────────────────────────────────
+  // Persistido en backend vía /proyectos. El proyecto activo se mantiene en
+  // localStorage para que el usuario lo recupere al volver a abrir la admin.
+  const PROYECTO_SLUG_REGEX = /^[a-z][a-z0-9-]{1,63}$/;
+
+  let proyectos = $state([]);
+  let cargandoProyectos = $state(false);
+  let errorCargarProyectos = $state('');
+  let proyectoFormAbierto = $state(false);
+  let proyectoEditandoId = $state(null);
+  let proyectoFormSlug = $state('');
+  let proyectoFormNombre = $state('');
+  let proyectoFormDescripcion = $state('');
+  let cargandoGuardarProyecto = $state(false);
+  let mensajeProyecto = $state('');
+  let proyectoABorrar = $state(null);
+  let mostrarConfirmacionBorrarProyecto = $state(false);
+  let cargandoBorrarProyecto = $state(false);
+
+  // Proyecto activo (filtra todo lo de abajo). Persiste cross-sesión.
+  let proyectoActivoId = $state(
+    typeof localStorage !== 'undefined' ? localStorage.getItem('bzz_proyecto_activo') || '' : ''
+  );
+  const proyectoActivo = $derived(proyectos.find((p) => p.id === proyectoActivoId) ?? null);
+
+  $effect(() => {
+    if (typeof localStorage === 'undefined') return;
+    if (proyectoActivoId) localStorage.setItem('bzz_proyecto_activo', proyectoActivoId);
+    else localStorage.removeItem('bzz_proyecto_activo');
+  });
+
+  function resetProyectoForm() {
+    proyectoEditandoId = null;
+    proyectoFormSlug = '';
+    proyectoFormNombre = '';
+    proyectoFormDescripcion = '';
+    mensajeProyecto = '';
+  }
+  function abrirFormCrearProyecto() {
+    resetProyectoForm();
+    proyectoFormAbierto = true;
+  }
+  function abrirFormEditarProyecto(p) {
+    proyectoEditandoId = p.id;
+    proyectoFormSlug = p.slug;
+    proyectoFormNombre = p.nombre;
+    proyectoFormDescripcion = p.descripcion ?? '';
+    mensajeProyecto = '';
+    proyectoFormAbierto = true;
+  }
+  function cerrarFormProyecto() {
+    proyectoFormAbierto = false;
+    resetProyectoForm();
+  }
+
+  async function cargarProyectos() {
+    cargandoProyectos = true;
+    errorCargarProyectos = '';
+    try {
+      const res = await fetch(`${apiUrl.base}/proyectos`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      proyectos = await res.json();
+      // Si el proyecto activo ya no existe en este ambiente, limpiar.
+      if (proyectoActivoId && !proyectos.some((p) => p.id === proyectoActivoId)) {
+        proyectoActivoId = '';
+      }
+      // Si no hay proyecto activo y existe al menos uno, auto-seleccionar el primero.
+      if (!proyectoActivoId && proyectos.length > 0) {
+        proyectoActivoId = proyectos[0].id;
+      }
+    } catch (err) {
+      errorCargarProyectos = `No se pudieron cargar los proyectos: ${err.message}`;
+      proyectos = [];
+    } finally {
+      cargandoProyectos = false;
+    }
+  }
+
+  async function guardarProyecto() {
+    const slug = proyectoFormSlug.trim();
+    const nombre = proyectoFormNombre.trim();
+    const descripcion = proyectoFormDescripcion.trim();
+
+    if (!proyectoEditandoId && !PROYECTO_SLUG_REGEX.test(slug)) {
+      mensajeProyecto = '❌ Slug inválido. Usa minúsculas, dígitos y guiones (2-64 chars, empieza con letra).';
+      return;
+    }
+    if (!nombre || nombre.length > 80) {
+      mensajeProyecto = '❌ Nombre requerido, máximo 80 caracteres.';
+      return;
+    }
+    if (descripcion.length > 500) {
+      mensajeProyecto = '❌ Descripción demasiado larga (máximo 500 caracteres).';
+      return;
+    }
+
+    cargandoGuardarProyecto = true;
+    mensajeProyecto = '';
+
+    try {
+      const editando = !!proyectoEditandoId;
+      const url = editando
+        ? `${apiUrl.base}/proyectos/${encodeURIComponent(proyectoEditandoId)}`
+        : `${apiUrl.base}/proyectos`;
+      const body = editando
+        ? { nombre, descripcion }
+        : { slug, nombre, descripcion };
+
+      const res = await fetch(url, {
+        method: editando ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        let msg = txt;
+        try {
+          const j = JSON.parse(txt);
+          msg = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail ?? j);
+        } catch {}
+        if (res.status === 409) throw new Error('Ya existe un proyecto con ese slug.');
+        throw new Error(`HTTP ${res.status}: ${msg}`);
+      }
+
+      const proyectoCreado = await res.json();
+      mensajeProyecto = editando ? '✅ Proyecto actualizado' : '✅ Proyecto creado';
+      await cargarProyectos();
+      // Si fue creación, auto-activarlo y marcar el flujo "vino de crear proyecto"
+      // para que aparezca la flechita guiando hacia Base de Conocimiento.
+      if (!editando && proyectoCreado?.id) {
+        proyectoActivoId = proyectoCreado.id;
+        vinoDeCrearProyecto = true;
+      }
+      setTimeout(() => cerrarFormProyecto(), 800);
+    } catch (err) {
+      mensajeProyecto = `❌ ${err.message}`;
+    } finally {
+      cargandoGuardarProyecto = false;
+    }
+  }
+
+  function pedirConfirmacionBorrarProyecto(p) {
+    proyectoABorrar = p;
+    mostrarConfirmacionBorrarProyecto = true;
+  }
+
+  async function borrarProyectoConfirmado() {
+    if (!proyectoABorrar) return;
+    cargandoBorrarProyecto = true;
+    try {
+      const res = await fetch(`${apiUrl.base}/proyectos/${encodeURIComponent(proyectoABorrar.id)}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok && res.status !== 204) {
+        if (res.status === 409) {
+          const txt = await res.text().catch(() => '');
+          let detalle = 'el proyecto tiene agentes o bases de conocimiento asociados';
+          try {
+            const j = JSON.parse(txt);
+            if (typeof j.detail === 'string') detalle = j.detail;
+          } catch {}
+          throw new Error(`No se puede borrar: ${detalle}`);
+        }
+        throw new Error(`HTTP ${res.status}`);
+      }
+      // Si era el proyecto activo, limpiar la selección activa.
+      if (proyectoActivoId === proyectoABorrar.id) proyectoActivoId = '';
+      await cargarProyectos();
+      mostrarConfirmacionBorrarProyecto = false;
+      proyectoABorrar = null;
+    } catch (err) {
+      mensajeProyecto = `❌ ${err.message}`;
+    } finally {
+      cargandoBorrarProyecto = false;
+    }
+  }
 
   let vectorizacionContextos = $state([]);
   let cargandoVectorizacionContextos = $state(false);
@@ -303,7 +521,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     return limpio.split(/[-:_\s]/)[0].toLowerCase();
   }
 
-  let nuevoContextoNombre = $state('');
   let nuevoContextoEmbedding = $state('');
   let nuevoContextoChunkSize = $state('1500');
 
@@ -324,6 +541,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let documentoSeleccionadoParaBorrar = $state('');
   let contextoSeleccionadoParaDocumentos = $state('');
   let vinoDeEditarContexto = $state(false);
+  let vinoDeCrearProyecto = $state(false);
   let crearContextoAbierto = $state(false);
   let archivoParaIntegrar = $state(null);
   let cargandoIntegrarDocumento = $state(false);
@@ -375,7 +593,17 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     );
     const prev = agenteFormVariables;
     const next = {};
-    for (const n of nombres) next[n] = prev[n] ?? '';
+    for (const n of nombres) {
+      // Si la variable ya tiene valor previo (incluyendo string vacío si el
+      // usuario lo limpió a propósito), respetarlo. Si no existe en el mapa
+      // previo, pre-llenar con el placeholder de la metadata para que el
+      // usuario vea la sugerencia inicial y pueda dejarla tal cual.
+      if (n in prev) {
+        next[n] = prev[n];
+      } else {
+        next[n] = PLACEHOLDER_VARIABLES_META[n]?.placeholder ?? '';
+      }
+    }
     agenteFormVariables = next;
   }
 
@@ -407,42 +635,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     agenteFormInstrucciones = construirInstruccionesPlain();
   });
 
-  function escapeHtml(s) {
-    return String(s)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
-
-  // Construye la vista previa con valores de variables en <strong>.
-  // Variables requeridas sin llenar → [xxx] atenuado.
-  // Variables opcionales sin llenar → no se muestra nada (espejo del comportamiento del prompt final).
-  const previewInstruccionesHtml = $derived.by(() => {
-    const tpl = placeholderInstrucciones;
-    if (!tpl) return '';
-    const partes = tpl.split(/(\[[^\]]+\])/g);
-    const html = partes.map((parte) => {
-      const m = parte.match(/^\[(.+)\]$/);
-      if (m) {
-        const nombre = m[1].trim();
-        const valor = agenteFormVariables[nombre];
-        const meta = PLACEHOLDER_VARIABLES_META[nombre];
-        if (valor && valor.trim()) {
-          const valorFinal = aplicarWrap(valor.trim(), meta?.wrap);
-          return `<strong>${escapeHtml(valorFinal)}</strong>`;
-        }
-        if (meta?.optional) {
-          return '';
-        }
-        return `<span style="opacity:0.5">${escapeHtml(parte)}</span>`;
-      }
-      return escapeHtml(parte);
-    }).join('');
-    return html.replace(/^\s+/, '').replace(/\n{3,}/g, '\n\n');
-  });
-
   let cargandoGuardarAgente = $state(false);
   let mensajeAgente = $state('');
   let agenteABorrar = $state(null);
@@ -457,6 +649,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     agenteFormContexto = '';
     agenteFormModelo = 'mistral';
     agenteFormHistorialMax = 5;
+    // Limpia el mapa de variables para que sincronizar arranque con los
+    // defaults de la plantilla (regla critica pre-llena, etc.) en cada nueva creación.
+    agenteFormVariables = {};
     mensajeAgente = '';
     sincronizarVariablesAgente();
   }
@@ -488,7 +683,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     cargandoAgentes = true;
     errorCargarAgentes = '';
     try {
-      const res = await fetch(`${apiUrl.base}/agentes`);
+      const url = proyectoActivoId
+        ? `${apiUrl.base}/agentes?proyecto_id=${encodeURIComponent(proyectoActivoId)}`
+        : `${apiUrl.base}/agentes`;
+      const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       agentes = await res.json();
     } catch (err) {
@@ -528,6 +726,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       mensajeAgente = '❌ Historial max debe ser entero entre 0 y 50.';
       return;
     }
+    if (!proyectoActivoId) {
+      mensajeAgente = '❌ No hay proyecto activo. Selecciona uno en el header o crea uno en la subtab Proyectos.';
+      return;
+    }
 
     cargandoGuardarAgente = true;
     mensajeAgente = '';
@@ -539,7 +741,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         : `${apiUrl.base}/agentes`;
       const body = editando
         ? { nombre, instrucciones, contexto, modelo_llm, historial_max }
-        : { slug, nombre, instrucciones, contexto, modelo_llm, historial_max };
+        : { slug, nombre, instrucciones, contexto, modelo_llm, historial_max, proyecto_id: proyectoActivoId };
 
       const res = await fetch(url, {
         method: editando ? 'PUT' : 'POST',
@@ -736,7 +938,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 10000);
-      const res = await fetch(`${apiUrl.base}/listarContextos`, { signal: controller.signal });
+      const filtro = proyectoActivoId ? `?proyecto_id=${encodeURIComponent(proyectoActivoId)}` : '';
+      const res = await fetch(`${apiUrl.base}/listarContextos${filtro}`, { signal: controller.signal });
       clearTimeout(timeout);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -884,7 +1087,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 10000);
-      const res = await fetch(`${apiUrl.base}/listarContextos`, { signal: controller.signal });
+      const filtro = proyectoActivoId ? `?proyecto_id=${encodeURIComponent(proyectoActivoId)}` : '';
+      const res = await fetch(`${apiUrl.base}/listarContextos${filtro}`, { signal: controller.signal });
       clearTimeout(timeout);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -920,18 +1124,27 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       return;
     }
 
+    if (!proyectoActivoId) {
+      mensajeCrearContexto = '❌ No hay proyecto activo. Selecciona uno en el header o crea uno en la subtab Proyectos.';
+      return;
+    }
+
     cargandoCrearContexto = true;
     mensajeCrearContexto = '';
 
+    // Captura el nombre generado antes de que el form se resetee post-creación.
+    const nombreCreado = nombreContextoGenerado;
+
     try {
-      const nombre = encodeURIComponent(nombreContextoGenerado);
+      const nombre = encodeURIComponent(nombreCreado);
       const modelo = encodeURIComponent(nuevoContextoEmbedding.trim());
       const chunk = encodeURIComponent(chunkSizeNum);
-      const url = `${apiUrl.base}/crearContexto?nombre_contexto=${nombre}&embedding_model=${modelo}&chunk_size=${chunk}`;
+      const proyId = encodeURIComponent(proyectoActivoId);
+      const url = `${apiUrl.base}/crearContexto?nombre_contexto=${nombre}&embedding_model=${modelo}&chunk_size=${chunk}&proyecto_id=${proyId}`;
 
       console.groupCollapsed(`%c📤 POST /crearContexto`, 'color:#0077ff;font-weight:bold;font-size:12px');
       console.log('URL enviada :', `${apiUrl.real}/crearContexto`);
-      console.log('Query params:', { nombre_contexto: nombre, embedding_model: modelo, chunk_size: chunk });
+      console.log('Query params:', { nombre_contexto: nombre, embedding_model: modelo, chunk_size: chunk, proyecto_id: proyectoActivoId });
       console.groupEnd();
 
       const res = await fetch(url, {
@@ -966,15 +1179,20 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       console.log('Respuesta   :', data);
       console.groupEnd();
 
-      mensajeCrearContexto = `✅ ${data.Mensaje ?? `Base de conocimiento "${nuevoContextoNombre}" creada exitosamente`}`;
-      nuevoContextoNombre = '';
+      mensajeCrearContexto = `✅ ${data.Mensaje ?? `Base de conocimiento "${nombreCreado}" creada exitosamente`}`;
       nuevoContextoEmbedding = '';
       nuevoContextoChunkSize = '1500';
 
-      // Recarga la lista después de 1 segundo
+      // Recarga la lista en el background para que el usuario la vea actualizada al regresar.
       setTimeout(() => {
         cargarContextosVectorizacion();
       }, 1000);
+
+      // Auto-navega a Documentos con el flujo de edición activo (»).
+      contextoSeleccionadoParaDocumentos = nombreCreado;
+      vinoDeEditarContexto = true;
+      vectorizacionTab = 'documentos';
+      cargarDocumentosVectorizacion(nombreCreado);
 
     } catch (err) {
       console.error('%c❌ Error al crear contexto', 'color:red;font-weight:bold', err);
@@ -1323,9 +1541,17 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       console.log('Keys        :', Object.keys(data));
       console.groupEnd();
 
-      // Extraer texto: recorre claves conocidas; si el valor es objeto, lo serializa
-      const candidato =
+      // Extraer texto: recorre claves conocidas; si el valor es objeto, lo serializa.
+      // Para modelos GPT-5/GPT-5.5 que vienen vía Responses API, el `content` es
+      // un array de items {type, text, ...}. Aplanamos extrayendo solo los de tipo text.
+      let candidato =
         data.Mensaje ?? data.respuesta ?? data.answer ?? data.response ?? data.message ?? data.content ?? data;
+      if (Array.isArray(candidato)) {
+        const textItems = candidato
+          .filter((it) => it && typeof it === 'object' && it.type === 'text' && typeof it.text === 'string')
+          .map((it) => it.text);
+        if (textItems.length > 0) candidato = textItems.join('\n').trim();
+      }
       const botText = typeof candidato === 'string'
         ? candidato
         : JSON.stringify(candidato, null, 2);
@@ -1425,20 +1651,20 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         class:active={activeTab === 'vectorizacion'}
         onclick={() => { activeTab = 'vectorizacion'; verificarSalud(); }}
         aria-pressed={activeTab === 'vectorizacion'}
-      >🛠️ Construcción</button>
+      ><Icon name="construccion" size={16} /> Construcción</button>
       <button
         class="tab-btn"
         class:active={activeTab === 'chat'}
         onclick={() => { activeTab = 'chat'; cargarAgentes(); verificarSalud(); }}
         aria-pressed={activeTab === 'chat'}
-      >💬 Chatbot</button>
+      ><Icon name="chatbot" size={16} /> Chatbot</button>
       <button
         class="tab-btn admin-gear-btn"
         class:active={activeTab === 'admin'}
         onclick={() => { activeTab = 'admin'; cargarModelos(); cargarModelosEmbedding(); }}
         aria-pressed={activeTab === 'admin'}
         title="Administración"
-      >⚙️</button>
+      ><Icon name="admin" size={18} label="Administración" /></button>
     </div>
   </header>
 
@@ -1463,12 +1689,12 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     {#if agenteSeleccionado}
       <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; font-size: 0.78rem; color: rgba(255,255,255,0.7);">
         {#if agenteSeleccionado.contexto}
-          <span title="Base de Conocimiento">📚 {agenteSeleccionado.contexto}</span>
+          <span title="Base de Conocimiento"><Icon name="base-conocimiento" size={14} /> {agenteSeleccionado.contexto}</span>
         {:else}
-          <span title="Sin base de conocimiento — agente conversacional puro" style="opacity:0.7;">🧠 sin RAG</span>
+          <span title="Sin base de conocimiento — agente conversacional puro" style="opacity:0.7;"><Icon name="sin-rag" size={14} /> sin RAG</span>
         {/if}
-        <span title="Modelo LLM">🤖 {agenteSeleccionado.modelo_llm}</span>
-        <span title="Historial">🔁 {agenteSeleccionado.historial_max} turnos</span>
+        <span title="Modelo LLM"><Icon name="modelo" size={14} /> {agenteSeleccionado.modelo_llm}</span>
+        <span title="Historial"><Icon name="historial" size={14} /> {agenteSeleccionado.historial_max} turnos</span>
       </div>
     {/if}
     <div class="context-select-wrap" style="margin-left: auto;">
@@ -1565,7 +1791,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         <!-- Banner de integración en curso -->
         {#if integracionEnCurso && !cargandoIntegrarDocumento}
           <div class="banner-integracion">
-            <div class="banner-integracion-icon">⏳</div>
+            <div class="banner-integracion-icon"><Icon name="cargando" size={28} /></div>
             <div class="banner-integracion-text">
               <strong>Integración en curso</strong>
               <p>El documento <strong>"{integracionEnCurso.archivo}"</strong> se está procesando en la base de conocimiento <strong>"{integracionEnCurso.contexto}"</strong>. La API puede tardar en responder a otras peticiones.</p>
@@ -1585,12 +1811,22 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         <div class="vectorizacion-subtabs">
           <button
             class="vectorizacion-subtab-btn"
+            class:active={vectorizacionTab === 'proyectos'}
+            onclick={() => { vectorizacionTab = 'proyectos'; vinoDeCrearProyecto = false; cargarProyectos(); }}
+          >
+            <Icon name="proyecto" size={16} /> Proyectos
+          </button>
+          {#if vinoDeCrearProyecto && vectorizacionContextos.length === 0}
+            <span class="subtab-arrow-indicator" aria-hidden="true">»</span>
+          {/if}
+          <button
+            class="vectorizacion-subtab-btn"
             class:active={vectorizacionTab === 'contextos'}
             onclick={() => { vectorizacionTab = 'contextos'; vinoDeEditarContexto = false; }}
           >
-            📚 Base de Conocimiento
+            <Icon name="base-conocimiento" size={16} /> Base de Conocimiento
           </button>
-          {#if vinoDeEditarContexto}
+          {#if vinoDeEditarContexto && vectorizacionDocumentos.length === 0}
             <span class="subtab-arrow-indicator" aria-hidden="true">»</span>
           {/if}
           <button
@@ -1599,51 +1835,222 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             disabled
             title="Accede desde el ✏️ de una base de conocimiento"
           >
-            📄 Documentos
+            <Icon name="documentos" size={16} /> Documentos
           </button>
+          {#if vinoDeEditarContexto && vectorizacionDocumentos.length > 0}
+            <span class="subtab-arrow-indicator" aria-hidden="true">»</span>
+          {/if}
           <button
             class="vectorizacion-subtab-btn"
             class:active={vectorizacionTab === 'agente'}
             onclick={() => { vectorizacionTab = 'agente'; cargarAgentes(); cargarContextos(); }}
           >
-            🧠 Agente
+            <Icon name="agente" size={16} /> Agente
           </button>
           <button
             class="vectorizacion-subtab-btn"
             class:active={vectorizacionTab === 'lightbot'}
             onclick={() => { vectorizacionTab = 'lightbot'; cargarAgentes(); }}
           >
-            💬 LightbotEmbedder
+            <Icon name="lightbot-embedder" size={16} /> LightbotEmbedder
           </button>
           <button
             class="vectorizacion-subtab-btn"
             class:active={vectorizacionTab === 'lightbotpanel'}
             onclick={() => { vectorizacionTab = 'lightbotpanel'; }}
           >
-            🤖 LightBot
+            <Icon name="lightbot" size={16} /> LightBot
           </button>
           <button
             class="vectorizacion-subtab-btn"
             class:active={vectorizacionTab === 'contextlightembedder'}
             onclick={() => { vectorizacionTab = 'contextlightembedder'; cargarAgentes(); }}
           >
-            📦 ContextLightEmbedder
+            <Icon name="contextlight-embedder" size={16} /> ContextLightEmbedder
           </button>
           <button
             class="vectorizacion-subtab-btn"
             class:active={vectorizacionTab === 'contextlight'}
             onclick={() => { vectorizacionTab = 'contextlight'; }}
           >
-            🪶 ContextLight
+            <Icon name="contextlight" size={16} /> ContextLight
           </button>
         </div>
 
         <!-- Dashboard -->
+        <!-- Proyectos -->
+        {#if vectorizacionTab === 'proyectos'}
+          <div class="crear-contexto-wrap" class:abierto={proyectoFormAbierto}>
+            <button class="crear-contexto-toggle" onclick={() => proyectoFormAbierto ? cerrarFormProyecto() : abrirFormCrearProyecto()}>
+              <h3>
+                {#if proyectoEditandoId}
+                  <Icon name="editar" size={18} /> Editar Proyecto
+                {:else}
+                  <Icon name="crear" size={18} /> Crear Nuevo Proyecto
+                {/if}
+              </h3>
+            </button>
+            {#if proyectoFormAbierto}
+              <div class="crear-contexto-form" style="flex-direction: column; align-items: stretch; max-width: 720px;">
+                <div class="form-field">
+                  <label for="proyecto-slug">Slug {proyectoEditandoId ? '(no modificable)' : ''}</label>
+                  <input
+                    id="proyecto-slug"
+                    type="text"
+                    placeholder="ej: banfondesa"
+                    bind:value={proyectoFormSlug}
+                    disabled={cargandoGuardarProyecto || !!proyectoEditandoId}
+                    class="contexto-input"
+                  />
+                  <small style="font-size: 0.75rem; color: rgba(0,0,0,0.6); line-height: 1.3; display: block; margin-top: 0.25rem;">
+                    Identidad estable cross-ambiente. Lowercase, dígitos y guiones, 2-64 chars.
+                  </small>
+                </div>
+                <div class="form-field">
+                  <label for="proyecto-nombre">Nombre</label>
+                  <input
+                    id="proyecto-nombre"
+                    type="text"
+                    placeholder="ej: Banfondesa"
+                    bind:value={proyectoFormNombre}
+                    disabled={cargandoGuardarProyecto}
+                    maxlength="80"
+                    class="contexto-input"
+                  />
+                </div>
+                <div class="form-field">
+                  <label for="proyecto-descripcion">Descripción (opcional)</label>
+                  <textarea
+                    id="proyecto-descripcion"
+                    bind:value={proyectoFormDescripcion}
+                    disabled={cargandoGuardarProyecto}
+                    rows="3"
+                    maxlength="500"
+                    class="contexto-input"
+                    style="font-family: inherit; resize: vertical;"
+                    placeholder="Para qué sirve este proyecto, qué agrupa..."
+                  ></textarea>
+                </div>
+                <div style="display: flex; gap: 0.5rem;">
+                  <button
+                    onclick={guardarProyecto}
+                    disabled={cargandoGuardarProyecto}
+                    class="crear-contexto-btn"
+                  >
+                    {cargandoGuardarProyecto ? '⟳ Guardando...' : (proyectoEditandoId ? '✓ Actualizar' : '✓ Crear')}
+                  </button>
+                  <button
+                    onclick={cerrarFormProyecto}
+                    disabled={cargandoGuardarProyecto}
+                    class="crear-contexto-btn"
+                    style="background: rgba(255,255,255,0.15);"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+                {#if mensajeProyecto}
+                  <p class="mensaje-contexto" class:success={mensajeProyecto.includes('✅')}>
+                    {mensajeProyecto}
+                  </p>
+                {/if}
+              </div>
+            {/if}
+          </div>
+
+          <div class="contextos-table-wrap">
+            <div class="seccion-header">
+              <h3><Icon name="proyecto" size={18} /> Proyectos Existentes</h3>
+              <button onclick={cargarProyectos} class="vectorizacion-action-btn contextos-recargar-btn" disabled={cargandoProyectos} aria-label="Recargar proyectos" title="Recargar proyectos">
+                <Icon name="recargar" size={16} />
+              </button>
+            </div>
+            {#if errorCargarProyectos}
+              <p class="mensaje-contexto" style="margin-top: 0.5rem;">❌ {errorCargarProyectos}</p>
+            {/if}
+            {#if cargandoProyectos}
+              <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando proyectos...</p>
+            {:else if proyectos.length === 0}
+              <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">No hay proyectos creados todavía.</p>
+            {:else}
+              <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.5rem;">
+                {#each proyectos as p (p.id)}
+                  {@const esActivo = p.id === proyectoActivoId}
+                  <div style="background: {esActivo ? 'rgba(34,197,94,0.18)' : 'rgba(0,0,0,0.2)'}; border: {esActivo ? '1px solid rgba(34,197,94,0.5)' : '1px solid transparent'}; border-radius: 8px; padding: 1rem; display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;">
+                    <div style="flex: 1; min-width: 0;">
+                      <div style="display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap;">
+                        {#if esActivo}
+                          <span style="color: #4ade80; font-size: 0.75rem; font-weight: 600; display: inline-flex; align-items: center; gap: 0.25rem;">
+                            <Icon name="check" size={14} /> ACTIVO
+                          </span>
+                        {/if}
+                        <strong style="color: #fff; font-size: 1rem;">{p.nombre}</strong>
+                        <code style="background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; color: rgba(255,255,255,0.75);">{p.slug}</code>
+                      </div>
+                      {#if p.descripcion}
+                        <p style="color: rgba(255,255,255,0.7); font-size: 0.85rem; margin: 0.5rem 0 0 0; line-height: 1.4;">
+                          {p.descripcion}
+                        </p>
+                      {/if}
+                    </div>
+                    <div style="display: flex; gap: 0.4rem; flex-shrink: 0; align-items: center;">
+                      {#if !esActivo}
+                        <button onclick={() => proyectoActivoId = p.id} class="vectorizacion-action-btn" title="Activar este proyecto" style="background: rgba(34,197,94,0.25); border-color: rgba(34,197,94,0.5);">
+                          Activar
+                        </button>
+                      {/if}
+                      <button onclick={() => abrirFormEditarProyecto(p)} class="vectorizacion-action-btn" title="Editar proyecto"><Icon name="editar" size={16} label="Editar" /></button>
+                      <button onclick={() => pedirConfirmacionBorrarProyecto(p)} class="vectorizacion-action-btn" title="Borrar proyecto"><Icon name="borrar" size={16} label="Borrar" /></button>
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          </div>
+
+          {#if mostrarConfirmacionBorrarProyecto && proyectoABorrar}
+            <div class="confirmacion-borrar">
+              <h3><Icon name="warning" size={18} /> Confirmar Borrado de Proyecto</h3>
+              <p style="color: rgba(255,255,255,0.85);">
+                ¿Estás seguro de borrar el proyecto <strong>{proyectoABorrar.nombre}</strong> (<code>{proyectoABorrar.slug}</code>)?
+              </p>
+              <p style="color: rgba(255,255,255,0.6); font-size: 0.85rem;">
+                Cuando esté el backend, esto fallará si el proyecto tiene bases de conocimiento o agentes asociados.
+              </p>
+              <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                <button onclick={borrarProyectoConfirmado} disabled={cargandoBorrarProyecto} class="crear-contexto-btn" style="background: #c8102e;">
+                  {cargandoBorrarProyecto ? '⟳ Borrando...' : '🗑️ Sí, borrar'}
+                </button>
+                <button onclick={() => { mostrarConfirmacionBorrarProyecto = false; proyectoABorrar = null; }} disabled={cargandoBorrarProyecto} class="crear-contexto-btn" style="background: rgba(255,255,255,0.15);">
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          {/if}
+        {/if}
+
         <!-- Agente -->
         {#if vectorizacionTab === 'agente'}
+          {#if proyectoActivo}
+            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.85rem; background: rgba(0,0,0,0.18); border-radius: 8px; margin-bottom: 1rem; font-size: 0.85rem; color: rgba(255,255,255,0.85);">
+              <Icon name="proyecto" size={14} />
+              <span>Trabajando en proyecto: <strong>{proyectoActivo.nombre}</strong></span>
+              <code style="background: rgba(0,0,0,0.3); padding: 1px 6px; border-radius: 4px; font-size: 0.75rem; color: rgba(255,255,255,0.7);">{proyectoActivo.slug}</code>
+            </div>
+          {:else}
+            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1rem; background: rgba(200,40,40,0.85); border-radius: 8px; margin-bottom: 1rem; color: #fff; font-size: 0.9rem;">
+              <Icon name="warning" size={16} />
+              <span>No hay proyecto activo. Crea o selecciona uno en <strong>📁 Proyectos</strong> antes de crear agentes.</span>
+            </div>
+          {/if}
           <div class="crear-contexto-wrap" class:abierto={agenteFormAbierto}>
             <button class="crear-contexto-toggle" onclick={() => agenteFormAbierto ? cerrarFormAgente() : abrirFormCrearAgente()}>
-              <h3>{agenteEditandoId ? '✏️ Editar Agente' : '➕ Crear Nuevo Agente'}</h3>
+              <h3>
+                {#if agenteEditandoId}
+                  <Icon name="editar" size={18} /> Editar Agente
+                {:else}
+                  <Icon name="crear" size={18} /> Crear Nuevo Agente
+                {/if}
+              </h3>
             </button>
             {#if agenteFormAbierto}
               <div class="crear-contexto-form" style="flex-direction: column; align-items: stretch; max-width: 720px;">
@@ -1742,16 +2149,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     </small>
                   </div>
 
-                  <div class="form-field">
-                    <label>Vista previa</label>
-                    <div
-                      style="padding: 0.75rem 1rem; background: rgba(0,0,0,0.18); border: 1px dashed rgba(255,255,255,0.25); border-radius: 8px; white-space: pre-wrap; font-family: inherit; font-size: 0.85rem; line-height: 1.5; color: rgba(255,255,255,0.9); max-height: 240px; overflow-y: auto;"
-                      aria-live="polite"
-                    >{@html previewInstruccionesHtml}</div>
-                    <small style="font-size: 0.75rem; color: rgba(0,0,0,0.6); line-height: 1.3; display: block; margin-top: 0.4rem;">
-                      Los valores que insertaste aparecen en negrita. Las variables sin llenar quedan atenuadas como <code>[xxx]</code>.
-                    </small>
-                  </div>
                 {/if}
 
                 <div class="form-field">
@@ -1762,7 +2159,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     disabled={cargandoGuardarAgente}
                     rows="8"
                     class="contexto-input"
-                    style="font-family: inherit; resize: vertical;"
+                    style="font-family: inherit; resize: vertical; padding: 0.75rem 1rem; background: rgba(0,0,0,0.4); border: 1px dashed rgba(255,255,255,0.25); border-radius: 8px; color: rgba(255,255,255,0.9); font-size: 0.85rem; line-height: 1.5;"
                     placeholder={placeholderInstrucciones}
                   ></textarea>
                 </div>
@@ -1806,9 +2203,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
           <div class="contextos-table-wrap">
             <div class="seccion-header">
-              <h3>🧠 Agentes Existentes</h3>
+              <h3><Icon name="agente" size={18} /> Agentes Existentes</h3>
               <button onclick={cargarAgentes} class="vectorizacion-action-btn contextos-recargar-btn" disabled={cargandoAgentes} aria-label="Recargar agentes" title="Recargar agentes">
-                ↻
+                <Icon name="recargar" size={16} />
               </button>
             </div>
             {#if errorCargarAgentes}
@@ -1824,6 +2221,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 1rem; display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;">
                     <div style="flex: 1; min-width: 0;">
                       <div style="display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap;">
+                        {#if agente.slug === lightbotAgenteSlug}
+                          <span title="Default del Lightbot" style="color: #fbbf24; display: inline-flex; align-items: center;">
+                            <Icon name="estrella" size={16} label="Default" />
+                          </span>
+                        {/if}
                         <strong style="color: #fff; font-size: 1rem;">{agente.nombre}</strong>
                         <code style="background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; color: rgba(255,255,255,0.75);">{agente.slug}</code>
                       </div>
@@ -1832,17 +2234,17 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                       </p>
                       <div style="display: flex; gap: 1rem; margin-top: 0.5rem; font-size: 0.75rem; color: rgba(255,255,255,0.55);">
                         {#if agente.contexto}
-                          <span>📚 {agente.contexto}</span>
+                          <span><Icon name="base-conocimiento" size={13} /> {agente.contexto}</span>
                         {:else}
-                          <span style="opacity:0.7;">🧠 sin RAG</span>
+                          <span style="opacity:0.7;"><Icon name="sin-rag" size={13} /> sin RAG</span>
                         {/if}
-                        <span>🤖 {agente.modelo_llm}</span>
-                        <span>🔁 {agente.historial_max} turnos</span>
+                        <span><Icon name="modelo" size={13} /> {agente.modelo_llm}</span>
+                        <span><Icon name="historial" size={13} /> {agente.historial_max} turnos</span>
                       </div>
                     </div>
                     <div style="display: flex; gap: 0.4rem; flex-shrink: 0;">
-                      <button onclick={() => abrirFormEditarAgente(agente)} class="vectorizacion-action-btn" title="Editar agente">✏️</button>
-                      <button onclick={() => pedirConfirmacionBorrarAgente(agente)} class="vectorizacion-action-btn" title="Borrar agente">🗑️</button>
+                      <button onclick={() => abrirFormEditarAgente(agente)} class="vectorizacion-action-btn" title="Editar agente"><Icon name="editar" size={16} label="Editar" /></button>
+                      <button onclick={() => pedirConfirmacionBorrarAgente(agente)} class="vectorizacion-action-btn" title="Borrar agente"><Icon name="borrar" size={16} label="Borrar" /></button>
                     </div>
                   </div>
                 {/each}
@@ -1852,7 +2254,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
           {#if mostrarConfirmacionBorrarAgente && agenteABorrar}
             <div class="confirmacion-borrar">
-              <h3>⚠️ Confirmar Borrado de Agente</h3>
+              <h3><Icon name="warning" size={18} /> Confirmar Borrado de Agente</h3>
               <p style="color: rgba(255,255,255,0.85);">
                 ¿Estás seguro de borrar el agente <strong>{agenteABorrar.nombre}</strong> (<code>{agenteABorrar.slug}</code>)? Esta acción no se puede deshacer.
               </p>
@@ -1870,9 +2272,21 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
         <!-- Contextos -->
         {#if vectorizacionTab === 'contextos'}
+          {#if proyectoActivo}
+            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.85rem; background: rgba(0,0,0,0.18); border-radius: 8px; margin-bottom: 1rem; font-size: 0.85rem; color: rgba(255,255,255,0.85);">
+              <Icon name="proyecto" size={14} />
+              <span>Trabajando en proyecto: <strong>{proyectoActivo.nombre}</strong></span>
+              <code style="background: rgba(0,0,0,0.3); padding: 1px 6px; border-radius: 4px; font-size: 0.75rem; color: rgba(255,255,255,0.7);">{proyectoActivo.slug}</code>
+            </div>
+          {:else}
+            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1rem; background: rgba(200,40,40,0.85); border-radius: 8px; margin-bottom: 1rem; color: #fff; font-size: 0.9rem;">
+              <Icon name="warning" size={16} />
+              <span>No hay proyecto activo. Crea o selecciona uno en <strong>📁 Proyectos</strong> antes de crear bases de conocimiento.</span>
+            </div>
+          {/if}
           <div class="crear-contexto-wrap" class:abierto={crearContextoAbierto}>
             <button class="crear-contexto-toggle" onclick={() => crearContextoAbierto = !crearContextoAbierto}>
-              <h3>➕ Crear Nueva Base de Conocimiento</h3>
+              <h3><Icon name="crear" size={18} /> Crear Nueva Base de Conocimiento</h3>
             </button>
             {#if crearContextoAbierto}
             <div class="crear-contexto-form">
@@ -1959,9 +2373,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
           <div class="contextos-table-wrap">
             <div class="seccion-header">
-              <h3>📚 Bases de Conocimiento Existentes</h3>
+              <h3><Icon name="base-conocimiento" size={18} /> Bases de Conocimiento Existentes</h3>
               <button onclick={cargarContextosVectorizacion} class="vectorizacion-action-btn contextos-recargar-btn" disabled={cargandoVectorizacionContextos} aria-label="Recargar bases de conocimiento" title="Recargar bases de conocimiento">
-                ↻
+                <Icon name="recargar" size={16} />
               </button>
             </div>
             {#if cargandoVectorizacionContextos}
@@ -1983,7 +2397,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                         cargarDocumentosVectorizacion(contexto.nombre);
                       }}
                     >
-                      ✏️
+                      <Icon name="editar" size={14} label="Editar" />
                     </button>
                     <button
                       class="contexto-borrar-btn"
@@ -1991,7 +2405,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                       disabled={cargandoBorrarContexto}
                       onclick={() => { contextoABorrar = contexto.nombre; mostrarConfirmacionBorrar = true; }}
                     >
-                      🗑️
+                      <Icon name="borrar" size={14} label="Borrar" />
                     </button>
                   </div>
                 {/each}
@@ -2002,11 +2416,18 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
         <!-- Documentos -->
         {#if vectorizacionTab === 'documentos'}
+          {#if proyectoActivo}
+            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.85rem; background: rgba(0,0,0,0.18); border-radius: 8px; margin-bottom: 1rem; font-size: 0.85rem; color: rgba(255,255,255,0.85);">
+              <Icon name="proyecto" size={14} />
+              <span>Trabajando en proyecto: <strong>{proyectoActivo.nombre}</strong></span>
+              <code style="background: rgba(0,0,0,0.3); padding: 1px 6px; border-radius: 4px; font-size: 0.75rem; color: rgba(255,255,255,0.7);">{proyectoActivo.slug}</code>
+            </div>
+          {/if}
           <div class="documentos-wrap">
             <div class="seccion-header">
-              <h3>📚 {contextoSeleccionadoParaDocumentos || 'Documentos'}</h3>
+              <h3><Icon name="base-conocimiento" size={18} /> {contextoSeleccionadoParaDocumentos || 'Documentos'}</h3>
               <button onclick={() => cargarDocumentosVectorizacion(contextoSeleccionadoParaDocumentos)} class="vectorizacion-action-btn contextos-recargar-btn" disabled={cargandoVectorizacionDocumentos} title="Recargar documentos" aria-label="Recargar documentos">
-                ↻
+                <Icon name="recargar" size={16} />
               </button>
             </div>
 
@@ -2045,7 +2466,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                           disabled={cargandoBorrarDocumento}
                           onclick={() => { documentoSeleccionadoParaBorrar = doc; mostrarConfirmacionBorrarDocumento = true; }}
                         >
-                          🗑️
+                          <Icon name="borrar" size={14} label="Borrar" />
                         </button>
                       </div>
                     {/each}
@@ -2367,7 +2788,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
       </div>
       <p class="disclaimer">Constructor Agente</p>
-    </main>
+      </main>
   {/if}
 
   <!-- Administración section -->
