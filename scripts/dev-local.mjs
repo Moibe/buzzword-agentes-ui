@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 
 const rootDir = process.cwd();
 const apiDir = resolve(rootDir, '..', 'constructor-agente-rag');
+const hostAsistentesDir = resolve(rootDir, '..', 'host-asistentes');
 const API_HOST = '127.0.0.1';
 const API_PORT = 8077;
 
@@ -40,6 +41,7 @@ const api = spawn(
 
 const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 let web = null;
+let host = null;
 
 let shuttingDown = false;
 
@@ -48,6 +50,7 @@ function shutdown(signal = 'SIGTERM') {
   shuttingDown = true;
 
   if (web) web.kill(signal);
+  if (host) host.kill(signal);
   api.kill(signal);
 
   setTimeout(() => process.exit(0), 200);
@@ -87,9 +90,9 @@ async function startWebWhenApiIsReady() {
   try {
     console.log('\n[dev] 🚀 Esperando a que la API esté lista...');
     await waitForApiReady(API_HOST, API_PORT);
-    console.log(`[dev] ✅ API lista en http://${API_HOST}:${API_PORT}`);
-    console.log('[dev] 🌐 Arrancando frontend...\n');
-    
+    console.log(`[dev] ✅ API lista en http://${API_HOST}:${API_PORT}/docs`);
+    console.log('[dev] 🌐 Arrancando frontend admin...\n');
+
     web = spawn(npmCmd, ['run', 'dev:web'], {
       cwd: rootDir,
       stdio: 'inherit',
@@ -98,10 +101,38 @@ async function startWebWhenApiIsReady() {
 
     web.on('exit', (code) => {
       if (!shuttingDown) {
-        console.error(`[dev] Frontend finalizo con codigo ${code ?? 0}.`);
+        console.error(`[dev] Frontend admin finalizo con codigo ${code ?? 0}.`);
         shutdown();
       }
     });
+
+    if (existsSync(hostAsistentesDir)) {
+      console.log(`[dev] 🪄 Arrancando host-asistentes en ${hostAsistentesDir}...\n`);
+      host = spawn(npmCmd, ['run', 'dev'], {
+        cwd: hostAsistentesDir,
+        stdio: 'inherit',
+        shell: process.platform === 'win32',
+      });
+
+      host.on('exit', (code) => {
+        if (!shuttingDown) {
+          console.error(`[dev] host-asistentes finalizo con codigo ${code ?? 0}.`);
+          shutdown();
+        }
+      });
+
+      setTimeout(() => {
+        console.log('\n' + '═'.repeat(70));
+        console.log('🪄  HOST-ASISTENTES — URLs públicas embebibles');
+        console.log('═'.repeat(70));
+        console.log('  Chatbot:   http://localhost:5174/embed/chat/<slug>');
+        console.log('  MiniAdmin: http://localhost:5174/embed/admin/<slug>');
+        console.log('  (Reemplaza <slug> por el slug del asistente. La raíz / da 404 a propósito.)');
+        console.log('═'.repeat(70) + '\n');
+      }, 2500);
+    } else {
+      console.warn(`[dev] ⚠️  host-asistentes no existe en ${hostAsistentesDir}. Saltando.`);
+    }
   } catch (error) {
     console.error(`\n[dev] ❌ Error: ${error.message}`);
     console.error(`[dev] Verifica que FastAPI esté corriendo en http://${API_HOST}:${API_PORT}\n`);

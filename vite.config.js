@@ -28,7 +28,7 @@ export default defineConfig(({ mode }) => {
           rewrite: (path) => path.replace(/^\/api-desarrollo/, ''),
         },
         '/api-staging': {
-          target: 'http://172.10.30.15:8080',
+          target: 'http://172.10.30.15:8077',
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api-staging/, ''),
         },

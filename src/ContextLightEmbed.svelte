@@ -2,7 +2,7 @@
   // ─── Config ──────────────────────────────────────────
   const AMBIENTES = {
     desarrollo: { url: 'http://127.0.0.1:8077', proxy: '/api-desarrollo' },
-    staging: { url: 'http://172.10.30.15:8080', proxy: '/api-staging' },
+    staging: { url: 'http://172.10.30.15:8077', proxy: '/api-staging' },
     producción: { url: 'http://172.10.30.16:8080', proxy: '/api-produccion' },
   };
 
@@ -14,7 +14,7 @@
 
   const params = new URLSearchParams(window.location.search);
   const ambienteParam = params.get('ambiente') || DEFAULT_AMBIENTE;
-  const agenteSlugParam = (params.get('agente') || '').trim();
+  const asistenteSlugParam = (params.get('agente') || '').trim();
 
   let ambienteSeleccionado = $state(
     Object.keys(AMBIENTES).includes(ambienteParam) ? ambienteParam : DEFAULT_AMBIENTE
@@ -29,8 +29,8 @@
   });
 
   // ─── Estado ──────────────────────────────────────────
-  let agente = $state(null);
-  const contexto = $derived(agente?.contexto ?? '');
+  let asistente = $state(null);
+  const contexto = $derived(asistente?.contexto ?? '');
   let configError = $state('');
   let documentos = $state([]);
   let cargando = $state(false);
@@ -42,9 +42,9 @@
   let cargandoBorrar = $state(false);
   let confirmarBorrar = $state(null);
 
-  async function cargarAgente() {
+  async function cargarAsistente() {
     configError = '';
-    if (!agenteSlugParam) {
+    if (!asistenteSlugParam) {
       configError = 'Falta el parámetro ?agente=<slug> en la URL.';
       return;
     }
@@ -55,19 +55,19 @@
       clearTimeout(timeout);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const lista = await res.json();
-      const found = Array.isArray(lista) ? lista.find((a) => a.slug === agenteSlugParam) : null;
+      const found = Array.isArray(lista) ? lista.find((a) => a.slug === asistenteSlugParam) : null;
       if (!found) {
-        configError = `No existe un agente con slug "${agenteSlugParam}" en el ambiente "${ambienteSeleccionado}".`;
+        configError = `No existe un asistente con slug "${asistenteSlugParam}" en el ambiente "${ambienteSeleccionado}".`;
         return;
       }
-      agente = found;
-      if (!agente.contexto) {
-        configError = `El agente "${agenteSlugParam}" no tiene base de conocimiento definida.`;
+      asistente = found;
+      if (!asistente.contexto) {
+        configError = `El asistente "${asistenteSlugParam}" no tiene base de conocimiento definida.`;
         return;
       }
       cargarDocumentos();
     } catch (err) {
-      configError = `No se pudo cargar el agente: ${err.message}`;
+      configError = `No se pudo cargar el asistente: ${err.message}`;
     }
   }
 
@@ -144,7 +144,7 @@
     }
   }
 
-  cargarAgente();
+  cargarAsistente();
 </script>
 
 <div class="embed-app">
@@ -156,7 +156,7 @@
       </svg>
     </div>
     <div class="embed-header-info">
-      <span class="embed-title">{agente?.nombre ? `Documentos · ${agente.nombre}` : 'Documentos'}</span>
+      <span class="embed-title">{asistente?.nombre ? `Documentos · ${asistente.nombre}` : 'Documentos'}</span>
       {#if contexto}
         <span class="embed-context">{contexto}</span>
       {/if}
@@ -172,10 +172,10 @@
 
   <!-- Body -->
   <main class="embed-body">
-    {#if !configCargada && !configError}
+    {#if !asistente && !configError}
       <p class="empty-msg">⟳ Cargando configuración...</p>
     {:else if !contexto}
-      <p class="empty-msg">No se pudo determinar la base de conocimiento. Verifica que el agente <strong>{agenteSlugParam || '(sin slug)'}</strong> exista en <strong>{ambienteSeleccionado}</strong> y tenga base de conocimiento definida.</p>
+      <p class="empty-msg">No se pudo determinar la base de conocimiento. Verifica que el asistente <strong>{asistenteSlugParam || '(sin slug)'}</strong> exista en <strong>{ambienteSeleccionado}</strong> y tenga base de conocimiento definida.</p>
     {:else}
       <section class="card">
         <h3>📋 Documentos</h3>

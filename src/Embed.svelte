@@ -4,7 +4,7 @@
   // ─── Config ──────────────────────────────────────────
   const AMBIENTES = {
     desarrollo: { url: 'http://127.0.0.1:8077', proxy: '/api-desarrollo' },
-    staging: { url: 'http://172.10.30.15:8080', proxy: '/api-staging' },
+    staging: { url: 'http://172.10.30.15:8077', proxy: '/api-staging' },
     producción: { url: 'http://172.10.30.16:8080', proxy: '/api-produccion' },
   };
 
@@ -17,7 +17,7 @@
   // Leer SOLO el ambiente desde la URL: ?ambiente=producción
   const params = new URLSearchParams(window.location.search);
   const ambienteParam = params.get('ambiente') || DEFAULT_AMBIENTE;
-  const agenteSlugParam = (params.get('agente') || '').trim();
+  const asistenteSlugParam = (params.get('agente') || '').trim();
 
   let ambienteSeleccionado = $state(
     Object.keys(AMBIENTES).includes(ambienteParam) ? ambienteParam : DEFAULT_AMBIENTE
@@ -32,13 +32,13 @@
   });
 
   // ─── Estado ──────────────────────────────────────────
-  let agente = $state(null);
+  let asistente = $state(null);
   let inputText = $state('');
   let isLoading = $state(false);
   let chatContainer;
   let configError = $state('');
 
-  const maxTurnos = $derived(agente?.historial_max ?? 5);
+  const maxTurnos = $derived(asistente?.historial_max ?? 5);
 
   function formatTime(date) {
     return date.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
@@ -53,10 +53,10 @@
 
   let messages = $state([{ ...MENSAJE_INICIAL }]);
 
-  // ─── Cargar agente del backend ───────────────────────
-  async function cargarAgente() {
+  // ─── Cargar asistente del backend ───────────────────────
+  async function cargarAsistente() {
     configError = '';
-    if (!agenteSlugParam) {
+    if (!asistenteSlugParam) {
       configError = 'Falta el parámetro ?agente=<slug> en la URL.';
       return;
     }
@@ -67,14 +67,14 @@
       clearTimeout(timeout);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const lista = await res.json();
-      const found = Array.isArray(lista) ? lista.find((a) => a.slug === agenteSlugParam) : null;
+      const found = Array.isArray(lista) ? lista.find((a) => a.slug === asistenteSlugParam) : null;
       if (!found) {
-        configError = `No existe un agente con slug "${agenteSlugParam}" en el ambiente "${ambienteSeleccionado}".`;
+        configError = `No existe un asistente con slug "${asistenteSlugParam}" en el ambiente "${ambienteSeleccionado}".`;
         return;
       }
-      agente = found;
+      asistente = found;
     } catch (err) {
-      configError = `No se pudo cargar el agente: ${err.message}`;
+      configError = `No se pudo cargar el asistente: ${err.message}`;
     }
   }
 
@@ -116,13 +116,13 @@
     await scrollToBottom();
     isLoading = true;
 
-    if (!agente) {
+    if (!asistente) {
       messages = [
         ...messages,
         {
           id: Date.now() + 1,
           role: 'bot',
-          text: configError || 'No hay agente cargado.',
+          text: configError || 'No hay asistente cargado.',
           time: formatTime(new Date()),
           isError: true,
         },
@@ -133,7 +133,7 @@
 
     try {
       const payload = {
-        agente_id: agente.id,
+        agente_id: asistente.id,
         pregunta: text,
         historial: buildHistorial(),
       };
@@ -199,7 +199,7 @@
   }
 
   onMount(() => {
-    cargarAgente();
+    cargarAsistente();
   });
 </script>
 
@@ -212,9 +212,9 @@
       </svg>
     </div>
     <div class="embed-header-info">
-      <span class="embed-title">{agente?.nombre ?? 'Asistente'}</span>
-      {#if agente}
-        <span class="embed-context">{agente.contexto}</span>
+      <span class="embed-title">{asistente?.nombre ?? 'Asistente'}</span>
+      {#if asistente}
+        <span class="embed-context">{asistente.contexto}</span>
       {/if}
     </div>
   </header>
@@ -265,13 +265,13 @@
       <textarea
         bind:value={inputText}
         onkeydown={handleKeydown}
-        placeholder={agente ? "Escribe tu mensaje..." : "Cargando agente..."}
+        placeholder={asistente ? "Escribe tu mensaje..." : "Cargando asistente..."}
         rows="1"
-        disabled={isLoading || !agente || !!configError}
+        disabled={isLoading || !asistente || !!configError}
       ></textarea>
       <button
         onclick={sendMessage}
-        disabled={!inputText.trim() || isLoading || !agente || !!configError}
+        disabled={!inputText.trim() || isLoading || !asistente || !!configError}
         aria-label="Enviar mensaje"
       >
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">

@@ -66,69 +66,29 @@
   }
 
   const AMBIENTES = {
-    desarrollo: { url: 'http://127.0.0.1:8077', proxy: '/api-desarrollo', frontend: 'http://localhost:5173' },
-    staging: { url: 'http://172.10.30.15:8080', proxy: '/api-staging', frontend: 'http://172.10.30.15:4175' },
-    producción: { url: 'http://172.10.30.16:8080', proxy: '/api-produccion', frontend: 'http://172.10.30.16:4175' },
+    desarrollo: { url: 'http://127.0.0.1:8077', proxy: '/api-desarrollo', frontend: 'http://localhost:5174' },
+    staging: { url: 'http://172.10.30.15:8077', proxy: '/api-staging', frontend: 'http://172.10.30.15:4176' },
+    producción: { url: 'http://172.10.30.16:8080', proxy: '/api-produccion', frontend: 'http://172.10.30.16:4176' },
   };
 
-  // Determina el ambiente por defecto según build mode
-  const DEFAULT_AMBIENTE = import.meta.env.DEV
+  // El ambiente se determina automáticamente por el build mode de Vite.
+  // No es seleccionable desde la UI — es DONDE estás corriendo.
+  // Si en algún momento se necesita cambiarlo en runtime, hay que reintroducir
+  // la lógica de cambiarAmbiente() y un selector en el header.
+  const ambienteSeleccionado = import.meta.env.DEV
     ? 'desarrollo'
     : import.meta.env.MODE === 'staging'
     ? 'staging'
     : 'producción';
 
-  // Estado reactivo del ambiente seleccionado (recupera del localStorage)
-  let ambienteSeleccionado = $state(
-    typeof localStorage !== 'undefined'
-      ? localStorage.getItem('mide_ambiente') || DEFAULT_AMBIENTE
-      : DEFAULT_AMBIENTE
-  );
-
-  // Resuelve API_BASE y API_URL_REAL dinámicamente según ambienteSeleccionado
-  let apiUrl = $derived.by(() => {
+  // API base/URL en función del ambiente fijo de la sesión.
+  const apiUrl = (() => {
     const config = AMBIENTES[ambienteSeleccionado];
     return {
       real: config.url,
       base: import.meta.env.DEV ? config.proxy : config.url,
     };
-  });
-
-  // Función para cambiar ambiente — recarga contextos al cambiar
-  function cambiarAmbiente(nuevoAmbiente) {
-    if (ambienteSeleccionado !== nuevoAmbiente) {
-      modelosEmbedding = []; // Limpiamos caché de modelos
-      nuevoContextoEmbedding = '';
-      // Limpia mensajes/estado del panel admin para evitar residuos del ambiente anterior
-      mensajeCrearContexto = '';
-      mensajeBorrarContexto = '';
-      mensajeIntegrarDocumento = '';
-      mensajeBorrarDocumento = '';
-      errorVectorizacionContextos = '';
-      contextoABorrar = '';
-      documentoSeleccionadoParaBorrar = '';
-      mostrarConfirmacionBorrar = false;
-      mostrarConfirmacionBorrarDocumento = false;
-    }
-    ambienteSeleccionado = nuevoAmbiente;
-    localStorage.setItem('mide_ambiente', nuevoAmbiente);
-    console.log(`🔄 Ambiente cambiado a: ${nuevoAmbiente}`);
-    console.log(`📍 API URL: ${apiUrl.real}/chatbot`);
-    // Los proyectos son per-ambiente (cada API tiene su propia tabla),
-    // así que recargamos para que el selector del header refleje los del nuevo ambiente.
-    cargarProyectos();
-    cargarContextos();
-    cargarAgentes();
-    // No reseteamos lightbotAgenteSlug ni contextlightAgenteSlug — los slugs
-    // son cross-ambiente (mismo nombre en dev/staging/prod), así que la
-    // selección persiste al cambiar de ambiente. Si el slug no existe en el
-    // nuevo ambiente, el dropdown lo muestra como no-match y el usuario puede
-    // re-seleccionar.
-    if (activeTab === 'vectorizacion') {
-      cargarContextosVectorizacion();
-    }
-    verificarSalud();
-  }
+  })();
 
   // Exponer helpers de log en consola para depuración
   if (typeof window !== 'undefined') {
@@ -154,7 +114,7 @@
     proyectoActivoId; // dependencia explícita (no operación, solo tracking)
     untrack(() => {
       cargarContextos();
-      cargarAgentes();
+      cargarAsistentes();
       if (activeTab === 'vectorizacion') {
         cargarContextosVectorizacion();
       }
@@ -213,11 +173,12 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   const PLACEHOLDER_VARIABLES_META = {
     'regla critica': {
       optional: true,
-      placeholder: '*** REGLA CRÍTICA: Responde en máximo 2 oraciones. ***',
+      defaultValue: '*** REGLA CRÍTICA: Responde en máximo 2 oraciones. ***',
       wrap: '***',
     },
     'tu dominio': {
-      description: 'el área de especialización del agente (ej. ventas, soporte técnico, recursos humanos)',
+      description: 'el área de especialización del asistente (ej. ventas, soporte técnico, recursos humanos)',
+      placeholder: 'experto en ventas bancarias',
     },
   };
 
@@ -254,15 +215,15 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     defaultContextFlashTimer = setTimeout(() => { defaultContextGuardadoFlash = false; }, 2500);
   }
 
-  // Lightbot/ContextLight: ambiente + slug de agente para construir URLs de embed.
+  // Lightbot/ContextLight: ambiente + slug de asistente para construir URLs de embed.
   // Los slugs persisten en localStorage para que cuando vuelvas a abrir la admin
-  // (o el LightBot) ya haya un agente seleccionado por defecto.
+  // (o el LightBot) ya haya un asistente seleccionado por defecto.
   let lightbotAmbiente = $state('staging');
-  let lightbotAgenteSlug = $state(
+  let lightbotAsistenteSlug = $state(
     typeof localStorage !== 'undefined' ? localStorage.getItem('bzz_lightbot_agente') || '' : ''
   );
   let contextlightAmbiente = $state('staging');
-  let contextlightAgenteSlug = $state(
+  let contextlightAsistenteSlug = $state(
     typeof localStorage !== 'undefined' ? localStorage.getItem('bzz_contextlight_agente') || '' : ''
   );
 
@@ -273,17 +234,20 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   $effect(() => {
     contextlightAmbiente = ambienteSeleccionado;
   });
+  $effect(() => {
+    if (vectorizacionTab !== 'proyectos') vinoDeCambiarProyecto = false;
+  });
 
   // Persistir slugs seleccionados en localStorage. Si se vacía la selección,
   // se borra la entrada para que la siguiente sesión arranque limpia.
   $effect(() => {
     if (typeof localStorage === 'undefined') return;
-    if (lightbotAgenteSlug) localStorage.setItem('bzz_lightbot_agente', lightbotAgenteSlug);
+    if (lightbotAsistenteSlug) localStorage.setItem('bzz_lightbot_agente', lightbotAsistenteSlug);
     else localStorage.removeItem('bzz_lightbot_agente');
   });
   $effect(() => {
     if (typeof localStorage === 'undefined') return;
-    if (contextlightAgenteSlug) localStorage.setItem('bzz_contextlight_agente', contextlightAgenteSlug);
+    if (contextlightAsistenteSlug) localStorage.setItem('bzz_contextlight_agente', contextlightAsistenteSlug);
     else localStorage.removeItem('bzz_contextlight_agente');
   });
 
@@ -444,7 +408,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       if (!res.ok && res.status !== 204) {
         if (res.status === 409) {
           const txt = await res.text().catch(() => '');
-          let detalle = 'el proyecto tiene agentes o bases de conocimiento asociados';
+          let detalle = 'el proyecto tiene asistentes o bases de conocimiento asociados';
           try {
             const j = JSON.parse(txt);
             if (typeof j.detail === 'string') detalle = j.detail;
@@ -542,6 +506,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let contextoSeleccionadoParaDocumentos = $state('');
   let vinoDeEditarContexto = $state(false);
   let vinoDeCrearProyecto = $state(false);
+  let vinoDeCambiarProyecto = $state(false);
   let crearContextoAbierto = $state(false);
   let archivoParaIntegrar = $state(null);
   let cargandoIntegrarDocumento = $state(false);
@@ -558,21 +523,21 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let infoModeloSeleccionado = $state(null);
   let cargandoInfoModelo = $state(false);
 
-  // ─── Agentes (CRUD) ───────────────────────────────────────────
+  // ─── Asistentes (CRUD) ───────────────────────────────────────────
   const SLUG_REGEX = /^[a-z][a-z0-9-]{1,63}$/;
-  let agentes = $state([]);
-  let cargandoAgentes = $state(false);
-  let errorCargarAgentes = $state('');
-  let agenteFormAbierto = $state(false);
-  let agenteEditandoId = $state(null);
-  let agenteFormSlug = $state('');
-  let agenteFormNombre = $state('');
-  let agenteFormInstrucciones = $state('');
-  let agenteFormContexto = $state('');
-  let agenteFormModelo = $state('mistral');
-  let agenteFormHistorialMax = $state(5);
+  let asistentes = $state([]);
+  let cargandoAsistentes = $state(false);
+  let errorCargarAsistentes = $state('');
+  let asistenteFormAbierto = $state(false);
+  let asistenteEditandoId = $state(null);
+  let asistenteFormSlug = $state('');
+  let asistenteFormNombre = $state('');
+  let asistenteFormInstrucciones = $state('');
+  let asistenteFormContexto = $state('');
+  let asistenteFormModelo = $state('mistral');
+  let asistenteFormHistorialMax = $state(3);
   const placeholderInstrucciones = $derived(
-    PLACEHOLDER_INSTRUCCIONES[agenteFormModelo] ?? PLACEHOLDER_INSTRUCCIONES_FALLBACK
+    PLACEHOLDER_INSTRUCCIONES[asistenteFormModelo] ?? PLACEHOLDER_INSTRUCCIONES_FALLBACK
   );
 
   // Extrae nombres únicos de variables tipo [xxx] de un template.
@@ -583,15 +548,15 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     return [...seen];
   }
   const placeholderVariables = $derived(extraerVariables(placeholderInstrucciones));
-  let agenteFormVariables = $state({});
+  let asistenteFormVariables = $state({});
 
   // Sincroniza el mapa de variables cuando cambia el modelo: conserva valores
   // de variables que mantengan el mismo nombre, e inicializa las nuevas en ''.
-  function sincronizarVariablesAgente() {
+  function sincronizarVariablesAsistente() {
     const nombres = extraerVariables(
-      PLACEHOLDER_INSTRUCCIONES[agenteFormModelo] ?? PLACEHOLDER_INSTRUCCIONES_FALLBACK
+      PLACEHOLDER_INSTRUCCIONES[asistenteFormModelo] ?? PLACEHOLDER_INSTRUCCIONES_FALLBACK
     );
-    const prev = agenteFormVariables;
+    const prev = asistenteFormVariables;
     const next = {};
     for (const n of nombres) {
       // Si la variable ya tiene valor previo (incluyendo string vacío si el
@@ -601,10 +566,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       if (n in prev) {
         next[n] = prev[n];
       } else {
-        next[n] = PLACEHOLDER_VARIABLES_META[n]?.placeholder ?? '';
+        next[n] = PLACEHOLDER_VARIABLES_META[n]?.defaultValue ?? '';
       }
     }
-    agenteFormVariables = next;
+    asistenteFormVariables = next;
   }
 
   // Construye el texto plano de instrucciones a partir de la plantilla.
@@ -613,7 +578,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   // Variables requeridas vacías → deja [xxx] literal como cue de "te falta llenar esto".
   function construirInstruccionesPlain() {
     let texto = placeholderInstrucciones;
-    for (const [nombre, valor] of Object.entries(agenteFormVariables)) {
+    for (const [nombre, valor] of Object.entries(asistenteFormVariables)) {
       const meta = PLACEHOLDER_VARIABLES_META[nombre];
       const valorTrim = (valor ?? '').trim();
       if (valorTrim) {
@@ -629,115 +594,116 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   // Auto-sincroniza el textarea con la plantilla + variables en modo creación.
   // En modo edición no toca nada — el usuario maneja libremente las instrucciones
-  // existentes del agente.
+  // existentes del asistente.
   $effect(() => {
-    if (!agenteFormAbierto || agenteEditandoId) return;
-    agenteFormInstrucciones = construirInstruccionesPlain();
+    if (!asistenteFormAbierto || asistenteEditandoId) return;
+    asistenteFormInstrucciones = construirInstruccionesPlain();
   });
 
-  let cargandoGuardarAgente = $state(false);
-  let mensajeAgente = $state('');
-  let agenteABorrar = $state(null);
-  let mostrarConfirmacionBorrarAgente = $state(false);
-  let cargandoBorrarAgente = $state(false);
+  let cargandoGuardarAsistente = $state(false);
+  let mensajeAsistente = $state('');
+  let asistenteABorrar = $state(null);
+  let mostrarConfirmacionBorrarAsistente = $state(false);
+  let cargandoBorrarAsistente = $state(false);
+  let lookAndFeelAsistente = $state(null);
 
-  function resetAgenteForm() {
-    agenteEditandoId = null;
-    agenteFormSlug = '';
-    agenteFormNombre = '';
-    agenteFormInstrucciones = '';
-    agenteFormContexto = '';
-    agenteFormModelo = 'mistral';
-    agenteFormHistorialMax = 5;
+  function resetAsistenteForm() {
+    asistenteEditandoId = null;
+    asistenteFormSlug = '';
+    asistenteFormNombre = '';
+    asistenteFormInstrucciones = '';
+    asistenteFormContexto = '';
+    asistenteFormModelo = 'mistral';
+    asistenteFormHistorialMax = 3;
     // Limpia el mapa de variables para que sincronizar arranque con los
     // defaults de la plantilla (regla critica pre-llena, etc.) en cada nueva creación.
-    agenteFormVariables = {};
-    mensajeAgente = '';
-    sincronizarVariablesAgente();
+    asistenteFormVariables = {};
+    mensajeAsistente = '';
+    sincronizarVariablesAsistente();
   }
 
-  function abrirFormCrearAgente() {
-    resetAgenteForm();
-    agenteFormAbierto = true;
+  function abrirFormCrearAsistente() {
+    resetAsistenteForm();
+    asistenteFormAbierto = true;
   }
 
-  function abrirFormEditarAgente(agente) {
-    agenteEditandoId = agente.id;
-    agenteFormSlug = agente.slug;
-    agenteFormNombre = agente.nombre;
-    agenteFormInstrucciones = agente.instrucciones;
-    agenteFormContexto = agente.contexto;
-    agenteFormModelo = agente.modelo_llm;
-    agenteFormHistorialMax = agente.historial_max;
-    mensajeAgente = '';
-    sincronizarVariablesAgente();
-    agenteFormAbierto = true;
+  function abrirFormEditarAsistente(asistente) {
+    asistenteEditandoId = asistente.id;
+    asistenteFormSlug = asistente.slug;
+    asistenteFormNombre = asistente.nombre;
+    asistenteFormInstrucciones = asistente.instrucciones;
+    asistenteFormContexto = asistente.contexto;
+    asistenteFormModelo = asistente.modelo_llm;
+    asistenteFormHistorialMax = asistente.historial_max;
+    mensajeAsistente = '';
+    sincronizarVariablesAsistente();
+    asistenteFormAbierto = true;
   }
 
-  function cerrarFormAgente() {
-    agenteFormAbierto = false;
-    resetAgenteForm();
+  function cerrarFormAsistente() {
+    asistenteFormAbierto = false;
+    resetAsistenteForm();
   }
 
-  async function cargarAgentes() {
-    cargandoAgentes = true;
-    errorCargarAgentes = '';
+  async function cargarAsistentes() {
+    cargandoAsistentes = true;
+    errorCargarAsistentes = '';
     try {
       const url = proyectoActivoId
         ? `${apiUrl.base}/agentes?proyecto_id=${encodeURIComponent(proyectoActivoId)}`
         : `${apiUrl.base}/agentes`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      agentes = await res.json();
+      asistentes = await res.json();
     } catch (err) {
-      errorCargarAgentes = `No se pudieron cargar los agentes: ${err.message}`;
-      agentes = [];
+      errorCargarAsistentes = `No se pudieron cargar los asistentes: ${err.message}`;
+      asistentes = [];
     } finally {
-      cargandoAgentes = false;
+      cargandoAsistentes = false;
     }
   }
 
-  async function guardarAgente() {
-    const slug = agenteFormSlug.trim();
-    const nombre = agenteFormNombre.trim();
-    const instrucciones = agenteFormInstrucciones.trim();
-    const contexto = agenteFormContexto.trim();
-    const modelo_llm = agenteFormModelo.trim();
-    const historial_max = parseInt(agenteFormHistorialMax, 10);
+  async function guardarAsistente() {
+    const slug = asistenteFormSlug.trim();
+    const nombre = asistenteFormNombre.trim();
+    const instrucciones = asistenteFormInstrucciones.trim();
+    const contexto = asistenteFormContexto.trim();
+    const modelo_llm = asistenteFormModelo.trim();
+    const historial_max = parseInt(asistenteFormHistorialMax, 10);
 
-    if (!agenteEditandoId && !SLUG_REGEX.test(slug)) {
-      mensajeAgente = '❌ Slug inválido. Usa minúsculas, dígitos y guiones (2-64 chars, empieza con letra).';
+    if (!asistenteEditandoId && !SLUG_REGEX.test(slug)) {
+      mensajeAsistente = '❌ Slug inválido. Usa minúsculas, dígitos y guiones (2-64 chars, empieza con letra).';
       return;
     }
     if (!nombre || nombre.length > 80) {
-      mensajeAgente = '❌ Nombre requerido, máximo 80 caracteres.';
+      mensajeAsistente = '❌ Nombre requerido, máximo 80 caracteres.';
       return;
     }
     if (!instrucciones) {
-      mensajeAgente = '❌ Instrucciones no pueden estar vacías.';
+      mensajeAsistente = '❌ Instrucciones no pueden estar vacías.';
       return;
     }
-    // contexto es opcional: vacío = agente sin RAG (chat puro, solo instrucciones + LLM).
+    // contexto es opcional: vacío = asistente sin RAG (chat puro, solo instrucciones + LLM).
     if (!modelo_llm) {
-      mensajeAgente = '❌ Selecciona un modelo LLM.';
+      mensajeAsistente = '❌ Selecciona un modelo LLM.';
       return;
     }
     if (isNaN(historial_max) || historial_max < 0 || historial_max > 50) {
-      mensajeAgente = '❌ Historial max debe ser entero entre 0 y 50.';
+      mensajeAsistente = '❌ Historial max debe ser entero entre 0 y 50.';
       return;
     }
     if (!proyectoActivoId) {
-      mensajeAgente = '❌ No hay proyecto activo. Selecciona uno en el header o crea uno en la subtab Proyectos.';
+      mensajeAsistente = '❌ No hay proyecto activo. Selecciona uno en el header o crea uno en la subtab Proyectos.';
       return;
     }
 
-    cargandoGuardarAgente = true;
-    mensajeAgente = '';
+    cargandoGuardarAsistente = true;
+    mensajeAsistente = '';
 
     try {
-      const editando = !!agenteEditandoId;
+      const editando = !!asistenteEditandoId;
       const url = editando
-        ? `${apiUrl.base}/agentes/${encodeURIComponent(agenteEditandoId)}`
+        ? `${apiUrl.base}/agentes/${encodeURIComponent(asistenteEditandoId)}`
         : `${apiUrl.base}/agentes`;
       const body = editando
         ? { nombre, instrucciones, contexto, modelo_llm, historial_max }
@@ -756,42 +722,42 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           const j = JSON.parse(txt);
           msg = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail ?? j);
         } catch {}
-        if (res.status === 409) throw new Error(`Ya existe un agente con ese slug.`);
+        if (res.status === 409) throw new Error(`Ya existe un asistente con ese slug.`);
         throw new Error(`HTTP ${res.status}: ${msg}`);
       }
 
-      mensajeAgente = editando ? '✅ Agente actualizado' : '✅ Agente creado';
-      await cargarAgentes();
+      mensajeAsistente = editando ? '✅ Asistente actualizado' : '✅ Asistente creado';
+      await cargarAsistentes();
       setTimeout(() => {
-        cerrarFormAgente();
+        cerrarFormAsistente();
       }, 800);
     } catch (err) {
-      mensajeAgente = `❌ ${err.message}`;
+      mensajeAsistente = `❌ ${err.message}`;
     } finally {
-      cargandoGuardarAgente = false;
+      cargandoGuardarAsistente = false;
     }
   }
 
-  function pedirConfirmacionBorrarAgente(agente) {
-    agenteABorrar = agente;
-    mostrarConfirmacionBorrarAgente = true;
+  function pedirConfirmacionBorrarAsistente(asistente) {
+    asistenteABorrar = asistente;
+    mostrarConfirmacionBorrarAsistente = true;
   }
 
-  async function borrarAgenteConfirmado() {
-    if (!agenteABorrar) return;
-    cargandoBorrarAgente = true;
+  async function borrarAsistenteConfirmado() {
+    if (!asistenteABorrar) return;
+    cargandoBorrarAsistente = true;
     try {
-      const res = await fetch(`${apiUrl.base}/agentes/${encodeURIComponent(agenteABorrar.id)}`, {
+      const res = await fetch(`${apiUrl.base}/agentes/${encodeURIComponent(asistenteABorrar.id)}`, {
         method: 'DELETE',
       });
       if (!res.ok && res.status !== 204) throw new Error(`HTTP ${res.status}`);
-      await cargarAgentes();
-      mostrarConfirmacionBorrarAgente = false;
-      agenteABorrar = null;
+      await cargarAsistentes();
+      mostrarConfirmacionBorrarAsistente = false;
+      asistenteABorrar = null;
     } catch (err) {
-      mensajeAgente = `❌ Error al borrar: ${err.message}`;
+      mensajeAsistente = `❌ Error al borrar: ${err.message}`;
     } finally {
-      cargandoBorrarAgente = false;
+      cargandoBorrarAsistente = false;
     }
   }
   // Cache por ambiente para modelos de embedding
@@ -1416,18 +1382,18 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     }
   }
 
-  // Agente seleccionado en el Chatbot tab. Persiste en localStorage.
-  let agenteSeleccionadoId = $state(
+  // Asistente seleccionado en el Chatbot tab. Persiste en localStorage.
+  let asistenteSeleccionadoId = $state(
     typeof localStorage !== 'undefined' ? localStorage.getItem('mide_agente_id') || '' : ''
   );
-  const agenteSeleccionado = $derived(
-    agentes.find((a) => a.id === agenteSeleccionadoId) ?? null
+  const asistenteSeleccionado = $derived(
+    asistentes.find((a) => a.id === asistenteSeleccionadoId) ?? null
   );
-  const maxTurnos = $derived(agenteSeleccionado?.historial_max ?? 5);
+  const maxTurnos = $derived(asistenteSeleccionado?.historial_max ?? 5);
 
   $effect(() => {
-    if (typeof localStorage !== 'undefined' && agenteSeleccionadoId) {
-      localStorage.setItem('mide_agente_id', agenteSeleccionadoId);
+    if (typeof localStorage !== 'undefined' && asistenteSeleccionadoId) {
+      localStorage.setItem('mide_agente_id', asistenteSeleccionadoId);
     }
   });
 
@@ -1477,13 +1443,13 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     const text = inputText.trim();
     if (!text || isLoading) return;
 
-    if (!agenteSeleccionado) {
+    if (!asistenteSeleccionado) {
       messages = [
         ...messages,
         {
           id: Date.now() + 1,
           role: 'bot',
-          text: '⚠️ Selecciona un agente primero (o créalo en Construcción → Agente).',
+          text: '⚠️ Selecciona un asistente primero (o créalo en Construcción → Asistente).',
           time: formatTime(new Date()),
           isError: true,
         },
@@ -1503,7 +1469,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
     try {
       const payload = {
-        agente_id: agenteSeleccionado.id,
+        agente_id: asistenteSeleccionado.id,
         pregunta: text,
         historial: buildHistorial(),
       };
@@ -1561,8 +1527,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         historial: payload.historial,
         respuesta: botText,
         ms: elapsed,
-        contexto: agenteSeleccionado.contexto,
-        modelo: agenteSeleccionado.modelo_llm,
+        contexto: asistenteSeleccionado.contexto,
+        modelo: asistenteSeleccionado.modelo_llm,
       });
 
       messages = [
@@ -1583,8 +1549,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         respuesta: null,
         ms: null,
         error: err.message,
-        contexto: agenteSeleccionado?.contexto,
-        modelo: agenteSeleccionado?.modelo_llm,
+        contexto: asistenteSeleccionado?.contexto,
+        modelo: asistenteSeleccionado?.modelo_llm,
       });
 
       messages = [
@@ -1621,11 +1587,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         </svg>
       </div>
       <div class="header-info">
-        <h1 class="header-title">Constructor Agente</h1>
+        <h1 class="header-title">Constructor de Asistentes</h1>
         <span class="header-status" onclick={verificarSalud} onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && verificarSalud()} title="Click para verificar conexión" role="button" tabindex="0">
           <span class="status-dot" class:online={estadoSalud === 'online'} class:offline={estadoSalud === 'offline'} class:checking={estadoSalud === 'checking'}></span>
           {#if estadoSalud === 'online'}
-            En linea
+            API en línea
           {:else if estadoSalud === 'offline'}
             Sin conexion
           {:else}
@@ -1633,15 +1599,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           {/if}
         </span>
       </div>
-      <div class="ambiente-toggle">
-        {#each Object.keys(AMBIENTES) as amb}
-          <button
-            class="ambiente-btn"
-            class:active={ambienteSeleccionado === amb}
-            onclick={() => cambiarAmbiente(amb)}
-            aria-pressed={ambienteSeleccionado === amb}
-          >{amb}</button>
-        {/each}
+      <div class="ambiente-indicador" title={`Estás corriendo en ambiente: ${ambienteSeleccionado}`}>
+        <span class="ambiente-indicador-label">Ambiente</span>
+        <span class="ambiente-indicador-valor" data-ambiente={ambienteSeleccionado}>{ambienteSeleccionado}</span>
       </div>
     </div>
 
@@ -1655,7 +1615,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       <button
         class="tab-btn"
         class:active={activeTab === 'chat'}
-        onclick={() => { activeTab = 'chat'; cargarAgentes(); verificarSalud(); }}
+        onclick={() => { activeTab = 'chat'; cargarAsistentes(); verificarSalud(); }}
         aria-pressed={activeTab === 'chat'}
       ><Icon name="chatbot" size={16} /> Chatbot</button>
       <button
@@ -1672,29 +1632,29 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   {#if activeTab === 'chat'}
   <nav class="chat-subnav">
     <div class="context-select-wrap">
-      <label for="agente-chat-select">Agente</label>
-      {#if cargandoAgentes}
+      <label for="asistente-chat-select">Asistente</label>
+      {#if cargandoAsistentes}
         <span class="ctx-loading">cargando...</span>
-      {:else if agentes.length === 0}
-        <span class="ctx-loading">sin agentes — créalo en Construcción</span>
+      {:else if asistentes.length === 0}
+        <span class="ctx-loading">sin asistentes — créalo en Construcción</span>
       {:else}
-        <select id="agente-chat-select" bind:value={agenteSeleccionadoId}>
-          <option value="">-- Selecciona Agente --</option>
-          {#each agentes as a (a.id)}
+        <select id="asistente-chat-select" bind:value={asistenteSeleccionadoId}>
+          <option value="">-- Selecciona Asistente --</option>
+          {#each asistentes as a (a.id)}
             <option value={a.id}>{a.nombre}</option>
           {/each}
         </select>
       {/if}
     </div>
-    {#if agenteSeleccionado}
+    {#if asistenteSeleccionado}
       <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; font-size: 0.78rem; color: rgba(255,255,255,0.7);">
-        {#if agenteSeleccionado.contexto}
-          <span title="Base de Conocimiento"><Icon name="base-conocimiento" size={14} /> {agenteSeleccionado.contexto}</span>
+        {#if asistenteSeleccionado.contexto}
+          <span title="Base de Conocimiento"><Icon name="base-conocimiento" size={14} /> {asistenteSeleccionado.contexto}</span>
         {:else}
-          <span title="Sin base de conocimiento — agente conversacional puro" style="opacity:0.7;"><Icon name="sin-rag" size={14} /> sin RAG</span>
+          <span title="Sin base de conocimiento — asistente conversacional puro" style="opacity:0.7;"><Icon name="sin-rag" size={14} /> sin RAG</span>
         {/if}
-        <span title="Modelo LLM"><Icon name="modelo" size={14} /> {agenteSeleccionado.modelo_llm}</span>
-        <span title="Historial"><Icon name="historial" size={14} /> {agenteSeleccionado.historial_max} turnos</span>
+        <span title="Modelo LLM"><Icon name="modelo" size={14} /> {asistenteSeleccionado.modelo_llm}</span>
+        <span title="Historial"><Icon name="historial" size={14} /> {asistenteSeleccionado.historial_max} turnos</span>
       </div>
     {/if}
     <div class="context-select-wrap" style="margin-left: auto;">
@@ -1765,13 +1725,13 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       <textarea
         bind:value={inputText}
         onkeydown={handleKeydown}
-        placeholder={agenteSeleccionado ? "Escribe tu mensaje..." : "Selecciona un agente primero"}
+        placeholder={asistenteSeleccionado ? "Escribe tu mensaje..." : "Selecciona un asistente primero"}
         rows="1"
-        disabled={isLoading || !agenteSeleccionado}
+        disabled={isLoading || !asistenteSeleccionado}
       ></textarea>
       <button
         onclick={sendMessage}
-        disabled={!inputText.trim() || isLoading || !agenteSeleccionado}
+        disabled={!inputText.trim() || isLoading || !asistenteSeleccionado}
         aria-label="Enviar mensaje"
       >
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1779,7 +1739,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         </svg>
       </button>
     </div>
-    <p class="disclaimer">Constructor Agente</p>
+    <p class="disclaimer">Constructor de Asistentes</p>
   </footer>
   {/if}
 
@@ -1809,10 +1769,13 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
         <!-- Sub-tab bar -->
         <div class="vectorizacion-subtabs">
+          {#if vinoDeCambiarProyecto}
+            <span class="subtab-arrow-indicator" aria-hidden="true">»</span>
+          {/if}
           <button
             class="vectorizacion-subtab-btn"
             class:active={vectorizacionTab === 'proyectos'}
-            onclick={() => { vectorizacionTab = 'proyectos'; vinoDeCrearProyecto = false; cargarProyectos(); }}
+            onclick={() => { vectorizacionTab = 'proyectos'; vinoDeCrearProyecto = false; vinoDeCambiarProyecto = false; cargarProyectos(); }}
           >
             <Icon name="proyecto" size={16} /> Proyectos
           </button>
@@ -1821,65 +1784,51 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           {/if}
           <button
             class="vectorizacion-subtab-btn"
-            class:active={vectorizacionTab === 'contextos'}
+            class:active={vectorizacionTab === 'contextos' || vectorizacionTab === 'documentos'}
             onclick={() => { vectorizacionTab = 'contextos'; vinoDeEditarContexto = false; }}
           >
-            <Icon name="base-conocimiento" size={16} /> Base de Conocimiento
-          </button>
-          {#if vinoDeEditarContexto && vectorizacionDocumentos.length === 0}
-            <span class="subtab-arrow-indicator" aria-hidden="true">»</span>
-          {/if}
-          <button
-            class="vectorizacion-subtab-btn"
-            class:active={vectorizacionTab === 'documentos'}
-            disabled
-            title="Accede desde el ✏️ de una base de conocimiento"
-          >
-            <Icon name="documentos" size={16} /> Documentos
-          </button>
-          {#if vinoDeEditarContexto && vectorizacionDocumentos.length > 0}
-            <span class="subtab-arrow-indicator" aria-hidden="true">»</span>
-          {/if}
-          <button
-            class="vectorizacion-subtab-btn"
-            class:active={vectorizacionTab === 'agente'}
-            onclick={() => { vectorizacionTab = 'agente'; cargarAgentes(); cargarContextos(); }}
-          >
-            <Icon name="agente" size={16} /> Agente
+            <Icon name="base-conocimiento" size={16} /> Bases de Conocimiento
           </button>
           <button
             class="vectorizacion-subtab-btn"
-            class:active={vectorizacionTab === 'lightbot'}
-            onclick={() => { vectorizacionTab = 'lightbot'; cargarAgentes(); }}
+            class:active={vectorizacionTab === 'asistente'}
+            onclick={() => { vectorizacionTab = 'asistente'; cargarAsistentes(); cargarContextos(); }}
           >
-            <Icon name="lightbot-embedder" size={16} /> LightbotEmbedder
+            <Icon name="asistente" size={16} /> Asistentes
           </button>
           <button
             class="vectorizacion-subtab-btn"
-            class:active={vectorizacionTab === 'lightbotpanel'}
-            onclick={() => { vectorizacionTab = 'lightbotpanel'; }}
+            class:active={vectorizacionTab === 'escenario'}
+            onclick={() => { vectorizacionTab = 'escenario'; cargarAsistentes(); }}
           >
-            <Icon name="lightbot" size={16} /> LightBot
+            <Icon name="escenario" size={16} /> Escenario
           </button>
           <button
             class="vectorizacion-subtab-btn"
-            class:active={vectorizacionTab === 'contextlightembedder'}
-            onclick={() => { vectorizacionTab = 'contextlightembedder'; cargarAgentes(); }}
+            class:active={vectorizacionTab === 'miniadmin'}
+            onclick={() => { vectorizacionTab = 'miniadmin'; cargarAsistentes(); }}
           >
-            <Icon name="contextlight-embedder" size={16} /> ContextLightEmbedder
-          </button>
-          <button
-            class="vectorizacion-subtab-btn"
-            class:active={vectorizacionTab === 'contextlight'}
-            onclick={() => { vectorizacionTab = 'contextlight'; }}
-          >
-            <Icon name="contextlight" size={16} /> ContextLight
+            <Icon name="miniadmin" size={16} /> MiniAdmin
           </button>
         </div>
 
         <!-- Dashboard -->
         <!-- Proyectos -->
         {#if vectorizacionTab === 'proyectos'}
+          {#if proyectoActivo}
+            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.85rem; background: rgba(0,0,0,0.18); border-radius: 8px; margin-bottom: 1rem; font-size: 0.85rem; color: rgba(255,255,255,0.85);">
+              <Icon name="proyecto" size={14} />
+              <span>Trabajando en proyecto: <strong>{proyectoActivo.nombre}</strong></span>
+              <code style="background: rgba(0,0,0,0.3); padding: 1px 6px; border-radius: 4px; font-size: 0.75rem; color: rgba(255,255,255,0.7);">{proyectoActivo.slug}</code>
+              <button
+                onclick={() => { vectorizacionTab = 'proyectos'; vinoDeCambiarProyecto = true; cargarProyectos(); }}
+                style="margin-left: auto; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.9); cursor: pointer; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 5px; transition: background 0.15s;"
+                onmouseover={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.22)'}
+                onmouseout={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.12)'}
+                title="Ir a Proyectos para cambiar el proyecto activo"
+              >Cambiar de proyecto</button>
+            </div>
+          {/if}
           <div class="crear-contexto-wrap" class:abierto={proyectoFormAbierto}>
             <button class="crear-contexto-toggle" onclick={() => proyectoFormAbierto ? cerrarFormProyecto() : abrirFormCrearProyecto()}>
               <h3>
@@ -1943,7 +1892,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     onclick={cerrarFormProyecto}
                     disabled={cargandoGuardarProyecto}
                     class="crear-contexto-btn"
-                    style="background: rgba(255,255,255,0.15);"
+                    style="background: rgba(0,0,0,0.45); color: rgba(255,255,255,0.95);"
                   >
                     Cancelar
                   </button>
@@ -1968,9 +1917,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               <p class="mensaje-contexto" style="margin-top: 0.5rem;">❌ {errorCargarProyectos}</p>
             {/if}
             {#if cargandoProyectos}
-              <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando proyectos...</p>
+              <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando proyectos...</p>
             {:else if proyectos.length === 0}
-              <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">No hay proyectos creados todavía.</p>
+              <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem; padding: 1rem 0;">No hay proyectos creados todavía.</p>
             {:else}
               <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.5rem;">
                 {#each proyectos as p (p.id)}
@@ -1994,10 +1943,17 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     </div>
                     <div style="display: flex; gap: 0.4rem; flex-shrink: 0; align-items: center;">
                       {#if !esActivo}
-                        <button onclick={() => proyectoActivoId = p.id} class="vectorizacion-action-btn" title="Activar este proyecto" style="background: rgba(34,197,94,0.25); border-color: rgba(34,197,94,0.5);">
+                        <button onclick={() => { proyectoActivoId = p.id; vinoDeCambiarProyecto = false; }} class="vectorizacion-action-btn" title="Activar este proyecto" style="background: rgba(34,197,94,0.25); border-color: rgba(34,197,94,0.5);">
                           Activar
                         </button>
                       {/if}
+                      <button
+                        onclick={() => { proyectoActivoId = p.id; vinoDeCambiarProyecto = false; vectorizacionTab = 'contextos'; }}
+                        class="vectorizacion-action-btn"
+                        title="Ir a Bases de Conocimiento de este proyecto"
+                      >
+                        <Icon name="base-conocimiento" size={16} label="Bases de Conocimiento" />
+                      </button>
                       <button onclick={() => abrirFormEditarProyecto(p)} class="vectorizacion-action-btn" title="Editar proyecto"><Icon name="editar" size={16} label="Editar" /></button>
                       <button onclick={() => pedirConfirmacionBorrarProyecto(p)} class="vectorizacion-action-btn" title="Borrar proyecto"><Icon name="borrar" size={16} label="Borrar" /></button>
                     </div>
@@ -2013,14 +1969,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               <p style="color: rgba(255,255,255,0.85);">
                 ¿Estás seguro de borrar el proyecto <strong>{proyectoABorrar.nombre}</strong> (<code>{proyectoABorrar.slug}</code>)?
               </p>
-              <p style="color: rgba(255,255,255,0.6); font-size: 0.85rem;">
-                Cuando esté el backend, esto fallará si el proyecto tiene bases de conocimiento o agentes asociados.
+              <p style="color: rgba(0,0,0,0.55); font-size: 0.85rem;">
+                Cuando esté el backend, esto fallará si el proyecto tiene bases de conocimiento o asistentes asociados.
               </p>
               <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
                 <button onclick={borrarProyectoConfirmado} disabled={cargandoBorrarProyecto} class="crear-contexto-btn" style="background: #c8102e;">
                   {cargandoBorrarProyecto ? '⟳ Borrando...' : '🗑️ Sí, borrar'}
                 </button>
-                <button onclick={() => { mostrarConfirmacionBorrarProyecto = false; proyectoABorrar = null; }} disabled={cargandoBorrarProyecto} class="crear-contexto-btn" style="background: rgba(255,255,255,0.15);">
+                <button onclick={() => { mostrarConfirmacionBorrarProyecto = false; proyectoABorrar = null; }} disabled={cargandoBorrarProyecto} class="crear-contexto-btn" style="background: rgba(0,0,0,0.45); color: rgba(255,255,255,0.95);">
                   Cancelar
                 </button>
               </div>
@@ -2028,64 +1984,86 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           {/if}
         {/if}
 
-        <!-- Agente -->
-        {#if vectorizacionTab === 'agente'}
+        <!-- Asistente -->
+        {#if vectorizacionTab === 'asistente'}
           {#if proyectoActivo}
             <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.85rem; background: rgba(0,0,0,0.18); border-radius: 8px; margin-bottom: 1rem; font-size: 0.85rem; color: rgba(255,255,255,0.85);">
               <Icon name="proyecto" size={14} />
               <span>Trabajando en proyecto: <strong>{proyectoActivo.nombre}</strong></span>
               <code style="background: rgba(0,0,0,0.3); padding: 1px 6px; border-radius: 4px; font-size: 0.75rem; color: rgba(255,255,255,0.7);">{proyectoActivo.slug}</code>
+              <button
+                onclick={() => { vectorizacionTab = 'proyectos'; vinoDeCambiarProyecto = true; cargarProyectos(); }}
+                style="margin-left: auto; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.9); cursor: pointer; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 5px; transition: background 0.15s;"
+                onmouseover={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.22)'}
+                onmouseout={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.12)'}
+                title="Ir a Proyectos para cambiar el proyecto activo"
+              >Cambiar de proyecto</button>
             </div>
           {:else}
             <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1rem; background: rgba(200,40,40,0.85); border-radius: 8px; margin-bottom: 1rem; color: #fff; font-size: 0.9rem;">
               <Icon name="warning" size={16} />
-              <span>No hay proyecto activo. Crea o selecciona uno en <strong>📁 Proyectos</strong> antes de crear agentes.</span>
+              <span>No hay proyecto activo. Crea o selecciona uno en <strong>📁 Proyectos</strong> antes de crear asistentes.</span>
             </div>
           {/if}
-          <div class="crear-contexto-wrap" class:abierto={agenteFormAbierto}>
-            <button class="crear-contexto-toggle" onclick={() => agenteFormAbierto ? cerrarFormAgente() : abrirFormCrearAgente()}>
+          <div class="crear-contexto-wrap" class:abierto={asistenteFormAbierto}>
+            <button class="crear-contexto-toggle" onclick={() => asistenteFormAbierto ? cerrarFormAsistente() : abrirFormCrearAsistente()}>
               <h3>
-                {#if agenteEditandoId}
-                  <Icon name="editar" size={18} /> Editar Agente
+                {#if asistenteEditandoId}
+                  <Icon name="editar" size={18} /> Editar Asistente
                 {:else}
-                  <Icon name="crear" size={18} /> Crear Nuevo Agente
+                  <Icon name="crear" size={18} /> Crear Nuevo Asistente
                 {/if}
               </h3>
             </button>
-            {#if agenteFormAbierto}
+            {#if asistenteFormAbierto}
               <div class="crear-contexto-form" style="flex-direction: column; align-items: stretch; max-width: 720px;">
                 <div class="form-field">
-                  <label for="agente-slug">Slug {agenteEditandoId ? '(no modificable)' : ''}</label>
+                  <label for="asistente-slug" style="display: inline-flex; align-items: center; gap: 0.35rem;">
+                    Slug {asistenteEditandoId ? '(no modificable)' : ''}
+                    <span
+                      title="Identidad estable cross-ambiente. Lowercase, dígitos y guiones, 2-64 chars."
+                      style="display: inline-flex; cursor: help; opacity: 0.65;"
+                      aria-label="Información sobre el slug"
+                    >
+                      <Icon name="info" size={14} />
+                    </span>
+                  </label>
                   <input
-                    id="agente-slug"
+                    id="asistente-slug"
                     type="text"
                     placeholder="ej: soporte-ventas"
-                    bind:value={agenteFormSlug}
-                    disabled={cargandoGuardarAgente || !!agenteEditandoId}
+                    bind:value={asistenteFormSlug}
+                    disabled={cargandoGuardarAsistente || !!asistenteEditandoId}
                     class="contexto-input"
                   />
-                  <small style="font-size: 0.75rem; color: rgba(0,0,0,0.6); line-height: 1.3; display: block; margin-top: 0.25rem;">
-                    Identidad estable cross-ambiente. Lowercase, dígitos y guiones, 2-64 chars.
-                  </small>
                 </div>
                 <div class="form-field">
-                  <label for="agente-nombre">Nombre</label>
+                  <label for="asistente-nombre">Nombre</label>
                   <input
-                    id="agente-nombre"
+                    id="asistente-nombre"
                     type="text"
                     placeholder="ej: Soporte Ventas"
-                    bind:value={agenteFormNombre}
-                    disabled={cargandoGuardarAgente}
+                    bind:value={asistenteFormNombre}
+                    disabled={cargandoGuardarAsistente}
                     maxlength="80"
                     class="contexto-input"
                   />
                 </div>
                 <div class="form-field">
-                  <label for="agente-contexto">Base de Conocimiento</label>
+                  <label for="asistente-contexto" style="display: inline-flex; align-items: center; gap: 0.35rem;">
+                    Base de Conocimiento
+                    <span
+                      title="Base de Conocimiento previamente creada, que contiene el conocimiento que requiere el Asistente para operar."
+                      style="display: inline-flex; cursor: help; opacity: 0.65;"
+                      aria-label="Información sobre la Base de Conocimiento"
+                    >
+                      <Icon name="info" size={14} />
+                    </span>
+                  </label>
                   <select
-                    id="agente-contexto"
-                    bind:value={agenteFormContexto}
-                    disabled={cargandoGuardarAgente}
+                    id="asistente-contexto"
+                    bind:value={asistenteFormContexto}
+                    disabled={cargandoGuardarAsistente}
                     class="contexto-input"
                     style="display: block; width: 100%;"
                   >
@@ -2096,12 +2074,21 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   </select>
                 </div>
                 <div class="form-field">
-                  <label for="agente-modelo">Modelo LLM</label>
+                  <label for="asistente-modelo" style="display: inline-flex; align-items: center; gap: 0.35rem;">
+                    Modelo LLM
+                    <span
+                      title="Modelo de lenguaje que interpretará la información de la base de conocimiento e interactuará con el cliente."
+                      style="display: inline-flex; cursor: help; opacity: 0.65;"
+                      aria-label="Información sobre el modelo LLM"
+                    >
+                      <Icon name="info" size={14} />
+                    </span>
+                  </label>
                   <select
-                    id="agente-modelo"
-                    bind:value={agenteFormModelo}
-                    onchange={sincronizarVariablesAgente}
-                    disabled={cargandoGuardarAgente}
+                    id="asistente-modelo"
+                    bind:value={asistenteFormModelo}
+                    onchange={sincronizarVariablesAsistente}
+                    disabled={cargandoGuardarAsistente}
                     class="contexto-input"
                     style="display: block; width: 100%;"
                   >
@@ -2112,31 +2099,49 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                       <option value={m}>{m}</option>
                     {/each}
                   </select>
-                  <small style="font-size: 0.75rem; color: rgba(0,0,0,0.6); line-height: 1.3; display: block; margin-top: 0.25rem;">
-                    El modelo que elijas determina el estilo de prompt sugerido abajo.
-                  </small>
                 </div>
 
                 {#if placeholderVariables.length > 0}
                   <div class="form-field">
-                    <label>Variables de la plantilla</label>
+                    <label style="display: inline-flex; align-items: center; gap: 0.35rem;">
+                      Variables de la plantilla
+                      <span
+                        title="Llena las variables y las instrucciones se generan automáticamente abajo. Las variables marcadas como opcional se pueden vaciar para omitirlas del prompt. Puedes editar el textarea manualmente como ajuste final."
+                        style="display: inline-flex; cursor: help; opacity: 0.65;"
+                        aria-label="Información sobre las variables de la plantilla"
+                      >
+                        <Icon name="info" size={14} />
+                      </span>
+                    </label>
                     <div style="display: flex; flex-direction: column; gap: 0.75rem;">
                       {#each placeholderVariables as varName (varName)}
                         {@const meta = PLACEHOLDER_VARIABLES_META[varName]}
                         <div>
-                          <div style="font-size: 0.7rem; color: rgba(0,0,0,0.7); margin-bottom: 0.25rem; font-weight: 600;">
+                          <div style="font-size: 0.7rem; color: rgba(0,0,0,0.7); margin-bottom: 0.25rem; font-weight: 600; display: inline-flex; align-items: center; gap: 0.35rem;">
                             <code style="background: rgba(0,0,0,0.08); padding: 1px 5px; border-radius: 3px;">[{varName}]</code>
                             {#if meta?.optional}
-                              <em style="color: rgba(0,0,0,0.55); font-style: italic; font-size: 0.7rem; margin-left: 0.4rem; font-weight: normal;">— opcional, déjalo vacío para omitir{#if meta.wrap}; los <code>{meta.wrap}</code> se añaden automáticamente{/if}</em>
+                              <span
+                                title={`Opcional, déjalo vacío para omitir${meta.wrap ? `; los ${meta.wrap} se añaden automáticamente` : ''}`}
+                                style="display: inline-flex; cursor: help; opacity: 0.65;"
+                                aria-label={`Información sobre [${varName}]`}
+                              >
+                                <Icon name="info" size={12} />
+                              </span>
                             {:else if meta?.description}
-                              <em style="color: rgba(0,0,0,0.55); font-style: italic; font-size: 0.7rem; margin-left: 0.4rem; font-weight: normal;">— {meta.description}</em>
+                              <span
+                                title={meta.description}
+                                style="display: inline-flex; cursor: help; opacity: 0.65;"
+                                aria-label={`Información sobre [${varName}]`}
+                              >
+                                <Icon name="info" size={12} />
+                              </span>
                             {/if}
                           </div>
                           <input
                             type="text"
                             placeholder={meta?.placeholder ?? varName}
-                            bind:value={agenteFormVariables[varName]}
-                            disabled={cargandoGuardarAgente}
+                            bind:value={asistenteFormVariables[varName]}
+                            disabled={cargandoGuardarAsistente}
                             class="contexto-input"
                             style="width: 100%; box-sizing: border-box;{meta?.optional ? ' border-style: dashed;' : ''}"
                             aria-label={`Valor para [${varName}]`}
@@ -2144,19 +2149,16 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                         </div>
                       {/each}
                     </div>
-                    <small style="font-size: 0.75rem; color: rgba(0,0,0,0.6); line-height: 1.3; display: block; margin-top: 0.4rem;">
-                      Llena las variables y las instrucciones se generan automáticamente abajo. Las variables marcadas como <em>opcional</em> se pueden vaciar para omitirlas del prompt. Puedes editar el textarea manualmente como ajuste final.
-                    </small>
                   </div>
 
                 {/if}
 
                 <div class="form-field">
-                  <label for="agente-instrucciones">Instrucciones (system prompt)</label>
+                  <label for="asistente-instrucciones">Instrucciones (system prompt)</label>
                   <textarea
-                    id="agente-instrucciones"
-                    bind:value={agenteFormInstrucciones}
-                    disabled={cargandoGuardarAgente}
+                    id="asistente-instrucciones"
+                    bind:value={asistenteFormInstrucciones}
+                    disabled={cargandoGuardarAsistente}
                     rows="8"
                     class="contexto-input"
                     style="font-family: inherit; resize: vertical; padding: 0.75rem 1rem; background: rgba(0,0,0,0.4); border: 1px dashed rgba(255,255,255,0.25); border-radius: 8px; color: rgba(255,255,255,0.9); font-size: 0.85rem; line-height: 1.5;"
@@ -2164,37 +2166,46 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   ></textarea>
                 </div>
                 <div class="form-field">
-                  <label for="agente-historial">Historial Max (turnos)</label>
+                  <label for="asistente-historial" style="display: inline-flex; align-items: center; gap: 0.35rem;">
+                    Historial Max (turnos)
+                    <span
+                      title="La cantidad de turnos que el usuario pregunta y el asistente responde, que quieres guardar como contexto de la conversación."
+                      style="display: inline-flex; cursor: help; opacity: 0.65;"
+                      aria-label="Información sobre el historial máximo"
+                    >
+                      <Icon name="info" size={14} />
+                    </span>
+                  </label>
                   <input
-                    id="agente-historial"
+                    id="asistente-historial"
                     type="number"
                     min="0"
                     max="50"
-                    bind:value={agenteFormHistorialMax}
-                    disabled={cargandoGuardarAgente}
-                    class="contexto-input"
+                    bind:value={asistenteFormHistorialMax}
+                    disabled={cargandoGuardarAsistente}
+                    class="contexto-input contexto-input--with-spinners"
                   />
                 </div>
                 <div style="display: flex; gap: 0.5rem;">
                   <button
-                    onclick={guardarAgente}
-                    disabled={cargandoGuardarAgente}
+                    onclick={guardarAsistente}
+                    disabled={cargandoGuardarAsistente}
                     class="crear-contexto-btn"
                   >
-                    {cargandoGuardarAgente ? '⟳ Guardando...' : (agenteEditandoId ? '✓ Actualizar' : '✓ Crear')}
+                    {cargandoGuardarAsistente ? '⟳ Guardando...' : (asistenteEditandoId ? '✓ Actualizar' : '✓ Crear')}
                   </button>
                   <button
-                    onclick={cerrarFormAgente}
-                    disabled={cargandoGuardarAgente}
+                    onclick={cerrarFormAsistente}
+                    disabled={cargandoGuardarAsistente}
                     class="crear-contexto-btn"
-                    style="background: rgba(255,255,255,0.15);"
+                    style="background: rgba(0,0,0,0.45); color: rgba(255,255,255,0.95);"
                   >
                     Cancelar
                   </button>
                 </div>
-                {#if mensajeAgente}
-                  <p class="mensaje-contexto" class:success={mensajeAgente.includes('✅')}>
-                    {mensajeAgente}
+                {#if mensajeAsistente}
+                  <p class="mensaje-contexto" class:success={mensajeAsistente.includes('✅')}>
+                    {mensajeAsistente}
                   </p>
                 {/if}
               </div>
@@ -2203,48 +2214,49 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
           <div class="contextos-table-wrap">
             <div class="seccion-header">
-              <h3><Icon name="agente" size={18} /> Agentes Existentes</h3>
-              <button onclick={cargarAgentes} class="vectorizacion-action-btn contextos-recargar-btn" disabled={cargandoAgentes} aria-label="Recargar agentes" title="Recargar agentes">
+              <h3><Icon name="asistente" size={18} /> Asistentes Existentes</h3>
+              <button onclick={cargarAsistentes} class="vectorizacion-action-btn contextos-recargar-btn" disabled={cargandoAsistentes} aria-label="Recargar asistentes" title="Recargar asistentes">
                 <Icon name="recargar" size={16} />
               </button>
             </div>
-            {#if errorCargarAgentes}
-              <p class="mensaje-contexto" style="margin-top: 0.5rem;">❌ {errorCargarAgentes}</p>
+            {#if errorCargarAsistentes}
+              <p class="mensaje-contexto" style="margin-top: 0.5rem;">❌ {errorCargarAsistentes}</p>
             {/if}
-            {#if cargandoAgentes}
-              <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando agentes...</p>
-            {:else if agentes.length === 0}
-              <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">No hay agentes creados todavía.</p>
+            {#if cargandoAsistentes}
+              <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando asistentes...</p>
+            {:else if asistentes.length === 0}
+              <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem; padding: 1rem 0;">No hay asistentes creados todavía.</p>
             {:else}
               <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.5rem;">
-                {#each agentes as agente (agente.id)}
+                {#each asistentes as asistente (asistente.id)}
                   <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 1rem; display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;">
                     <div style="flex: 1; min-width: 0;">
                       <div style="display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap;">
-                        {#if agente.slug === lightbotAgenteSlug}
+                        {#if asistente.slug === lightbotAsistenteSlug}
                           <span title="Default del Lightbot" style="color: #fbbf24; display: inline-flex; align-items: center;">
                             <Icon name="estrella" size={16} label="Default" />
                           </span>
                         {/if}
-                        <strong style="color: #fff; font-size: 1rem;">{agente.nombre}</strong>
-                        <code style="background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; color: rgba(255,255,255,0.75);">{agente.slug}</code>
+                        <strong style="color: #fff; font-size: 1rem;">{asistente.nombre}</strong>
+                        <code style="background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; color: rgba(255,255,255,0.75);">{asistente.slug}</code>
                       </div>
                       <p style="color: rgba(255,255,255,0.7); font-size: 0.85rem; margin: 0.5rem 0 0 0; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
-                        {agente.instrucciones}
+                        {asistente.instrucciones}
                       </p>
-                      <div style="display: flex; gap: 1rem; margin-top: 0.5rem; font-size: 0.75rem; color: rgba(255,255,255,0.55);">
-                        {#if agente.contexto}
-                          <span><Icon name="base-conocimiento" size={13} /> {agente.contexto}</span>
+                      <div style="display: flex; gap: 1.1rem; margin-top: 0.6rem; font-size: 0.9rem; color: rgba(255,255,255,0.7);">
+                        {#if asistente.contexto}
+                          <span style="display: inline-flex; align-items: center; gap: 0.3rem;"><Icon name="base-conocimiento" size={16} /> {asistente.contexto}</span>
                         {:else}
-                          <span style="opacity:0.7;"><Icon name="sin-rag" size={13} /> sin RAG</span>
+                          <span style="opacity:0.7; display: inline-flex; align-items: center; gap: 0.3rem;"><Icon name="sin-rag" size={16} /> sin RAG</span>
                         {/if}
-                        <span><Icon name="modelo" size={13} /> {agente.modelo_llm}</span>
-                        <span><Icon name="historial" size={13} /> {agente.historial_max} turnos</span>
+                        <span style="display: inline-flex; align-items: center; gap: 0.3rem;"><Icon name="modelo" size={16} /> {asistente.modelo_llm}</span>
+                        <span style="display: inline-flex; align-items: center; gap: 0.3rem;"><Icon name="historial" size={16} /> {asistente.historial_max} turnos</span>
                       </div>
                     </div>
                     <div style="display: flex; gap: 0.4rem; flex-shrink: 0;">
-                      <button onclick={() => abrirFormEditarAgente(agente)} class="vectorizacion-action-btn" title="Editar agente"><Icon name="editar" size={16} label="Editar" /></button>
-                      <button onclick={() => pedirConfirmacionBorrarAgente(agente)} class="vectorizacion-action-btn" title="Borrar agente"><Icon name="borrar" size={16} label="Borrar" /></button>
+                      <button onclick={() => lookAndFeelAsistente = asistente} class="vectorizacion-action-btn" title="Look and Feel"><Icon name="look-and-feel" size={16} label="Look and Feel" /></button>
+                      <button onclick={() => abrirFormEditarAsistente(asistente)} class="vectorizacion-action-btn" title="Editar asistente"><Icon name="editar" size={16} label="Editar" /></button>
+                      <button onclick={() => pedirConfirmacionBorrarAsistente(asistente)} class="vectorizacion-action-btn" title="Borrar asistente"><Icon name="borrar" size={16} label="Borrar" /></button>
                     </div>
                   </div>
                 {/each}
@@ -2252,19 +2264,38 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             {/if}
           </div>
 
-          {#if mostrarConfirmacionBorrarAgente && agenteABorrar}
+          {#if mostrarConfirmacionBorrarAsistente && asistenteABorrar}
             <div class="confirmacion-borrar">
-              <h3><Icon name="warning" size={18} /> Confirmar Borrado de Agente</h3>
+              <h3><Icon name="warning" size={18} /> Confirmar Borrado de Asistente</h3>
               <p style="color: rgba(255,255,255,0.85);">
-                ¿Estás seguro de borrar el agente <strong>{agenteABorrar.nombre}</strong> (<code>{agenteABorrar.slug}</code>)? Esta acción no se puede deshacer.
+                ¿Estás seguro de borrar el asistente <strong>{asistenteABorrar.nombre}</strong> (<code>{asistenteABorrar.slug}</code>)? Esta acción no se puede deshacer.
               </p>
               <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
-                <button onclick={borrarAgenteConfirmado} disabled={cargandoBorrarAgente} class="crear-contexto-btn" style="background: #c8102e;">
-                  {cargandoBorrarAgente ? '⟳ Borrando...' : '🗑️ Sí, borrar'}
+                <button onclick={borrarAsistenteConfirmado} disabled={cargandoBorrarAsistente} class="crear-contexto-btn" style="background: #c8102e;">
+                  {cargandoBorrarAsistente ? '⟳ Borrando...' : '🗑️ Sí, borrar'}
                 </button>
-                <button onclick={() => { mostrarConfirmacionBorrarAgente = false; agenteABorrar = null; }} disabled={cargandoBorrarAgente} class="crear-contexto-btn" style="background: rgba(255,255,255,0.15);">
+                <button onclick={() => { mostrarConfirmacionBorrarAsistente = false; asistenteABorrar = null; }} disabled={cargandoBorrarAsistente} class="crear-contexto-btn" style="background: rgba(0,0,0,0.45); color: rgba(255,255,255,0.95);">
                   Cancelar
                 </button>
+              </div>
+            </div>
+          {/if}
+
+          {#if lookAndFeelAsistente}
+            <div class="modal-overlay" onclick={() => lookAndFeelAsistente = null} role="presentation">
+              <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
+                <h3><Icon name="look-and-feel" size={18} /> Look and Feel — {lookAndFeelAsistente.nombre}</h3>
+                <p style="color: rgba(255,255,255,0.75); margin-top: 0.5rem;">
+                  Personaliza la apariencia del widget para <code>{lookAndFeelAsistente.slug}</code>.
+                </p>
+                <p style="color: rgba(255,255,255,0.55); font-size: 0.85rem; margin-top: 1rem; padding: 0.75rem; background: rgba(255,255,255,0.05); border-radius: 8px;">
+                  ⚠️ Funcionalidad en desarrollo — próximamente podrás editar color primario, avatar, mensaje inicial y subtítulo.
+                </p>
+                <div style="display: flex; gap: 0.5rem; margin-top: 1rem; justify-content: flex-end;">
+                  <button onclick={() => lookAndFeelAsistente = null} class="crear-contexto-btn" style="background: rgba(0,0,0,0.45); color: rgba(255,255,255,0.95);">
+                    Cerrar
+                  </button>
+                </div>
               </div>
             </div>
           {/if}
@@ -2277,6 +2308,13 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               <Icon name="proyecto" size={14} />
               <span>Trabajando en proyecto: <strong>{proyectoActivo.nombre}</strong></span>
               <code style="background: rgba(0,0,0,0.3); padding: 1px 6px; border-radius: 4px; font-size: 0.75rem; color: rgba(255,255,255,0.7);">{proyectoActivo.slug}</code>
+              <button
+                onclick={() => { vectorizacionTab = 'proyectos'; vinoDeCambiarProyecto = true; cargarProyectos(); }}
+                style="margin-left: auto; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.9); cursor: pointer; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 5px; transition: background 0.15s;"
+                onmouseover={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.22)'}
+                onmouseout={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.12)'}
+                title="Ir a Proyectos para cambiar el proyecto activo"
+              >Cambiar de proyecto</button>
             </div>
           {:else}
             <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1rem; background: rgba(200,40,40,0.85); border-radius: 8px; margin-bottom: 1rem; color: #fff; font-size: 0.9rem;">
@@ -2379,9 +2417,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               </button>
             </div>
             {#if cargandoVectorizacionContextos}
-              <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando bases de conocimiento...</p>
+              <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando bases de conocimiento...</p>
             {:else if vectorizacionContextos.length === 0}
-              <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">No hay bases de conocimiento disponibles</p>
+              <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem; padding: 1rem 0;">No hay bases de conocimiento disponibles</p>
             {:else}
               <div class="contextos-table">
                 {#each vectorizacionContextos as contexto (contexto.nombre)}
@@ -2397,7 +2435,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                         cargarDocumentosVectorizacion(contexto.nombre);
                       }}
                     >
-                      <Icon name="editar" size={14} label="Editar" />
+                      <Icon name="documentos" size={22} label="Editar" />
                     </button>
                     <button
                       class="contexto-borrar-btn"
@@ -2405,7 +2443,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                       disabled={cargandoBorrarContexto}
                       onclick={() => { contextoABorrar = contexto.nombre; mostrarConfirmacionBorrar = true; }}
                     >
-                      <Icon name="borrar" size={14} label="Borrar" />
+                      <Icon name="borrar" size={22} label="Borrar" />
                     </button>
                   </div>
                 {/each}
@@ -2421,30 +2459,29 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               <Icon name="proyecto" size={14} />
               <span>Trabajando en proyecto: <strong>{proyectoActivo.nombre}</strong></span>
               <code style="background: rgba(0,0,0,0.3); padding: 1px 6px; border-radius: 4px; font-size: 0.75rem; color: rgba(255,255,255,0.7);">{proyectoActivo.slug}</code>
+              <button
+                onclick={() => { vectorizacionTab = 'proyectos'; vinoDeCambiarProyecto = true; cargarProyectos(); }}
+                style="margin-left: auto; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.9); cursor: pointer; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 5px; transition: background 0.15s;"
+                onmouseover={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.22)'}
+                onmouseout={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.12)'}
+                title="Ir a Proyectos para cambiar el proyecto activo"
+              >Cambiar de proyecto</button>
             </div>
           {/if}
           <div class="documentos-wrap">
             <div class="seccion-header">
-              <h3><Icon name="base-conocimiento" size={18} /> {contextoSeleccionadoParaDocumentos || 'Documentos'}</h3>
+              <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <button
+                  class="bc-detalle-volver-btn"
+                  onclick={() => { vectorizacionTab = 'contextos'; vinoDeEditarContexto = false; }}
+                  title="Volver a Bases de Conocimiento"
+                  aria-label="Volver a Bases de Conocimiento"
+                >← Bases de Conocimiento</button>
+                <h3 style="margin: 0;"><Icon name="base-conocimiento" size={18} /> {contextoSeleccionadoParaDocumentos || 'Documentos'}</h3>
+              </div>
               <button onclick={() => cargarDocumentosVectorizacion(contextoSeleccionadoParaDocumentos)} class="vectorizacion-action-btn contextos-recargar-btn" disabled={cargandoVectorizacionDocumentos} title="Recargar documentos" aria-label="Recargar documentos">
                 <Icon name="recargar" size={16} />
               </button>
-            </div>
-
-            <!-- Selector de contexto -->
-            <div class="documentos-contexto-select">
-              <label for="doc-contexto">Selecciona base de conocimiento:</label>
-              <select
-                id="doc-contexto"
-                bind:value={contextoSeleccionadoParaDocumentos}
-                onchange={() => cargarDocumentosVectorizacion(contextoSeleccionadoParaDocumentos)}
-                class="contexto-select"
-              >
-                <option value="">-- Selecciona una base de conocimiento --</option>
-                {#each vectorizacionContextos as contexto (contexto.nombre)}
-                  <option value={contexto.nombre}>{contexto.nombre}</option>
-                {/each}
-              </select>
             </div>
 
             <!-- Lista de documentos -->
@@ -2452,9 +2489,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               <div class="documentos-list-wrap">
                 <h4>Documentos de la base de conocimiento: <strong>{contextoSeleccionadoParaDocumentos}</strong></h4>
                 {#if cargandoVectorizacionDocumentos}
-                  <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando documentos...</p>
+                  <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando documentos...</p>
                 {:else if vectorizacionDocumentos.length === 0}
-                  <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">No hay documentos en esta base de conocimiento</p>
+                  <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem; padding: 1rem 0;">No hay documentos en esta base de conocimiento</p>
                 {:else}
                   <div class="documentos-table">
                     {#each vectorizacionDocumentos as doc (doc)}
@@ -2466,7 +2503,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                           disabled={cargandoBorrarDocumento}
                           onclick={() => { documentoSeleccionadoParaBorrar = doc; mostrarConfirmacionBorrarDocumento = true; }}
                         >
-                          <Icon name="borrar" size={14} label="Borrar" />
+                          <Icon name="borrar" size={22} label="Borrar" />
                         </button>
                       </div>
                     {/each}
@@ -2483,22 +2520,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
           <!-- Integrar Documento -->
           <div class="integrar-documento-wrap">
-            <h3>📤 Integrar Nuevo Documento</h3>
+            <h3>📤 Integrar Nuevo Documento a <strong>{contextoSeleccionadoParaDocumentos}</strong></h3>
             <div class="integrar-documento-form">
-              <div class="form-field">
-                <label for="doc-contexto-integrar">Base de Conocimiento destino</label>
-                <select
-                  id="doc-contexto-integrar"
-                  bind:value={contextoSeleccionadoParaDocumentos}
-                  disabled={cargandoIntegrarDocumento}
-                  class="contexto-select"
-                >
-                  <option value="">-- Selecciona una base de conocimiento --</option>
-                  {#each vectorizacionContextos as contexto (contexto.nombre)}
-                    <option value={contexto.nombre}>{contexto.nombre}</option>
-                  {/each}
-                </select>
-              </div>
               <div class="form-field">
                 <label for="doc-archivo">Selecciona archivo</label>
                 <input
@@ -2551,7 +2574,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               <p>
                 ¿Estás seguro de que deseas borrar el documento <strong>"{documentoSeleccionadoParaBorrar}"</strong> de la base de conocimiento <strong>"{contextoSeleccionadoParaDocumentos}"</strong>?
               </p>
-              <p style="font-size: 0.85rem; color: rgba(255,255,255,0.6);">
+              <p style="font-size: 0.85rem; color: rgba(0,0,0,0.55);">
                 Esta acción es irreversible.
               </p>
               <div class="modal-buttons">
@@ -2585,11 +2608,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             </div>
 
             {#if cargandoModelos}
-              <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando modelos...</p>
+              <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando modelos...</p>
             {:else if errorModelos}
               <p style="color: #fff; font-size: 0.9rem; padding: 1rem; background: rgba(200,40,40,0.9); border-radius: 4px; line-height: 1.5; font-weight: 500;">{errorModelos}</p>
             {:else if modelosDisponibles.length === 0}
-              <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">No hay modelos disponibles</p>
+              <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem; padding: 1rem 0;">No hay modelos disponibles</p>
             {:else}
               <div class="modelos-grid">
                 {#each modelosDisponibles as modelo (modelo)}
@@ -2608,7 +2631,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               <div class="modelo-detalle">
                 <h4>📋 Detalles de <strong>"{modeloSeleccionado}"</strong></h4>
                 {#if cargandoInfoModelo}
-                  <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem;">⟳ Cargando información...</p>
+                  <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem;">⟳ Cargando información...</p>
                 {:else}
                   <div class="modelo-propiedades">
                     {#each Object.entries(infoModeloSeleccionado) as [key, value]}
@@ -2624,25 +2647,41 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           </div>
         {/if}
 
-        <!-- Lightbot -->
-        {#if vectorizacionTab === 'lightbot'}
-          <div class="lightbot-wrap">
-            <div class="seccion-header">
-              <h3>💬 LightbotEmbedder</h3>
+        <!-- Escenario -->
+        {#if vectorizacionTab === 'escenario'}
+          {#if proyectoActivo}
+            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.85rem; background: rgba(0,0,0,0.18); border-radius: 8px; margin-bottom: 1rem; font-size: 0.85rem; color: rgba(255,255,255,0.85);">
+              <Icon name="proyecto" size={14} />
+              <span>Trabajando en proyecto: <strong>{proyectoActivo.nombre}</strong></span>
+              <code style="background: rgba(0,0,0,0.3); padding: 1px 6px; border-radius: 4px; font-size: 0.75rem; color: rgba(255,255,255,0.7);">{proyectoActivo.slug}</code>
+              <button
+                onclick={() => { vectorizacionTab = 'proyectos'; vinoDeCambiarProyecto = true; cargarProyectos(); }}
+                style="margin-left: auto; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.9); cursor: pointer; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 5px; transition: background 0.15s;"
+                onmouseover={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.22)'}
+                onmouseout={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.12)'}
+                title="Ir a Proyectos para cambiar el proyecto activo"
+              >Cambiar de proyecto</button>
             </div>
-            <p class="lightbot-desc">Genera la URL del widget de chat para incrustarlo en otro sitio. El agente seleccionado decide la base de conocimiento, modelo, historial e instrucciones.</p>
+          {/if}
+          {#if lightbotAsistenteSlug}
+            <div class="lightbot-preview" style="margin-bottom: 1rem;">
+              <h4>📋 URL del widget</h4>
+              <code class="lightbot-url">{AMBIENTES[lightbotAmbiente]?.frontend ?? window.location.origin}/embed/chat/{encodeURIComponent(lightbotAsistenteSlug)}</code>
+            </div>
+          {/if}
 
-            <div class="lightbot-form">
+          <div style="display: flex; gap: 1.5rem; align-items: flex-start; flex-wrap: wrap;">
+            <div class="lightbot-form" style="margin: 0;">
               <div class="lightbot-field">
-                <label for="lb-agente">Agente</label>
-                {#if cargandoAgentes}
-                  <span style="color:rgba(255,255,255,0.6); font-size:0.9rem;">⟳ Cargando agentes...</span>
-                {:else if agentes.length === 0}
-                  <span style="color:rgba(255,255,255,0.6); font-size:0.9rem;">Sin agentes — créalos en 🧠 Agente.</span>
+                <label for="lb-asistente">Asistente</label>
+                {#if cargandoAsistentes}
+                  <span style="color:rgba(255,255,255,0.6); font-size:0.9rem;">⟳ Cargando asistentes...</span>
+                {:else if asistentes.length === 0}
+                  <span style="color:rgba(255,255,255,0.6); font-size:0.9rem;">Sin asistentes — créalos en 🎧 Asistentes.</span>
                 {:else}
-                  <select id="lb-agente" bind:value={lightbotAgenteSlug}>
-                    <option value="">— Seleccionar agente —</option>
-                    {#each agentes as a (a.id)}
+                  <select id="lb-asistente" bind:value={lightbotAsistenteSlug}>
+                    <option value="">— Seleccionar asistente —</option>
+                    {#each asistentes as a (a.id)}
                       <option value={a.slug}>{a.nombre}</option>
                     {/each}
                   </select>
@@ -2650,38 +2689,12 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               </div>
             </div>
 
-            {#if lightbotAgenteSlug}
-              <div class="lightbot-preview">
-                <h4>📋 URL del widget</h4>
-                <code class="lightbot-url">{AMBIENTES[lightbotAmbiente]?.frontend ?? window.location.origin}/embed/index.html?ambiente={encodeURIComponent(lightbotAmbiente)}&amp;agente={encodeURIComponent(lightbotAgenteSlug)}</code>
-              </div>
-            {/if}
-          </div>
-        {/if}
-
-        <!-- LightBot -->
-        {#if vectorizacionTab === 'lightbotpanel'}
-          <div class="lightbot-wrap">
-            <div class="seccion-header">
-              <h3>🤖 LightBot</h3>
-            </div>
-            <p class="lightbot-desc">Visualizador del widget configurado en LightbotEmbedder.</p>
-
-            {#if !lightbotAgenteSlug}
-              <p style="color: rgba(255,255,255,0.7); padding: 1rem; background: rgba(255,255,255,0.05); border-radius: 8px;">
-                Selecciona un agente en <strong>💬 LightbotEmbedder</strong> para ver el widget.
-              </p>
-            {:else}
-              {@const lightbotEmbedUrl = `${AMBIENTES[lightbotAmbiente]?.frontend ?? window.location.origin}/embed/index.html?ambiente=${encodeURIComponent(lightbotAmbiente)}&agente=${encodeURIComponent(lightbotAgenteSlug)}`}
-              <div style="display:flex; align-items:center; gap:0.6rem; padding:0.6rem 1rem; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius:8px; margin-bottom:1rem; flex-wrap:wrap; font-size:0.85rem; color:rgba(255,255,255,0.75);">
-                <span><strong>Ambiente:</strong> {lightbotAmbiente}</span>
-                <span>·</span>
-                <span><strong>Agente:</strong> {lightbotAgenteSlug}</span>
-              </div>
-              <div style="width:100%; max-width:420px; height:70vh; min-height:520px; border:1px solid rgba(255,255,255,0.12); border-radius:12px; overflow:hidden; background:#fff; margin: 0 auto;">
+            {#if lightbotAsistenteSlug}
+              {@const lightbotEmbedUrl = `${AMBIENTES[lightbotAmbiente]?.frontend ?? window.location.origin}/embed/chat/${encodeURIComponent(lightbotAsistenteSlug)}`}
+              <div style="width:100%; max-width:420px; height:70vh; min-height:520px; border:1px solid rgba(255,255,255,0.12); border-radius:12px; overflow:hidden; background:#fff; flex-shrink: 0;">
                 <iframe
                   src={lightbotEmbedUrl}
-                  title="LightBot preview"
+                  title="Vista previa del widget"
                   style="width:100%; height:100%; border:0; display:block;"
                 ></iframe>
               </div>
@@ -2690,25 +2703,41 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         {/if}
 
 
-        <!-- ContextLightEmbedder -->
-        {#if vectorizacionTab === 'contextlightembedder'}
-          <div class="lightbot-wrap">
-            <div class="seccion-header">
-              <h3>📦 ContextLightEmbedder</h3>
+        <!-- MiniAdmin -->
+        {#if vectorizacionTab === 'miniadmin'}
+          {#if proyectoActivo}
+            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.85rem; background: rgba(0,0,0,0.18); border-radius: 8px; margin-bottom: 1rem; font-size: 0.85rem; color: rgba(255,255,255,0.85);">
+              <Icon name="proyecto" size={14} />
+              <span>Trabajando en proyecto: <strong>{proyectoActivo.nombre}</strong></span>
+              <code style="background: rgba(0,0,0,0.3); padding: 1px 6px; border-radius: 4px; font-size: 0.75rem; color: rgba(255,255,255,0.7);">{proyectoActivo.slug}</code>
+              <button
+                onclick={() => { vectorizacionTab = 'proyectos'; vinoDeCambiarProyecto = true; cargarProyectos(); }}
+                style="margin-left: auto; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.9); cursor: pointer; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 5px; transition: background 0.15s;"
+                onmouseover={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.22)'}
+                onmouseout={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.12)'}
+                title="Ir a Proyectos para cambiar el proyecto activo"
+              >Cambiar de proyecto</button>
             </div>
-            <p class="lightbot-desc">Genera la URL del widget de gestión de documentos. La base de conocimiento se resuelve a partir del agente seleccionado.</p>
+          {/if}
+          {#if contextlightAsistenteSlug}
+            <div class="lightbot-preview" style="margin-bottom: 1rem;">
+              <h4>📋 URL del widget</h4>
+              <code class="lightbot-url">{AMBIENTES[contextlightAmbiente]?.frontend ?? window.location.origin}/embed/admin/{encodeURIComponent(contextlightAsistenteSlug)}</code>
+            </div>
+          {/if}
 
-            <div class="lightbot-form">
+          <div style="display: flex; gap: 1.5rem; align-items: flex-start; flex-wrap: wrap;">
+            <div class="lightbot-form" style="margin: 0;">
               <div class="lightbot-field">
-                <label for="cle-agente">Agente</label>
-                {#if cargandoAgentes}
-                  <span style="color:rgba(255,255,255,0.6); font-size:0.9rem;">⟳ Cargando agentes...</span>
-                {:else if agentes.length === 0}
-                  <span style="color:rgba(255,255,255,0.6); font-size:0.9rem;">Sin agentes — créalos en 🧠 Agente.</span>
+                <label for="cle-asistente">Asistente</label>
+                {#if cargandoAsistentes}
+                  <span style="color:rgba(255,255,255,0.6); font-size:0.9rem;">⟳ Cargando asistentes...</span>
+                {:else if asistentes.length === 0}
+                  <span style="color:rgba(255,255,255,0.6); font-size:0.9rem;">Sin asistentes — créalos en 🎧 Asistentes.</span>
                 {:else}
-                  <select id="cle-agente" bind:value={contextlightAgenteSlug}>
-                    <option value="">— Seleccionar agente —</option>
-                    {#each agentes as a (a.id)}
+                  <select id="cle-asistente" bind:value={contextlightAsistenteSlug}>
+                    <option value="">— Seleccionar asistente —</option>
+                    {#each asistentes as a (a.id)}
                       <option value={a.slug}>{a.nombre}</option>
                     {/each}
                   </select>
@@ -2716,38 +2745,12 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               </div>
             </div>
 
-            {#if contextlightAgenteSlug}
-              <div class="lightbot-preview">
-                <h4>📋 URL del widget</h4>
-                <code class="lightbot-url">{AMBIENTES[contextlightAmbiente]?.frontend ?? window.location.origin}/embed/contextlight.html?ambiente={encodeURIComponent(contextlightAmbiente)}&amp;agente={encodeURIComponent(contextlightAgenteSlug)}</code>
-              </div>
-            {/if}
-          </div>
-        {/if}
-
-        <!-- ContextLight -->
-        {#if vectorizacionTab === 'contextlight'}
-          <div class="lightbot-wrap">
-            <div class="seccion-header">
-              <h3>🪶 ContextLight</h3>
-            </div>
-            <p class="lightbot-desc">Visualizador del widget configurado en ContextLightEmbedder.</p>
-
-            {#if !contextlightAgenteSlug}
-              <p style="color: rgba(255,255,255,0.7); padding: 1rem; background: rgba(255,255,255,0.05); border-radius: 8px;">
-                Selecciona un agente en <strong>📦 ContextLightEmbedder</strong> para ver el widget.
-              </p>
-            {:else}
-              {@const contextlightEmbedUrl = `${AMBIENTES[contextlightAmbiente]?.frontend ?? window.location.origin}/embed/contextlight.html?ambiente=${encodeURIComponent(contextlightAmbiente)}&agente=${encodeURIComponent(contextlightAgenteSlug)}`}
-              <div style="display:flex; align-items:center; gap:0.6rem; padding:0.6rem 1rem; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius:8px; margin-bottom:1rem; flex-wrap:wrap; font-size:0.85rem; color:rgba(255,255,255,0.75);">
-                <span><strong>Ambiente:</strong> {contextlightAmbiente}</span>
-                <span>·</span>
-                <span><strong>Agente:</strong> {contextlightAgenteSlug}</span>
-              </div>
-              <div style="width:100%; max-width:720px; height:70vh; min-height:520px; border:1px solid rgba(255,255,255,0.12); border-radius:12px; overflow:hidden; background:#fff; margin: 0 auto;">
+            {#if contextlightAsistenteSlug}
+              {@const contextlightEmbedUrl = `${AMBIENTES[contextlightAmbiente]?.frontend ?? window.location.origin}/embed/admin/${encodeURIComponent(contextlightAsistenteSlug)}`}
+              <div style="width:100%; max-width:720px; height:70vh; min-height:520px; border:1px solid rgba(255,255,255,0.12); border-radius:12px; overflow:hidden; background:#fff; flex-shrink: 0;">
                 <iframe
                   src={contextlightEmbedUrl}
-                  title="ContextLight preview"
+                  title="Vista previa del MiniAdmin"
                   style="width:100%; height:100%; border:0; display:block;"
                 ></iframe>
               </div>
@@ -2763,7 +2766,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               <p>
                 ¿Estás seguro de que deseas borrar la base de conocimiento <strong>"{contextoABorrar}"</strong>?
               </p>
-              <p style="font-size: 0.85rem; color: rgba(255,255,255,0.6);">
+              <p style="font-size: 0.85rem; color: rgba(0,0,0,0.55);">
                 Esta acción es irreversible.
               </p>
               <div class="modal-buttons">
@@ -2787,7 +2790,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         {/if}
 
       </div>
-      <p class="disclaimer">Constructor Agente</p>
+      <p class="disclaimer">Constructor de Asistentes</p>
       </main>
   {/if}
 
@@ -2833,11 +2836,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           </div>
 
           {#if cargandoModelos}
-            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">⏳ Cargando modelos...</p>
+            <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem; padding: 1rem 0;">⏳ Cargando modelos...</p>
           {:else if errorModelos}
             <p style="color: #fff; font-size: 0.9rem; padding: 1rem; background: rgba(200,40,40,0.9); border-radius: 4px; line-height: 1.5; font-weight: 500;">{errorModelos}</p>
           {:else if modelosDisponibles.length === 0}
-            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">No hay modelos disponibles</p>
+            <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem; padding: 1rem 0;">No hay modelos disponibles</p>
           {:else}
             <div class="modelos-grid">
               {#each modelosDisponibles as modelo (modelo)}
@@ -2856,7 +2859,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             <div class="modelo-detalle">
               <h4>📋 Detalles de <strong>"{modeloSeleccionado}"</strong></h4>
               {#if cargandoInfoModelo}
-                <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem;">⏳ Cargando información...</p>
+                <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem;">⏳ Cargando información...</p>
               {:else}
                 <div class="modelo-propiedades">
                   {#each Object.entries(infoModeloSeleccionado) as [key, value]}
@@ -2888,7 +2891,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           </p>
 
           {#if cargandoModelosEmbedding}
-            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">⏳ Cargando modelos de embedding...</p>
+            <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem; padding: 1rem 0;">⏳ Cargando modelos de embedding...</p>
           {/if}
 
           {#snippet filaAlias(modelo, origen)}
@@ -2998,9 +3001,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           </div>
 
           {#if cargandoContextos}
-            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 0.75rem 0;">⏳ Cargando bases de conocimiento...</p>
+            <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem; padding: 0.75rem 0;">⏳ Cargando bases de conocimiento...</p>
           {:else if contextos.length === 0}
-            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 0.75rem 0;">No hay bases de conocimiento disponibles. Pulsa ↻ Recargar.</p>
+            <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem; padding: 0.75rem 0;">No hay bases de conocimiento disponibles. Pulsa ↻ Recargar.</p>
           {/if}
 
           <p style="color: rgba(255,255,255,0.5); font-size: 0.8rem; margin-top: 1rem;">
@@ -3442,13 +3445,43 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     justify-content: center;
   }
 
-  .ambiente-toggle {
-    display: flex;
-    gap: 3px;
-    background: rgba(0, 0, 0, 0.2);
-    padding: 3px;
-    border-radius: 18px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
+  .ambiente-indicador {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.3rem 0.7rem;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 8px;
+    cursor: default;
+    user-select: none;
+  }
+
+  .ambiente-indicador-label {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+  }
+
+  .ambiente-indicador-valor {
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-transform: capitalize;
+    letter-spacing: 0.01em;
+  }
+
+  /* Color de cada ambiente como cue visual contra accidentes:
+     desarrollo verde (seguro), staging ambar (cuidado), producción rojo (peligro). */
+  .ambiente-indicador-valor[data-ambiente="desarrollo"] {
+    color: #4ade80;
+  }
+  .ambiente-indicador-valor[data-ambiente="staging"] {
+    color: #fbbf24;
+  }
+  .ambiente-indicador-valor[data-ambiente="producción"] {
+    color: #f87171;
   }
 
   .ambiente-btn {
@@ -3981,13 +4014,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   /* ── Admin Sub-tabs ──────────────────────────────── */
   .vectorizacion-subtabs {
-    display: inline-flex;
+    display: flex;
     gap: 0.5rem;
     margin-bottom: 2rem;
     background: rgba(0, 0, 0, 0.2);
     padding: 0.4rem;
     border-radius: 14px;
     border: 1px solid rgba(255, 255, 255, 0.12);
+    box-sizing: border-box;
   }
 
   .vectorizacion-subtab-btn {
@@ -4187,6 +4221,24 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     filter: drop-shadow(0 1px 4px rgba(0,0,0,0.55)) brightness(0.6);
   }
 
+  .bc-detalle-volver-btn {
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    color: rgba(255, 255, 255, 0.85);
+    cursor: pointer;
+    font-size: 0.85rem;
+    padding: 0.4rem 0.75rem;
+    border-radius: 6px;
+    transition: background 0.15s, border-color 0.15s;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .bc-detalle-volver-btn:hover {
+    background: rgba(0, 0, 0, 0.4);
+    border-color: rgba(255, 255, 255, 0.35);
+  }
+
   .contexto-editar-btn:hover:not(:disabled) {
     opacity: 1;
     filter: brightness(1) drop-shadow(0 0 6px rgba(255, 200, 50, 0.9)) drop-shadow(0 0 12px rgba(255, 170, 0, 0.6));
@@ -4319,11 +4371,22 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     transition: border-color 0.2s ease, background 0.2s ease;
   }
 
-  /* Ocultar flechitas del input type=number */
+  /* Ocultar flechitas del input type=number por defecto */
   .contexto-input::-webkit-outer-spin-button,
   .contexto-input::-webkit-inner-spin-button {
     -webkit-appearance: none;
     margin: 0;
+  }
+
+  /* Mostrar flechitas si la clase modificadora está presente */
+  .contexto-input.contexto-input--with-spinners::-webkit-outer-spin-button,
+  .contexto-input.contexto-input--with-spinners::-webkit-inner-spin-button {
+    -webkit-appearance: auto;
+    margin: 0;
+    opacity: 1;
+  }
+  .contexto-input.contexto-input--with-spinners {
+    -moz-appearance: number-input;
   }
 
   .contexto-input::placeholder {
