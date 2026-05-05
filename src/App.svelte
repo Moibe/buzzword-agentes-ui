@@ -67,7 +67,7 @@
 
   // Subir esta versión manualmente con cada despliegue para llevar control
   // visual de qué build está corriendo. Se muestra debajo del título del header.
-  const APP_VERSION = '0.0.0';
+  const APP_VERSION = '0.0.1';
 
   const AMBIENTES = {
     desarrollo: { url: 'http://127.0.0.1:8077', proxy: '/api-desarrollo', frontend: 'http://localhost:5174' },
@@ -2355,6 +2355,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             {:else}
               <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.5rem;">
                 {#each asistentes as asistente (asistente.id)}
+                  {@const asistenteEmbedUrl = `${AMBIENTES[ambienteSeleccionado]?.frontend ?? window.location.origin}/embed/chat/${encodeURIComponent(asistente.slug)}`}
                   <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 1rem; display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;">
                     <div style="flex: 1; min-width: 0;">
                       <div style="display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap;">
@@ -2377,7 +2378,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                         {/if}
                         <span style="display: inline-flex; align-items: center; gap: 0.3rem;"><Icon name="modelo" size={16} /> {asistente.modelo_llm}</span>
                         <span style="display: inline-flex; align-items: center; gap: 0.3rem;"><Icon name="historial" size={16} /> {asistente.historial_max} turnos</span>
-                        {@const asistenteEmbedUrl = `${AMBIENTES[ambienteSeleccionado]?.frontend ?? window.location.origin}/embed/chat/${encodeURIComponent(asistente.slug)}`}
                         <button
                           type="button"
                           onclick={() => copiarUrl(asistenteEmbedUrl)}
