@@ -588,11 +588,16 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     return texto.replace(/^\s+/, '').replace(/\n{3,}/g, '\n\n');
   }
 
-  // Auto-sincroniza el textarea con la plantilla + variables en modo creación.
-  // En modo edición no toca nada — el usuario maneja libremente las instrucciones
-  // existentes del asistente.
+  // Bandera que indica si el usuario tocó alguna variable durante una edición.
+  // En modo creación el textarea siempre se reconstruye automáticamente. En
+  // modo edición solo se reconstruye DESPUÉS de que el usuario edita alguna
+  // variable — así no pisamos las instrucciones originales al abrir el form.
+  let variablesTocadasEnEdicion = $state(false);
+
   $effect(() => {
-    if (!asistenteFormAbierto || asistenteEditandoId) return;
+    if (!asistenteFormAbierto) return;
+    // Edición sin tocar variables = no rebuild (preserva instrucciones del asistente).
+    if (asistenteEditandoId && !variablesTocadasEnEdicion) return;
     asistenteFormInstrucciones = construirInstruccionesPlain();
   });
 
@@ -700,6 +705,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     // Limpia el mapa de variables para que sincronizar arranque con los
     // defaults de la plantilla (regla critica pre-llena, etc.) en cada nueva creación.
     asistenteFormVariables = {};
+    variablesTocadasEnEdicion = false;
     mensajeAsistente = '';
     sincronizarVariablesAsistente();
   }
@@ -720,6 +726,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     asistenteFormMensajeInicial = asistente.mensaje_inicial ?? '';
     mensajeAsistente = '';
     sincronizarVariablesAsistente();
+    variablesTocadasEnEdicion = false;
     asistenteFormAbierto = true;
   }
 
@@ -2274,6 +2281,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                             type="text"
                             placeholder={meta?.placeholder ?? varName}
                             bind:value={asistenteFormVariables[varName]}
+                            oninput={() => { if (asistenteEditandoId) variablesTocadasEnEdicion = true; }}
                             disabled={cargandoGuardarAsistente}
                             class="contexto-input"
                             style="width: 100%; box-sizing: border-box;{meta?.optional ? ' border-style: dashed;' : ''}"
