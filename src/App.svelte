@@ -28,7 +28,7 @@
     const entry = {
       fecha: new Date().toISOString(),
       sesion: SESSION_ID,
-      ambiente: ambienteSeleccionado,
+      host: location.hostname,
       modelo: modelo ?? '',
       contexto: contexto ?? '',
       pregunta,
@@ -39,7 +39,7 @@
     };
     logs = [...logs, entry];
     console.groupCollapsed(
-      `%c📋 Log #${logs.length}  ·  ${entry.ambiente}  ·  ${entry.ms || '—'}ms`,
+      `%c📋 Log #${logs.length}  ·  ${entry.host}  ·  ${entry.ms || '—'}ms`,
       'color:#7c3aed;font-weight:bold;font-size:12px'
     );
     console.table({ ...entry, historial: `(${historial.length} msgs)` });
@@ -67,32 +67,20 @@
 
   // Subir esta versión manualmente con cada despliegue para llevar control
   // visual de qué build está corriendo. Se muestra debajo del título del header.
-  const APP_VERSION = '0.0.1';
+  const APP_VERSION = '0.1.0';
 
-  const AMBIENTES = {
-    desarrollo: { url: 'http://127.0.0.1:8077', proxy: '/api-desarrollo', frontend: 'http://localhost:5174' },
-    staging: { url: 'http://172.10.30.15:8077', proxy: '/api-staging', frontend: 'http://172.10.30.15:4176' },
-    producción: { url: 'http://172.10.30.16:8080', proxy: '/api-produccion', frontend: 'http://172.10.30.16:4176' },
-  };
+  // Sin concepto de "ambiente". Las URLs se derivan del host donde corre la
+  // app: el API siempre vive en el mismo host en :8077 y el host-asistentes
+  // (embeds públicos) en :4176. Esto hace que local y server sean idénticos
+  // sin build-mode flags ni .env files.
+  const HOST_ASISTENTES_PORT = 4176;
+  const API_PORT = 8077;
 
-  // El ambiente se determina automáticamente por el build mode de Vite.
-  // No es seleccionable desde la UI — es DONDE estás corriendo.
-  // Si en algún momento se necesita cambiarlo en runtime, hay que reintroducir
-  // la lógica de cambiarAmbiente() y un selector en el header.
-  const ambienteSeleccionado = import.meta.env.DEV
-    ? 'desarrollo'
-    : import.meta.env.MODE === 'staging'
-    ? 'staging'
-    : 'producción';
-
-  // API base/URL en función del ambiente fijo de la sesión.
   const apiUrl = (() => {
-    const config = AMBIENTES[ambienteSeleccionado];
-    return {
-      real: config.url,
-      base: import.meta.env.DEV ? config.proxy : config.url,
-    };
+    const url = `${location.protocol}//${location.hostname}:${API_PORT}`;
+    return { real: url, base: url };
   })();
+  const hostAsistentesBase = `${location.protocol}//${location.hostname}:${HOST_ASISTENTES_PORT}`;
 
   // Exponer helpers de log en consola para depuración
   if (typeof window !== 'undefined') {
@@ -103,7 +91,7 @@
   $effect(() => {
     console.groupCollapsed('%c🌐 MIDE Chat — Configuración', 'color:#c8102e;font-weight:bold;font-size:13px');
     console.log('Sesión     :', SESSION_ID);
-    console.log('Ambiente   :', ambienteSeleccionado);
+    console.log('Host       :', location.hostname);
     console.log('API URL    :', apiUrl.real);
     console.log('Endpoint   :', `${apiUrl.real}/chatbot`);
     console.groupEnd();
@@ -219,25 +207,16 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     defaultContextFlashTimer = setTimeout(() => { defaultContextGuardadoFlash = false; }, 2500);
   }
 
-  // Lightbot/ContextLight: ambiente + slug de asistente para construir URLs de embed.
-  // Los slugs persisten en localStorage para que cuando vuelvas a abrir la admin
-  // (o el LightBot) ya haya un asistente seleccionado por defecto.
-  let lightbotAmbiente = $state('staging');
+  // Lightbot/ContextLight: slug de asistente seleccionado para los embeds.
+  // Persisten en localStorage para que al volver a abrir la admin haya un
+  // asistente seleccionado por defecto.
   let lightbotAsistenteSlug = $state(
     typeof localStorage !== 'undefined' ? localStorage.getItem('bzz_lightbot_agente') || '' : ''
   );
-  let contextlightAmbiente = $state('staging');
   let contextlightAsistenteSlug = $state(
     typeof localStorage !== 'undefined' ? localStorage.getItem('bzz_contextlight_agente') || '' : ''
   );
 
-  // Sincronizar ambientes de embed con el ambiente seleccionado en el navbar
-  $effect(() => {
-    lightbotAmbiente = ambienteSeleccionado;
-  });
-  $effect(() => {
-    contextlightAmbiente = ambienteSeleccionado;
-  });
   $effect(() => {
     if (vectorizacionTab !== 'proyectos') vinoDeCambiarProyecto = false;
   });
@@ -552,6 +531,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let asistenteFormContexto = $state('');
   let asistenteFormModelo = $state('mistral');
   let asistenteFormHistorialMax = $state(3);
+  let asistenteFormMensajeInicial = $state('');
   const placeholderInstrucciones = $derived(
     PLACEHOLDER_INSTRUCCIONES[asistenteFormModelo] ?? PLACEHOLDER_INSTRUCCIONES_FALLBACK
   );
@@ -716,6 +696,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     asistenteFormContexto = '';
     asistenteFormModelo = 'mistral';
     asistenteFormHistorialMax = 3;
+    asistenteFormMensajeInicial = '';
     // Limpia el mapa de variables para que sincronizar arranque con los
     // defaults de la plantilla (regla critica pre-llena, etc.) en cada nueva creación.
     asistenteFormVariables = {};
@@ -736,6 +717,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     asistenteFormContexto = asistente.contexto;
     asistenteFormModelo = asistente.modelo_llm;
     asistenteFormHistorialMax = asistente.historial_max;
+    asistenteFormMensajeInicial = asistente.mensaje_inicial ?? '';
     mensajeAsistente = '';
     sincronizarVariablesAsistente();
     asistenteFormAbierto = true;
@@ -771,6 +753,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     const contexto = asistenteFormContexto.trim();
     const modelo_llm = asistenteFormModelo.trim();
     const historial_max = parseInt(asistenteFormHistorialMax, 10);
+    const mensaje_inicial = asistenteFormMensajeInicial.trim();
 
     if (!asistenteEditandoId && !SLUG_REGEX.test(slug)) {
       mensajeAsistente = '❌ Slug inválido. Usa minúsculas, dígitos y guiones (2-64 chars, empieza con letra).';
@@ -810,9 +793,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       // (no como "") para que el backend lo interprete como "limpiar campo"
       // y no como string vacío sospechoso.
       const contextoPayload = contexto === '' ? null : contexto;
+      // Mensaje inicial vacío = usar default del frontend.
+      const mensajeInicialPayload = mensaje_inicial === '' ? null : mensaje_inicial;
       const body = editando
-        ? { nombre, instrucciones, contexto: contextoPayload, modelo_llm, historial_max }
-        : { slug, nombre, instrucciones, contexto: contextoPayload, modelo_llm, historial_max, proyecto_id: proyectoActivoId };
+        ? { nombre, instrucciones, contexto: contextoPayload, modelo_llm, historial_max, mensaje_inicial: mensajeInicialPayload }
+        : { slug, nombre, instrucciones, contexto: contextoPayload, modelo_llm, historial_max, mensaje_inicial: mensajeInicialPayload, proyecto_id: proyectoActivoId };
 
       const res = await fetch(url, {
         method: editando ? 'PUT' : 'POST',
@@ -907,10 +892,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           console.log('%c🔄 API regresó online — recargando contextos', 'color:#16a34a;font-weight:bold');
           cargarContextos();
         } else if (estadoPrevio === 'checking' && import.meta.env.PROD) {
-          console.log(`%c✅ API online [${ambienteSeleccionado}] → ${apiUrl.real}`, 'color:#16a34a;font-weight:bold');
+          console.log(`%c✅ API online → ${apiUrl.real}`, 'color:#16a34a;font-weight:bold');
         }
       } else {
-        console.warn(`%c⚠️ API respondió pero status != ok [${ambienteSeleccionado}] → ${apiUrl.real}`, 'color:#d97706;font-weight:bold', data);
+        console.warn(`%c⚠️ API respondió pero status != ok → ${apiUrl.real}`, 'color:#d97706;font-weight:bold', data);
       }
       ultimaVerificacion = new Date();
     } catch (err) {
@@ -920,12 +905,12 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       const label = err.name === 'AbortError' ? 'Timeout (>5s)' : err.message;
       if (wasOnline) {
         console.error(
-          `%c🔴 API caída [${ambienteSeleccionado}] → ${apiUrl.real}\n   Motivo: ${label}\n   Hora: ${new Date().toLocaleTimeString()}`,
+          `%c🔴 API caída → ${apiUrl.real}\n   Motivo: ${label}\n   Hora: ${new Date().toLocaleTimeString()}`,
           'color:#dc2626;font-weight:bold'
         );
       } else if (estadoPrevio === 'checking') {
         console.warn(
-          `%c⚠️ API no disponible [${ambienteSeleccionado}] → ${apiUrl.real}\n   Motivo: ${label}`,
+          `%c⚠️ API no disponible → ${apiUrl.real}\n   Motivo: ${label}`,
           'color:#d97706;font-weight:bold'
         );
       }
@@ -965,7 +950,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         errorModelos = '⏳ La API no respondió (tiempo de espera agotado). Intenta recargar en unos momentos.';
         console.warn('%c⏳ Timeout al cargar modelos', 'color:orange;font-weight:bold');
       } else {
-        errorModelos = `API ${ambienteSeleccionado.charAt(0).toUpperCase() + ambienteSeleccionado.slice(1)} offline`;
+        errorModelos = 'API offline';
         console.error('%c❌ Error al cargar modelos', 'color:red;font-weight:bold', err);
       }
     } finally {
@@ -1049,8 +1034,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     modelosEmbedding = [];
     try {
       // Reuse cache for current environment if available
-      if (cacheModelosEmbedding[ambienteSeleccionado]?.length) {
-        modelosEmbedding = cacheModelosEmbedding[ambienteSeleccionado];
+      if (cacheModelosEmbedding[location.hostname]?.length) {
+        modelosEmbedding = cacheModelosEmbedding[location.hostname];
         if (modelosEmbedding.length > 0 && !nuevoContextoEmbedding) {
           const preferido = seleccionarModeloDefault(modelosEmbedding);
           nuevoContextoEmbedding = preferido;
@@ -1121,7 +1106,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         ...MODELOS_EMBEDDING_OPENAI.filter(m => !modelosConfirmados.includes(m))
       ];
       modelosEmbedding = todosLosModelos;
-      cacheModelosEmbedding[ambienteSeleccionado] = modelosEmbedding;
+      cacheModelosEmbedding[location.hostname] = modelosEmbedding;
       // Seleccionar por defecto uno si hay y no hay seleccion
       if (modelosEmbedding.length > 0 && !nuevoContextoEmbedding) {
         const preferido = seleccionarModeloDefault(modelosEmbedding);
@@ -1175,7 +1160,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         errorVectorizacionContextos = '⏳ La API no respondió (tiempo de espera agotado). Puede estar ocupada procesando un documento. Intenta recargar en unos momentos.';
         console.warn('%c⏳ Timeout al cargar contextos admin — la API puede estar ocupada', 'color:orange;font-weight:bold');
       } else {
-        errorVectorizacionContextos = `API ${ambienteSeleccionado.charAt(0).toUpperCase() + ambienteSeleccionado.slice(1)} offline`;
+        errorVectorizacionContextos = 'API offline';
         console.error('%c❌ Error al cargar contextos admin', 'color:red;font-weight:bold', err);
       }
     } finally {
@@ -1601,7 +1586,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
       console.groupCollapsed(`%c📤 POST /chatbot`, 'color:#c8102e;font-weight:bold;font-size:12px');
       console.log('URL enviada :', `${apiUrl.real}/chatbot`);
-      console.log('Ambiente    :', ambienteSeleccionado);
+      console.log('Host        :', location.hostname);
       console.log('Payload     :', JSON.parse(JSON.stringify(payload)));
       console.log('Body JSON   :', JSON.stringify(payload, null, 2));
       console.groupEnd();
@@ -1725,9 +1710,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           {/if}
         </span>
       </div>
-      <div class="ambiente-indicador" title={`Estás corriendo en ambiente: ${ambienteSeleccionado}`}>
-        <span class="ambiente-indicador-label">Ambiente</span>
-        <span class="ambiente-indicador-valor" data-ambiente={ambienteSeleccionado}>{ambienteSeleccionado}</span>
+      <div class="ambiente-indicador" title={`Sirviendo desde: ${location.host}`}>
+        <span class="ambiente-indicador-label">Host</span>
+        <span class="ambiente-indicador-valor">{location.hostname}</span>
       </div>
     </div>
 
@@ -2176,6 +2161,27 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   />
                 </div>
                 <div class="form-field">
+                  <label for="asistente-mensaje-inicial" style="display: inline-flex; align-items: center; gap: 0.35rem;">
+                    Mensaje inicial
+                    <span
+                      title="Saludo que el chatbot muestra al abrirse, antes de que el usuario escriba. Si lo dejas vacío se usa el default."
+                      style="display: inline-flex; cursor: help; opacity: 0.65;"
+                      aria-label="Información sobre el mensaje inicial"
+                    >
+                      <Icon name="info" size={14} />
+                    </span>
+                  </label>
+                  <input
+                    id="asistente-mensaje-inicial"
+                    type="text"
+                    placeholder="¡Hola! ¿En qué puedo ayudarte hoy?"
+                    bind:value={asistenteFormMensajeInicial}
+                    disabled={cargandoGuardarAsistente}
+                    maxlength="200"
+                    class="contexto-input"
+                  />
+                </div>
+                <div class="form-field">
                   <label for="asistente-contexto" style="display: inline-flex; align-items: center; gap: 0.35rem;">
                     Base de Conocimiento
                     <span
@@ -2302,15 +2308,19 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                       <Icon name="info" size={14} />
                     </span>
                   </label>
-                  <input
+                  <select
                     id="asistente-historial"
-                    type="number"
-                    min="0"
-                    max="50"
                     bind:value={asistenteFormHistorialMax}
                     disabled={cargandoGuardarAsistente}
-                    class="contexto-input contexto-input--with-spinners"
-                  />
+                    class="contexto-input"
+                    style="display: block; width: 100%;"
+                  >
+                    <option value={0}>Sin Contexto</option>
+                    <option value={1}>1 turno</option>
+                    <option value={3}>3 turnos</option>
+                    <option value={5}>5 turnos</option>
+                    <option value={10}>10 turnos</option>
+                  </select>
                 </div>
                 <div style="display: flex; gap: 0.5rem;">
                   <button
@@ -2355,7 +2365,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             {:else}
               <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.5rem;">
                 {#each asistentes as asistente (asistente.id)}
-                  {@const asistenteEmbedUrl = `${AMBIENTES[ambienteSeleccionado]?.frontend ?? window.location.origin}/embed/chat/${encodeURIComponent(asistente.slug)}`}
+                  {@const asistenteEmbedUrl = `${hostAsistentesBase}/embed/chat/${encodeURIComponent(asistente.slug)}`}
                   <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 1rem; display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;">
                     <div style="flex: 1; min-width: 0;">
                       <div style="display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap;">
@@ -2855,7 +2865,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             </div>
           {/if}
           {#if lightbotAsistenteSlug}
-            {@const sandboxWidgetUrl = `${AMBIENTES[lightbotAmbiente]?.frontend ?? window.location.origin}/embed/chat/${encodeURIComponent(lightbotAsistenteSlug)}`}
+            {@const sandboxWidgetUrl = `${hostAsistentesBase}/embed/chat/${encodeURIComponent(lightbotAsistenteSlug)}`}
             <div class="lightbot-preview" style="margin-bottom: 1rem;">
               <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.4rem; flex-wrap: wrap;">
                 <h4 style="margin: 0;">📋 URL del widget</h4>
@@ -2900,7 +2910,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             </div>
 
             {#if lightbotAsistenteSlug}
-              {@const lightbotEmbedUrl = `${AMBIENTES[lightbotAmbiente]?.frontend ?? window.location.origin}/embed/chat/${encodeURIComponent(lightbotAsistenteSlug)}`}
+              {@const lightbotEmbedUrl = `${hostAsistentesBase}/embed/chat/${encodeURIComponent(lightbotAsistenteSlug)}`}
               <div style="width:100%; max-width:420px; height:70vh; min-height:520px; border:1px solid rgba(255,255,255,0.12); border-radius:12px; overflow:hidden; background:#fff; flex-shrink: 0;">
                 <iframe
                   src={lightbotEmbedUrl}
@@ -2930,7 +2940,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             </div>
           {/if}
           {#if contextlightAsistenteSlug}
-            {@const miniadminWidgetUrl = `${AMBIENTES[contextlightAmbiente]?.frontend ?? window.location.origin}/embed/admin/${encodeURIComponent(contextlightAsistenteSlug)}`}
+            {@const miniadminWidgetUrl = `${hostAsistentesBase}/embed/admin/${encodeURIComponent(contextlightAsistenteSlug)}`}
             <div class="lightbot-preview" style="margin-bottom: 1rem;">
               <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.4rem; flex-wrap: wrap;">
                 <h4 style="margin: 0;">📋 URL del widget</h4>
@@ -2975,7 +2985,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             </div>
 
             {#if contextlightAsistenteSlug}
-              {@const contextlightEmbedUrl = `${AMBIENTES[contextlightAmbiente]?.frontend ?? window.location.origin}/embed/admin/${encodeURIComponent(contextlightAsistenteSlug)}`}
+              {@const contextlightEmbedUrl = `${hostAsistentesBase}/embed/admin/${encodeURIComponent(contextlightAsistenteSlug)}`}
               <div style="width:100%; max-width:720px; height:70vh; min-height:520px; border:1px solid rgba(255,255,255,0.12); border-radius:12px; overflow:hidden; background:#fff; flex-shrink: 0;">
                 <iframe
                   src={contextlightEmbedUrl}
@@ -3732,20 +3742,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   .ambiente-indicador-valor {
     font-size: 0.85rem;
     font-weight: 700;
-    text-transform: capitalize;
     letter-spacing: 0.01em;
-  }
-
-  /* Color de cada ambiente como cue visual contra accidentes:
-     desarrollo verde (seguro), staging ambar (cuidado), producción rojo (peligro). */
-  .ambiente-indicador-valor[data-ambiente="desarrollo"] {
-    color: #4ade80;
-  }
-  .ambiente-indicador-valor[data-ambiente="staging"] {
-    color: #fbbf24;
-  }
-  .ambiente-indicador-valor[data-ambiente="producción"] {
-    color: #f87171;
+    color: rgba(255, 255, 255, 0.92);
+    font-family: 'Consolas', 'Courier New', monospace;
   }
 
   .ambiente-btn {

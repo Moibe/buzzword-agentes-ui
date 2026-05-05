@@ -1,32 +1,14 @@
 <script>
   // ─── Config ──────────────────────────────────────────
-  const AMBIENTES = {
-    desarrollo: { url: 'http://127.0.0.1:8077', proxy: '/api-desarrollo' },
-    staging: { url: 'http://172.10.30.15:8077', proxy: '/api-staging' },
-    producción: { url: 'http://172.10.30.16:8080', proxy: '/api-produccion' },
-  };
-
-  const DEFAULT_AMBIENTE = import.meta.env.DEV
-    ? 'desarrollo'
-    : import.meta.env.MODE === 'staging'
-    ? 'staging'
-    : 'producción';
-
+  // Sin ambientes. El API vive en el mismo host de la app, puerto 8077.
+  const API_PORT = 8077;
   const params = new URLSearchParams(window.location.search);
-  const ambienteParam = params.get('ambiente') || DEFAULT_AMBIENTE;
   const asistenteSlugParam = (params.get('agente') || '').trim();
 
-  let ambienteSeleccionado = $state(
-    Object.keys(AMBIENTES).includes(ambienteParam) ? ambienteParam : DEFAULT_AMBIENTE
-  );
-
-  let apiUrl = $derived.by(() => {
-    const config = AMBIENTES[ambienteSeleccionado];
-    return {
-      real: config.url,
-      base: import.meta.env.DEV ? config.proxy : config.url,
-    };
-  });
+  const apiUrl = (() => {
+    const url = `${location.protocol}//${location.hostname}:${API_PORT}`;
+    return { real: url, base: url };
+  })();
 
   // ─── Estado ──────────────────────────────────────────
   let asistente = $state(null);
@@ -57,7 +39,7 @@
       const lista = await res.json();
       const found = Array.isArray(lista) ? lista.find((a) => a.slug === asistenteSlugParam) : null;
       if (!found) {
-        configError = `No existe un asistente con slug "${asistenteSlugParam}" en el ambiente "${ambienteSeleccionado}".`;
+        configError = `No existe un asistente con slug "${asistenteSlugParam}" en ${location.host}.`;
         return;
       }
       asistente = found;
@@ -175,7 +157,7 @@
     {#if !asistente && !configError}
       <p class="empty-msg">⟳ Cargando configuración...</p>
     {:else if !contexto}
-      <p class="empty-msg">No se pudo determinar la base de conocimiento. Verifica que el asistente <strong>{asistenteSlugParam || '(sin slug)'}</strong> exista en <strong>{ambienteSeleccionado}</strong> y tenga base de conocimiento definida.</p>
+      <p class="empty-msg">No se pudo determinar la base de conocimiento. Verifica que el asistente <strong>{asistenteSlugParam || '(sin slug)'}</strong> exista en <strong>{location.host}</strong> y tenga base de conocimiento definida.</p>
     {:else}
       <section class="card">
         <h3>📋 Documentos</h3>

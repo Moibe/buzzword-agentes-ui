@@ -123,11 +123,12 @@ async function startWebWhenApiIsReady() {
 
       setTimeout(() => {
         console.log('\n' + '═'.repeat(70));
-        console.log('🪄  HOST-ASISTENTES — URLs públicas embebibles');
+        console.log('🌐  URLs locales (todos en localhost):');
         console.log('═'.repeat(70));
-        console.log('  Chatbot:   http://localhost:5174/embed/chat/<slug>');
-        console.log('  MiniAdmin: http://localhost:5174/embed/admin/<slug>');
-        console.log('  (Reemplaza <slug> por el slug del asistente. La raíz / da 404 a propósito.)');
+        console.log('  Admin:     http://localhost:4175');
+        console.log('  Chatbot:   http://localhost:4176/embed/chat/<slug>');
+        console.log('  MiniAdmin: http://localhost:4176/embed/admin/<slug>');
+        console.log('  API docs:  http://localhost:8077/docs');
         console.log('═'.repeat(70) + '\n');
       }, 2500);
     } else {
