@@ -67,7 +67,7 @@
 
   // Subir esta versión manualmente con cada despliegue para llevar control
   // visual de qué build está corriendo. Se muestra debajo del título del header.
-  const APP_VERSION = '0.1.0';
+  const APP_VERSION = '0.1.1';
 
   // Sin concepto de "ambiente". Las URLs se derivan del host donde corre la
   // app: el API siempre vive en el mismo host en :8077 y el host-asistentes
