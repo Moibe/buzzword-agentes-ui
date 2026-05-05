@@ -1544,17 +1544,35 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     }
   }
 
-  const MENSAJE_INICIAL = {
-    id: 1,
-    role: 'bot',
-    text: '¡Hola! Soy el asistente. ¿En qué puedo ayudarte hoy?',
-    time: formatTime(new Date()),
-  };
+  const MENSAJE_INICIAL_DEFAULT = '¡Hola! Soy el asistente. ¿En qué puedo ayudarte hoy?';
+
+  function buildMensajeInicial() {
+    return {
+      id: 1,
+      role: 'bot',
+      text: asistenteSeleccionado?.mensaje_inicial?.trim() || MENSAJE_INICIAL_DEFAULT,
+      time: formatTime(new Date()),
+    };
+  }
 
   function resetChat() {
-    messages = [{ ...MENSAJE_INICIAL, time: formatTime(new Date()) }];
+    messages = [buildMensajeInicial()];
     inputText = '';
   }
+
+  // Cuando el usuario cambia el asistente seleccionado y aún no hay
+  // conversación activa, sincroniza el saludo de bienvenida con el
+  // mensaje_inicial del nuevo asistente. Usamos untrack al leer messages
+  // para evitar un loop reactivo (el effect se gatilla solo por
+  // asistenteSeleccionado, no por su propia escritura).
+  $effect(() => {
+    if (!asistenteSeleccionado) return;
+    untrack(() => {
+      if (messages.length === 1 && messages[0]?.role === 'bot') {
+        messages = [buildMensajeInicial()];
+      }
+    });
+  });
 
   async function sendMessage() {
     const text = inputText.trim();
@@ -1654,7 +1672,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           id: Date.now() + 1,
           role: 'bot',
           text: botText,
-          time: `${formatTime(new Date())} · ${elapsed}ms`,
+          // `elapsed` se sigue calculando y aparece en consola/logs pero no
+          // se renderiza junto al timestamp. Para mostrarlo: cambia a
+          // `${formatTime(new Date())} · ${elapsed}ms`
+          time: formatTime(new Date()),
         },
       ];
     } catch (err) {

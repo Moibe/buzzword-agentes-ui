@@ -25,14 +25,18 @@
     return date.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
   }
 
-  const MENSAJE_INICIAL = {
-    id: 1,
-    role: 'bot',
-    text: '¡Hola! ¿En qué puedo ayudarte hoy?',
-    time: formatTime(new Date()),
-  };
+  const MENSAJE_INICIAL_DEFAULT = '¡Hola! ¿En qué puedo ayudarte hoy?';
 
-  let messages = $state([{ ...MENSAJE_INICIAL }]);
+  function buildMensajeInicial() {
+    return {
+      id: 1,
+      role: 'bot',
+      text: asistente?.mensaje_inicial?.trim() || MENSAJE_INICIAL_DEFAULT,
+      time: formatTime(new Date()),
+    };
+  }
+
+  let messages = $state([buildMensajeInicial()]);
 
   // ─── Cargar asistente del backend ───────────────────────
   async function cargarAsistente() {
@@ -54,6 +58,13 @@
         return;
       }
       asistente = found;
+      if (
+        asistente?.mensaje_inicial?.trim() &&
+        messages.length === 1 &&
+        messages[0]?.role === 'bot'
+      ) {
+        messages = [buildMensajeInicial()];
+      }
     } catch (err) {
       configError = `No se pudo cargar el asistente: ${err.message}`;
     }
@@ -152,7 +163,9 @@
           id: Date.now() + 1,
           role: 'bot',
           text: botText,
-          time: `${formatTime(new Date())} · ${elapsed}ms`,
+          // `elapsed` se calcula pero no se muestra en la burbuja. Para
+          // reactivar: cambia esta línea por `${formatTime(new Date())} · ${elapsed}ms`
+          time: formatTime(new Date()),
         },
       ];
     } catch (err) {
