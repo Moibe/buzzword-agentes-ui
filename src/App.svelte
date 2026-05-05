@@ -2171,15 +2171,16 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                       <Icon name="info" size={14} />
                     </span>
                   </label>
-                  <input
+                  <textarea
                     id="asistente-mensaje-inicial"
-                    type="text"
-                    placeholder="¡Hola! ¿En qué puedo ayudarte hoy?"
                     bind:value={asistenteFormMensajeInicial}
                     disabled={cargandoGuardarAsistente}
-                    maxlength="200"
+                    rows="3"
+                    maxlength="500"
                     class="contexto-input"
-                  />
+                    style="font-family: inherit; resize: vertical; padding: 0.75rem 1rem; background: rgba(0,0,0,0.4); border: 1px dashed rgba(255,255,255,0.25); border-radius: 8px; color: rgba(255,255,255,0.9); font-size: 0.85rem; line-height: 1.5;"
+                    placeholder="¡Hola! ¿En qué puedo ayudarte hoy?"
+                  ></textarea>
                 </div>
                 <div class="form-field">
                   <label for="asistente-contexto" style="display: inline-flex; align-items: center; gap: 0.35rem;">
