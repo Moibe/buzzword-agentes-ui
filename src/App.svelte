@@ -1919,10 +1919,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           </button>
           <button
             class="vectorizacion-subtab-btn"
-            class:active={vectorizacionTab === 'escenario'}
-            onclick={() => { vectorizacionTab = 'escenario'; cargarAsistentes(); }}
+            class:active={vectorizacionTab === 'sandbox'}
+            onclick={() => { vectorizacionTab = 'sandbox'; cargarAsistentes(); }}
           >
-            <Icon name="escenario" size={16} /> Escenario
+            <Icon name="sandbox" size={16} /> Sandbox
           </button>
           <button
             class="vectorizacion-subtab-btn"
@@ -2364,7 +2364,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                       <p style="color: rgba(255,255,255,0.7); font-size: 0.85rem; margin: 0.5rem 0 0 0; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
                         {asistente.instrucciones}
                       </p>
-                      <div style="display: flex; gap: 1.1rem; margin-top: 0.6rem; font-size: 0.9rem; color: rgba(255,255,255,0.7);">
+                      <div style="display: flex; gap: 1.1rem; margin-top: 0.6rem; font-size: 0.9rem; color: rgba(255,255,255,0.7); align-items: center; flex-wrap: wrap;">
                         {#if asistente.contexto}
                           <span style="display: inline-flex; align-items: center; gap: 0.3rem;"><Icon name="base-conocimiento" size={16} /> {asistente.contexto}</span>
                         {:else}
@@ -2372,6 +2372,16 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                         {/if}
                         <span style="display: inline-flex; align-items: center; gap: 0.3rem;"><Icon name="modelo" size={16} /> {asistente.modelo_llm}</span>
                         <span style="display: inline-flex; align-items: center; gap: 0.3rem;"><Icon name="historial" size={16} /> {asistente.historial_max} turnos</span>
+                        {@const asistenteEmbedUrl = `${AMBIENTES[ambienteSeleccionado]?.frontend ?? window.location.origin}/embed/chat/${encodeURIComponent(asistente.slug)}`}
+                        <button
+                          type="button"
+                          onclick={() => copiarUrl(asistenteEmbedUrl)}
+                          title="Copiar URL del widget de chat"
+                          class="asistente-link-chip"
+                        >
+                          <Icon name="link" size={16} />
+                          {urlCopiada === asistenteEmbedUrl ? '✓ copiado' : 'link'}
+                        </button>
                       </div>
                     </div>
                     <div style="display: flex; gap: 0.4rem; flex-shrink: 0;">
@@ -2823,8 +2833,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           </div>
         {/if}
 
-        <!-- Escenario -->
-        {#if vectorizacionTab === 'escenario'}
+        <!-- Sandbox -->
+        {#if vectorizacionTab === 'sandbox'}
           {#if proyectoActivo}
             <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.85rem; background: rgba(0,0,0,0.18); border-radius: 8px; margin-bottom: 1rem; font-size: 0.85rem; color: rgba(255,255,255,0.85);">
               <Icon name="proyecto" size={14} />
@@ -2840,28 +2850,28 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             </div>
           {/if}
           {#if lightbotAsistenteSlug}
-            {@const escenarioWidgetUrl = `${AMBIENTES[lightbotAmbiente]?.frontend ?? window.location.origin}/embed/chat/${encodeURIComponent(lightbotAsistenteSlug)}`}
+            {@const sandboxWidgetUrl = `${AMBIENTES[lightbotAmbiente]?.frontend ?? window.location.origin}/embed/chat/${encodeURIComponent(lightbotAsistenteSlug)}`}
             <div class="lightbot-preview" style="margin-bottom: 1rem;">
               <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.4rem; flex-wrap: wrap;">
                 <h4 style="margin: 0;">📋 URL del widget</h4>
                 <div style="display: flex; gap: 0.4rem;">
                   <button
                     class="url-action-btn"
-                    onclick={() => copiarUrl(escenarioWidgetUrl)}
+                    onclick={() => copiarUrl(sandboxWidgetUrl)}
                     title="Copiar URL"
                   >
-                    {urlCopiada === escenarioWidgetUrl ? '✓ Copiado' : '📋 Copiar'}
+                    {urlCopiada === sandboxWidgetUrl ? '✓ Copiado' : '📋 Copiar'}
                   </button>
                   <a
                     class="url-action-btn"
-                    href={escenarioWidgetUrl}
+                    href={sandboxWidgetUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     title="Abrir en nueva ventana"
                   >↗ Abrir</a>
                 </div>
               </div>
-              <code class="lightbot-url">{escenarioWidgetUrl}</code>
+              <code class="lightbot-url">{sandboxWidgetUrl}</code>
             </div>
           {/if}
 
@@ -4703,8 +4713,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .modal-content {
-    background: linear-gradient(160deg, #001a4d 0%, #003d99 30%, #0055cc 60%, #0077ff 100%);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: linear-gradient(160deg, #3d2a0a 0%, #5e4214 40%, #7a5618 75%, #8e6420 100%);
+    border: 1px solid rgba(255, 200, 100, 0.25);
     border-radius: 16px;
     padding: 2rem;
     max-width: 400px;
@@ -5370,6 +5380,26 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     text-decoration: none;
     transition: background 0.15s, border-color 0.15s, transform 0.1s;
     white-space: nowrap;
+  }
+
+  .asistente-link-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.15rem 0.55rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.06);
+    color: inherit;
+    font-family: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    white-space: nowrap;
+  }
+  .asistente-link-chip:hover {
+    background: rgba(255, 255, 255, 0.14);
+    border-color: rgba(255, 255, 255, 0.32);
   }
   .url-action-btn:hover {
     background: rgba(255, 255, 255, 0.16);

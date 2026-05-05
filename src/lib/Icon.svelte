@@ -23,9 +23,10 @@
     'documentos':           { emoji: '📄', iconify: 'ph:file-text-fill' },
     'lightbot':             { emoji: '🤖', iconify: 'ph:robot-fill' },
     'lightbot-embedder':    { emoji: '💬', iconify: 'ph:chats-circle-fill' },
-    'escenario':            { emoji: '🖥️', iconify: 'ph:monitor-fill' },
+    'sandbox':              { emoji: '🖥️', iconify: 'ph:monitor-fill' },
     'miniadmin':            { emoji: '🗂️', iconify: 'ph:notebook-fill' },
     'look-and-feel':        { emoji: '🎨', iconify: 'ph:palette-fill' },
+    'link':                 { emoji: '🔗', iconify: 'ph:link-fill' },
     'contextlight':         { emoji: '🪶', iconify: 'ph:feather-fill' },
     'contextlight-embedder':{ emoji: '📦', iconify: 'ph:package-fill' },
 
