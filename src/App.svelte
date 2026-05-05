@@ -65,6 +65,10 @@
     return entry;
   }
 
+  // Subir esta versión manualmente con cada despliegue para llevar control
+  // visual de qué build está corriendo. Se muestra debajo del título del header.
+  const APP_VERSION = '0.0.0';
+
   const AMBIENTES = {
     desarrollo: { url: 'http://127.0.0.1:8077', proxy: '/api-desarrollo', frontend: 'http://localhost:5174' },
     staging: { url: 'http://172.10.30.15:8077', proxy: '/api-staging', frontend: 'http://172.10.30.15:4176' },
@@ -1708,7 +1712,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         </svg>
       </div>
       <div class="header-info">
-        <h1 class="header-title">Constructor de Asistentes</h1>
+        <h1 class="header-title">Constructor de Asistentes Buzzword</h1>
+        <span class="header-version">versión {APP_VERSION}</span>
         <span class="header-status" onclick={verificarSalud} onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && verificarSalud()} title="Click para verificar conexión" role="button" tabindex="0">
           <span class="status-dot" class:online={estadoSalud === 'online'} class:offline={estadoSalud === 'offline'} class:checking={estadoSalud === 'checking'}></span>
           {#if estadoSalud === 'online'}
@@ -3634,6 +3639,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     font-weight: 700;
     color: #fff;
     letter-spacing: 0.01em;
+  }
+
+  .header-version {
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.55);
+    letter-spacing: 0.04em;
+    text-transform: lowercase;
   }
 
   .header-status {
