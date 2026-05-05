@@ -606,6 +606,73 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let mostrarConfirmacionBorrarAsistente = $state(false);
   let cargandoBorrarAsistente = $state(false);
   let lookAndFeelAsistente = $state(null);
+  // Defaults coinciden con los valores hardcodeados de Embed.svelte/ContextLightEmbed.svelte.
+  const TEMA_DEFAULT = {
+    color_primario: '#5b6abf',
+    color_burbuja_bot: '#d4e4f7',
+    color_fondo_chat: '#f0f2f5',
+    color_header: '#ffffff',
+  };
+  let lookAndFeelForm = $state({ ...TEMA_DEFAULT });
+  let cargandoGuardarTema = $state(false);
+  let mensajeTema = $state('');
+  let urlCopiada = $state('');
+
+  async function copiarUrl(url) {
+    try {
+      await navigator.clipboard.writeText(url);
+      urlCopiada = url;
+      setTimeout(() => { if (urlCopiada === url) urlCopiada = ''; }, 1500);
+    } catch (_) {
+      // Fallback silencioso si el navegador no soporta Clipboard API
+    }
+  }
+
+  function abrirLookAndFeel(asistente) {
+    lookAndFeelAsistente = asistente;
+    lookAndFeelForm = {
+      color_primario: asistente.color_primario ?? TEMA_DEFAULT.color_primario,
+      color_burbuja_bot: asistente.color_burbuja_bot ?? TEMA_DEFAULT.color_burbuja_bot,
+      color_fondo_chat: asistente.color_fondo_chat ?? TEMA_DEFAULT.color_fondo_chat,
+      color_header: asistente.color_header ?? TEMA_DEFAULT.color_header,
+    };
+    mensajeTema = '';
+  }
+
+  function cerrarLookAndFeel() {
+    lookAndFeelAsistente = null;
+    mensajeTema = '';
+  }
+
+  function resetearTema() {
+    lookAndFeelForm = { ...TEMA_DEFAULT };
+  }
+
+  async function guardarTema() {
+    if (!lookAndFeelAsistente) return;
+    cargandoGuardarTema = true;
+    mensajeTema = '';
+    try {
+      const res = await fetch(`${apiUrl.base}/agentes/${encodeURIComponent(lookAndFeelAsistente.id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(lookAndFeelForm),
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status} ${txt}`);
+      }
+      mensajeTema = '✅ Tema guardado';
+      await cargarAsistentes();
+      // Sincroniza el state del modal con el asistente recién recargado
+      const refrescado = asistentes.find((a) => a.id === lookAndFeelAsistente.id);
+      if (refrescado) lookAndFeelAsistente = refrescado;
+    } catch (err) {
+      mensajeTema = `❌ ${err.message}`;
+    } finally {
+      cargandoGuardarTema = false;
+    }
+  }
 
   function resetAsistenteForm() {
     asistenteEditandoId = null;
@@ -2254,7 +2321,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                       </div>
                     </div>
                     <div style="display: flex; gap: 0.4rem; flex-shrink: 0;">
-                      <button onclick={() => lookAndFeelAsistente = asistente} class="vectorizacion-action-btn" title="Look and Feel"><Icon name="look-and-feel" size={16} label="Look and Feel" /></button>
+                      <button onclick={() => abrirLookAndFeel(asistente)} class="vectorizacion-action-btn" title="Look and Feel"><Icon name="look-and-feel" size={16} label="Look and Feel" /></button>
                       <button onclick={() => abrirFormEditarAsistente(asistente)} class="vectorizacion-action-btn" title="Editar asistente"><Icon name="editar" size={16} label="Editar" /></button>
                       <button onclick={() => pedirConfirmacionBorrarAsistente(asistente)} class="vectorizacion-action-btn" title="Borrar asistente"><Icon name="borrar" size={16} label="Borrar" /></button>
                     </div>
@@ -2282,18 +2349,73 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           {/if}
 
           {#if lookAndFeelAsistente}
-            <div class="modal-overlay" onclick={() => lookAndFeelAsistente = null} role="presentation">
-              <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
-                <h3><Icon name="look-and-feel" size={18} /> Look and Feel — {lookAndFeelAsistente.nombre}</h3>
-                <p style="color: rgba(255,255,255,0.75); margin-top: 0.5rem;">
-                  Personaliza la apariencia del widget para <code>{lookAndFeelAsistente.slug}</code>.
+            <div class="modal-overlay" onclick={cerrarLookAndFeel} role="presentation">
+              <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 720px; width: 92%;">
+                <h3 style="margin: 0 0 0.25rem;"><Icon name="look-and-feel" size={18} /> Look and Feel — {lookAndFeelAsistente.nombre}</h3>
+                <p style="color: rgba(255,255,255,0.7); font-size: 0.85rem; margin: 0 0 1rem;">
+                  Personaliza los colores del widget para <code>{lookAndFeelAsistente.slug}</code>. Aplica al chatbot y al MiniAdmin.
                 </p>
-                <p style="color: rgba(255,255,255,0.55); font-size: 0.85rem; margin-top: 1rem; padding: 0.75rem; background: rgba(255,255,255,0.05); border-radius: 8px;">
-                  ⚠️ Funcionalidad en desarrollo — próximamente podrás editar color primario, avatar, mensaje inicial y subtítulo.
-                </p>
-                <div style="display: flex; gap: 0.5rem; margin-top: 1rem; justify-content: flex-end;">
-                  <button onclick={() => lookAndFeelAsistente = null} class="crear-contexto-btn" style="background: rgba(0,0,0,0.45); color: rgba(255,255,255,0.95);">
-                    Cerrar
+
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.85rem; margin-bottom: 1rem;">
+                  <label style="display: flex; flex-direction: column; gap: 0.35rem; color: rgba(255,255,255,0.9); font-size: 0.85rem;">
+                    Color primario (avatar, botón enviar, dots)
+                    <span style="display: flex; align-items: center; gap: 0.5rem;">
+                      <input type="color" bind:value={lookAndFeelForm.color_primario} style="width: 44px; height: 36px; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; background: transparent; cursor: pointer;" />
+                      <input type="text" bind:value={lookAndFeelForm.color_primario} placeholder="#5b6abf" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
+                    </span>
+                  </label>
+
+                  <label style="display: flex; flex-direction: column; gap: 0.35rem; color: rgba(255,255,255,0.9); font-size: 0.85rem;">
+                    Burbuja del bot
+                    <span style="display: flex; align-items: center; gap: 0.5rem;">
+                      <input type="color" bind:value={lookAndFeelForm.color_burbuja_bot} style="width: 44px; height: 36px; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; background: transparent; cursor: pointer;" />
+                      <input type="text" bind:value={lookAndFeelForm.color_burbuja_bot} placeholder="#d4e4f7" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
+                    </span>
+                  </label>
+
+                  <label style="display: flex; flex-direction: column; gap: 0.35rem; color: rgba(255,255,255,0.9); font-size: 0.85rem;">
+                    Fondo del chat
+                    <span style="display: flex; align-items: center; gap: 0.5rem;">
+                      <input type="color" bind:value={lookAndFeelForm.color_fondo_chat} style="width: 44px; height: 36px; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; background: transparent; cursor: pointer;" />
+                      <input type="text" bind:value={lookAndFeelForm.color_fondo_chat} placeholder="#f0f2f5" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
+                    </span>
+                  </label>
+
+                  <label style="display: flex; flex-direction: column; gap: 0.35rem; color: rgba(255,255,255,0.9); font-size: 0.85rem;">
+                    Header
+                    <span style="display: flex; align-items: center; gap: 0.5rem;">
+                      <input type="color" bind:value={lookAndFeelForm.color_header} style="width: 44px; height: 36px; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; background: transparent; cursor: pointer;" />
+                      <input type="text" bind:value={lookAndFeelForm.color_header} placeholder="#ffffff" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
+                    </span>
+                  </label>
+                </div>
+
+                <!-- Vista previa rápida -->
+                <div style="border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; overflow: hidden; margin-bottom: 1rem; background: {lookAndFeelForm.color_fondo_chat};">
+                  <div style="background: {lookAndFeelForm.color_header}; padding: 0.6rem 0.85rem; display: flex; align-items: center; gap: 0.6rem; border-bottom: 1px solid rgba(0,0,0,0.08);">
+                    <span style="display: inline-block; width: 28px; height: 28px; border-radius: 50%; background: {lookAndFeelForm.color_primario};"></span>
+                    <strong style="color: #1a1a2e; font-size: 0.85rem;">{lookAndFeelAsistente.nombre}</strong>
+                  </div>
+                  <div style="padding: 0.85rem;">
+                    <div style="display: inline-block; background: {lookAndFeelForm.color_burbuja_bot}; color: #1a1a2e; padding: 0.5rem 0.75rem; border-radius: 14px; font-size: 0.8rem;">
+                      Vista previa de mensaje del bot
+                    </div>
+                  </div>
+                </div>
+
+                {#if mensajeTema}
+                  <p style="font-size: 0.85rem; color: rgba(255,255,255,0.85); margin-bottom: 0.75rem;">{mensajeTema}</p>
+                {/if}
+
+                <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                  <button onclick={resetearTema} disabled={cargandoGuardarTema} class="crear-contexto-btn" style="background: rgba(0,0,0,0.45); color: rgba(255,255,255,0.95);">
+                    Reset a defaults
+                  </button>
+                  <button onclick={cerrarLookAndFeel} disabled={cargandoGuardarTema} class="crear-contexto-btn" style="background: rgba(0,0,0,0.45); color: rgba(255,255,255,0.95);">
+                    Cancelar
+                  </button>
+                  <button onclick={guardarTema} disabled={cargandoGuardarTema} class="crear-contexto-btn">
+                    {cargandoGuardarTema ? '⟳ Guardando...' : '✓ Guardar'}
                   </button>
                 </div>
               </div>
@@ -2664,9 +2786,28 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             </div>
           {/if}
           {#if lightbotAsistenteSlug}
+            {@const escenarioWidgetUrl = `${AMBIENTES[lightbotAmbiente]?.frontend ?? window.location.origin}/embed/chat/${encodeURIComponent(lightbotAsistenteSlug)}`}
             <div class="lightbot-preview" style="margin-bottom: 1rem;">
-              <h4>📋 URL del widget</h4>
-              <code class="lightbot-url">{AMBIENTES[lightbotAmbiente]?.frontend ?? window.location.origin}/embed/chat/{encodeURIComponent(lightbotAsistenteSlug)}</code>
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.4rem; flex-wrap: wrap;">
+                <h4 style="margin: 0;">📋 URL del widget</h4>
+                <div style="display: flex; gap: 0.4rem;">
+                  <button
+                    class="url-action-btn"
+                    onclick={() => copiarUrl(escenarioWidgetUrl)}
+                    title="Copiar URL"
+                  >
+                    {urlCopiada === escenarioWidgetUrl ? '✓ Copiado' : '📋 Copiar'}
+                  </button>
+                  <a
+                    class="url-action-btn"
+                    href={escenarioWidgetUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Abrir en nueva ventana"
+                  >↗ Abrir</a>
+                </div>
+              </div>
+              <code class="lightbot-url">{escenarioWidgetUrl}</code>
             </div>
           {/if}
 
@@ -2720,9 +2861,28 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             </div>
           {/if}
           {#if contextlightAsistenteSlug}
+            {@const miniadminWidgetUrl = `${AMBIENTES[contextlightAmbiente]?.frontend ?? window.location.origin}/embed/admin/${encodeURIComponent(contextlightAsistenteSlug)}`}
             <div class="lightbot-preview" style="margin-bottom: 1rem;">
-              <h4>📋 URL del widget</h4>
-              <code class="lightbot-url">{AMBIENTES[contextlightAmbiente]?.frontend ?? window.location.origin}/embed/admin/{encodeURIComponent(contextlightAsistenteSlug)}</code>
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.4rem; flex-wrap: wrap;">
+                <h4 style="margin: 0;">📋 URL del widget</h4>
+                <div style="display: flex; gap: 0.4rem;">
+                  <button
+                    class="url-action-btn"
+                    onclick={() => copiarUrl(miniadminWidgetUrl)}
+                    title="Copiar URL"
+                  >
+                    {urlCopiada === miniadminWidgetUrl ? '✓ Copiado' : '📋 Copiar'}
+                  </button>
+                  <a
+                    class="url-action-btn"
+                    href={miniadminWidgetUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Abrir en nueva ventana"
+                  >↗ Abrir</a>
+                </div>
+              </div>
+              <code class="lightbot-url">{miniadminWidgetUrl}</code>
             </div>
           {/if}
 
@@ -5111,6 +5271,31 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     font-size: 0.8rem;
     color: rgba(255, 255, 255, 0.7);
     margin-bottom: 0.5rem;
+  }
+
+  .url-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.3rem 0.7rem;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.92);
+    font-family: inherit;
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.15s, border-color 0.15s, transform 0.1s;
+    white-space: nowrap;
+  }
+  .url-action-btn:hover {
+    background: rgba(255, 255, 255, 0.16);
+    border-color: rgba(255, 255, 255, 0.32);
+  }
+  .url-action-btn:active {
+    transform: scale(0.97);
   }
 
   .lightbot-url {
