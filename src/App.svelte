@@ -802,9 +802,13 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       const url = editando
         ? `${apiUrl.base}/agentes/${encodeURIComponent(asistenteEditandoId)}`
         : `${apiUrl.base}/agentes`;
+      // Contexto vacío = "Sin base de conocimiento". Lo mandamos como null
+      // (no como "") para que el backend lo interprete como "limpiar campo"
+      // y no como string vacío sospechoso.
+      const contextoPayload = contexto === '' ? null : contexto;
       const body = editando
-        ? { nombre, instrucciones, contexto, modelo_llm, historial_max }
-        : { slug, nombre, instrucciones, contexto, modelo_llm, historial_max, proyecto_id: proyectoActivoId };
+        ? { nombre, instrucciones, contexto: contextoPayload, modelo_llm, historial_max }
+        : { slug, nombre, instrucciones, contexto: contextoPayload, modelo_llm, historial_max, proyecto_id: proyectoActivoId };
 
       const res = await fetch(url, {
         method: editando ? 'PUT' : 'POST',
@@ -1265,7 +1269,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     }
   }
 
-  async function borrarContextoConfirmado() {
+  // Cuando la API devuelve 409 (BC en uso), guardamos el mensaje aquí para
+  // mostrar el segundo modal de confirmación que permite forzar el borrado.
+  let advertenciaBorrar = $state('');
+
+  async function borrarContextoConfirmado(force = false) {
     if (!contextoABorrar.trim()) {
       mensajeBorrarContexto = '❌ Selecciona una base de conocimiento para borrar';
       return;
@@ -1276,14 +1284,21 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
     try {
       const nombreContexto = contextoABorrar.trim();
-      console.groupCollapsed(`%c📤 DELETE /borrarContexto`, 'color:#ff6b35;font-weight:bold;font-size:12px');
-      console.log('URL enviada :', `${apiUrl.real}/borrarContexto?contexto=${encodeURIComponent(nombreContexto)}`);
-      console.log('Query param :', { contexto: nombreContexto });
+      const url = `${apiUrl.base}/borrarContexto?contexto=${encodeURIComponent(nombreContexto)}${force ? '&force=true' : ''}`;
+      console.groupCollapsed(`%c📤 DELETE /borrarContexto${force ? ' (force)' : ''}`, 'color:#ff6b35;font-weight:bold;font-size:12px');
+      console.log('URL enviada :', url);
+      console.log('Force       :', force);
       console.groupEnd();
 
-      const res = await fetch(`${apiUrl.base}/borrarContexto?contexto=${encodeURIComponent(nombreContexto)}`, {
-        method: 'DELETE'
-      });
+      const res = await fetch(url, { method: 'DELETE' });
+
+      // 409: BC en uso por algún asistente. Capturamos el detail y mostramos el
+      // segundo modal de "Borrar de todas formas" en vez de fallar duro.
+      if (res.status === 409 && !force) {
+        const body = await res.json().catch(() => ({}));
+        advertenciaBorrar = body?.detail ?? 'Esta base de conocimiento está en uso por uno o más asistentes.';
+        return;
+      }
 
       if (!res.ok) {
         const errorBody = await res.text().catch(() => '(sin detalles)');
@@ -1300,10 +1315,13 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       mensajeBorrarContexto = `✅ ${data.Mensaje ?? `Base de conocimiento "${contextoABorrar}" borrada exitosamente`}`;
       contextoABorrar = '';
       mostrarConfirmacionBorrar = false;
+      advertenciaBorrar = '';
 
       // Recarga la lista después de 1 segundo
       setTimeout(() => {
         cargarContextosVectorizacion();
+        // También recarga asistentes para reflejar que algunos quedaron sin BC
+        cargarAsistentes();
       }, 1000);
 
     } catch (err) {
@@ -1312,6 +1330,12 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     } finally {
       cargandoBorrarContexto = false;
     }
+  }
+
+  function cancelarBorradoBC() {
+    mostrarConfirmacionBorrar = false;
+    advertenciaBorrar = '';
+    contextoABorrar = '';
   }
 
   async function cargarDocumentosVectorizacion(contexto) {
@@ -2952,29 +2976,55 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         {#if mostrarConfirmacionBorrar}
           <div class="modal-overlay">
             <div class="modal-content">
-              <h3>⚠️ Confirmar Borrado</h3>
-              <p>
-                ¿Estás seguro de que deseas borrar la base de conocimiento <strong>"{contextoABorrar}"</strong>?
-              </p>
-              <p style="font-size: 0.85rem; color: rgba(0,0,0,0.55);">
-                Esta acción es irreversible.
-              </p>
-              <div class="modal-buttons">
-                <button
-                  onclick={() => mostrarConfirmacionBorrar = false}
-                  disabled={cargandoBorrarContexto}
-                  class="modal-btn cancel"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onclick={borrarContextoConfirmado}
-                  disabled={cargandoBorrarContexto}
-                  class="modal-btn danger"
-                >
-                  {cargandoBorrarContexto ? '⟳ Borrando...' : 'Sí, borrar'}
-                </button>
-              </div>
+              {#if advertenciaBorrar}
+                <h3>⚠️ Esta BC está en uso</h3>
+                <p style="color: rgba(0,0,0,0.85);">
+                  {advertenciaBorrar}
+                </p>
+                <p style="font-size: 0.85rem; color: rgba(0,0,0,0.65); margin-top: 0.5rem;">
+                  Si borras la BC de todas formas, los asistentes que la usan quedarán sin base de conocimiento (chat puro, sin RAG) hasta que les asignes una nueva.
+                </p>
+                <div class="modal-buttons">
+                  <button
+                    onclick={cancelarBorradoBC}
+                    disabled={cargandoBorrarContexto}
+                    class="modal-btn cancel"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onclick={() => borrarContextoConfirmado(true)}
+                    disabled={cargandoBorrarContexto}
+                    class="modal-btn danger"
+                  >
+                    {cargandoBorrarContexto ? '⟳ Borrando...' : 'Borrar de todas formas'}
+                  </button>
+                </div>
+              {:else}
+                <h3>⚠️ Confirmar Borrado</h3>
+                <p>
+                  ¿Estás seguro de que deseas borrar la base de conocimiento <strong>"{contextoABorrar}"</strong>?
+                </p>
+                <p style="font-size: 0.85rem; color: rgba(0,0,0,0.55);">
+                  Esta acción es irreversible.
+                </p>
+                <div class="modal-buttons">
+                  <button
+                    onclick={cancelarBorradoBC}
+                    disabled={cargandoBorrarContexto}
+                    class="modal-btn cancel"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onclick={() => borrarContextoConfirmado(false)}
+                    disabled={cargandoBorrarContexto}
+                    class="modal-btn danger"
+                  >
+                    {cargandoBorrarContexto ? '⟳ Borrando...' : 'Sí, borrar'}
+                  </button>
+                </div>
+              {/if}
             </div>
           </div>
         {/if}
