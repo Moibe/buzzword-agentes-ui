@@ -488,11 +488,23 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let nuevoContextoEmbedding = $state('');
   let nuevoContextoChunkSize = $state('1500');
 
-  // Nombre auto-generado: bzz-<alias_modelo>-<chunk>
+  // Nombre auto-generado: <proyecto-slug>-<N>, donde N es el menor entero
+  // positivo libre dentro del proyecto activo. Si se borra una BC, su número
+  // queda disponible y el siguiente alta lo reusa (rellena huecos).
   const nombreContextoGenerado = $derived.by(() => {
-    const alias = aliasModeloEmbedding(nuevoContextoEmbedding);
-    const chunk = nuevoContextoChunkSize || '1500';
-    return alias ? `bzz-${alias}-${chunk}` : 'bzz--1500';
+    if (!proyectoActivo?.slug) return '';
+    const slug = proyectoActivo.slug;
+    // Recolecta los números usados por BCs existentes que matcheen <slug>-<N>.
+    const usados = new Set();
+    const re = new RegExp(`^${slug.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}-(\\d+)$`);
+    for (const bc of vectorizacionContextos) {
+      const m = bc?.nombre?.match(re);
+      if (m) usados.add(parseInt(m[1], 10));
+    }
+    // El menor entero >= 1 que no esté usado.
+    let n = 1;
+    while (usados.has(n)) n++;
+    return `${slug}-${n}`;
   });
   let cargandoCrearContexto = $state(false);
   let mensajeCrearContexto = $state('');
@@ -619,12 +631,33 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let urlCopiada = $state('');
 
   async function copiarUrl(url) {
-    try {
-      await navigator.clipboard.writeText(url);
+    let ok = false;
+    // 1. Modern API: solo funciona en HTTPS o localhost.
+    if (navigator.clipboard && window.isSecureContext) {
+      try {
+        await navigator.clipboard.writeText(url);
+        ok = true;
+      } catch (_) { /* fall through al fallback */ }
+    }
+    // 2. Fallback: textarea + execCommand. Funciona en HTTP plano y navegadores viejos.
+    if (!ok) {
+      const ta = document.createElement('textarea');
+      ta.value = url;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      ta.style.top = '0';
+      ta.setAttribute('readonly', '');
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try {
+        ok = document.execCommand('copy');
+      } catch (_) { ok = false; }
+      document.body.removeChild(ta);
+    }
+    if (ok) {
       urlCopiada = url;
       setTimeout(() => { if (urlCopiada === url) urlCopiada = ''; }, 1500);
-    } catch (_) {
-      // Fallback silencioso si el navegador no soporta Clipboard API
     }
   }
 
@@ -662,11 +695,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         const txt = await res.text().catch(() => '');
         throw new Error(`HTTP ${res.status} ${txt}`);
       }
-      mensajeTema = '✅ Tema guardado';
       await cargarAsistentes();
-      // Sincroniza el state del modal con el asistente recién recargado
-      const refrescado = asistentes.find((a) => a.id === lookAndFeelAsistente.id);
-      if (refrescado) lookAndFeelAsistente = refrescado;
+      cerrarLookAndFeel();
     } catch (err) {
       mensajeTema = `❌ ${err.message}`;
     } finally {
@@ -3045,9 +3075,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             </button>
           </div>
           <p style="color: rgba(255,255,255,0.7); font-size: 0.9rem; margin: 0.25rem 0 1rem 0; line-height: 1.5;">
-            Cada base de conocimiento se nombra como <code style="background:rgba(0,0,0,0.25); padding:2px 6px; border-radius:4px;">bzz-&lt;alias&gt;-&lt;chunk&gt;</code>.
-            Si dejas el alias vacío se usa la regla por defecto (texto antes del primer <code>-</code>, <code>_</code> o <code>:</code>),
-            lo cual puede causar colisiones entre modelos parecidos. Edita el alias para evitarlas.
+            <strong style="color: rgba(255,200,80,0.9);">⚠️ Legacy:</strong>
+            Antes cada base de conocimiento se nombraba como <code style="background:rgba(0,0,0,0.25); padding:2px 6px; border-radius:4px;">bzz-&lt;alias&gt;-&lt;chunk&gt;</code>.
+            Ahora se nombra como <code style="background:rgba(0,0,0,0.25); padding:2px 6px; border-radius:4px;">&lt;proyecto-slug&gt;-&lt;N&gt;</code>
+            (N consecutivo desde 1, reusa huecos de BCs borradas). Estos alias quedan solo como referencia.
           </p>
 
           {#if cargandoModelosEmbedding}
@@ -3067,7 +3098,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 value={MODELO_ALIAS[modelo] ?? ''}
                 oninput={(e) => { MODELO_ALIAS[modelo] = e.currentTarget.value; guardarAlias(); }}
               />
-              <span class="alias-preview">→ bzz-<strong>{aliasModeloEmbedding(modelo)}</strong>-1500</span>
+              <span class="alias-preview" style="opacity: 0.55;">alias previo: <strong>{aliasModeloEmbedding(modelo)}</strong></span>
             </div>
           {/snippet}
 
