@@ -1555,6 +1555,29 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     };
   }
 
+  function parseLinks(text) {
+    if (!text) return [{ type: 'text', value: '' }];
+    const re = /(https?:\/\/[^\s]+)/g;
+    const parts = [];
+    let last = 0;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      if (m.index > last) parts.push({ type: 'text', value: text.slice(last, m.index) });
+      let url = m[0];
+      const trail = url.match(/[.,;!?)\]]+$/);
+      let trailingText = '';
+      if (trail) {
+        trailingText = trail[0];
+        url = url.slice(0, -trail[0].length);
+      }
+      parts.push({ type: 'link', value: url });
+      if (trailingText) parts.push({ type: 'text', value: trailingText });
+      last = m.index + m[0].length;
+    }
+    if (last < text.length) parts.push({ type: 'text', value: text.slice(last) });
+    return parts;
+  }
+
   function resetChat() {
     messages = [buildMensajeInicial()];
     inputText = '';
@@ -1822,7 +1845,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             </div>
           {/if}
           <div class="bubble-wrap">
-            <div class="bubble">{msg.text}</div>
+            <div class="bubble">{#each parseLinks(msg.text) as part}{#if part.type === 'link'}<a href={part.value} target="_blank" rel="noopener noreferrer" class="bubble-link">{part.value}</a>{:else}{part.value}{/if}{/each}</div>
             <span class="time">{msg.time}</span>
           </div>
         </div>
@@ -3909,6 +3932,24 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     background: rgba(0, 0, 0, 0.3);
     border-color: rgba(255, 100, 100, 0.4);
     color: rgba(255, 200, 200, 0.9);
+  }
+
+  .bubble-link {
+    color: #93c5fd;
+    text-decoration: underline;
+    word-break: break-all;
+  }
+  .bubble-link:hover {
+    color: #bfdbfe;
+  }
+  .message-row.user .bubble-link {
+    color: #1d4ed8;
+  }
+  .message-row.user .bubble-link:hover {
+    color: #1e3a8a;
+  }
+  .message-row.error .bubble-link {
+    color: rgba(255, 200, 200, 0.95);
   }
 
   .time {
