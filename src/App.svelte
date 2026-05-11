@@ -522,32 +522,68 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let cargandoBorrarModelo = $state(false);
   let mensajeBorrarModelo = $state('');
 
+  // Error de borrado mostrado DENTRO del modal (no se confunde con el
+  // mensaje de éxito post-cierre).
+  let errorBorrarModelo = $state('');
+
+  // Asistentes que usan el modelo a borrar (computado al abrir el modal).
+  const asistentesAfectadosPorBorrado = $derived(
+    modeloABorrar
+      ? asistentes.filter((a) => (a?.modelo_llm ?? '').trim() === modeloABorrar.trim())
+      : []
+  );
+
+  function abrirConfirmacionBorrarModelo(modelo) {
+    modeloABorrar = modelo;
+    mostrarConfirmacionBorrarModelo = true;
+    errorBorrarModelo = '';
+    mensajeBorrarModelo = '';
+    // Asegura que asistentes esté cargado para poder mostrar los afectados.
+    if (asistentes.length === 0) cargarAsistentes();
+  }
+
+  function cerrarConfirmacionBorrarModelo() {
+    mostrarConfirmacionBorrarModelo = false;
+    modeloABorrar = '';
+    errorBorrarModelo = '';
+  }
+
   async function borrarModeloConfirmado() {
     if (!modeloABorrar.trim()) return;
     cargandoBorrarModelo = true;
-    mensajeBorrarModelo = '';
+    errorBorrarModelo = '';
+    mensajeBorrarModelo = `⟳ Borrando modelo "${modeloABorrar}"...`;
+    const nombre = modeloABorrar.trim();
     try {
-      const nombre = modeloABorrar.trim();
       const res = await fetch(`${apiUrl.base}/borrarModelo?nombre=${encodeURIComponent(nombre)}`, {
         method: 'DELETE',
       });
       if (!res.ok) {
         const txt = await res.text().catch(() => '');
-        throw new Error(`HTTP ${res.status}: ${txt}`);
+        let detail = txt;
+        try {
+          const j = JSON.parse(txt);
+          detail = j?.detail ?? txt;
+        } catch {}
+        throw new Error(`HTTP ${res.status}${detail ? ': ' + detail : ''}`);
       }
-      mensajeBorrarModelo = `✅ Modelo "${nombre}" borrado`;
       if (modeloSeleccionado === nombre) {
         modeloSeleccionado = null;
         infoModeloSeleccionado = null;
       }
-      modeloABorrar = '';
-      mostrarConfirmacionBorrarModelo = false;
+      // Refresca la lista ANTES de cerrar el modal — así el usuario ve la
+      // tarjeta desaparecer en cuanto se cierra el diálogo.
+      await Promise.all([cargarModelos(), cargarModelosEmbedding()]);
+      mensajeBorrarModelo = `✅ Modelo "${nombre}" borrado`;
+      // Limpia el mensaje después de unos segundos.
+      const msgSnapshot = mensajeBorrarModelo;
       setTimeout(() => {
-        cargarModelos();
-        cargarModelosEmbedding();
-      }, 500);
+        if (mensajeBorrarModelo === msgSnapshot) mensajeBorrarModelo = '';
+      }, 4000);
+      cerrarConfirmacionBorrarModelo();
     } catch (err) {
-      mensajeBorrarModelo = `❌ ${err.message}`;
+      errorBorrarModelo = err.message;
+      mensajeBorrarModelo = '';
     } finally {
       cargandoBorrarModelo = false;
     }
@@ -3151,17 +3187,45 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
         {#if mostrarConfirmacionBorrarModelo && modeloABorrar}
           <div class="modal-overlay">
-            <div class="modal-content">
+            <div class="modal-content" style="max-width: 520px;">
               <h3>⚠️ Borrar Modelo</h3>
               <p>
-                ¿Borrar el modelo <strong>"{modeloABorrar}"</strong> del server? Esto ejecuta el equivalente a <code>ollama rm {modeloABorrar}</code>.
+                Vas a borrar el modelo <strong>"{modeloABorrar}"</strong> del server (equivalente a <code>ollama rm {modeloABorrar}</code>).
               </p>
-              <p style="font-size: 0.85rem; color: rgba(255,255,255,0.75);">
-                Los asistentes que usen este modelo dejarán de funcionar hasta que reasignes otro. Esta acción es irreversible — para recuperarlo tendrás que volver a descargarlo con <code>ollama pull</code>.
+
+              {#if asistentesAfectadosPorBorrado.length > 0}
+                <div style="margin-top: 0.75rem; padding: 0.75rem; background: rgba(220, 80, 80, 0.22); border: 1px solid rgba(255, 150, 150, 0.4); border-radius: 8px;">
+                  <p style="font-size: 0.85rem; color: rgba(255,255,255,0.95); margin: 0 0 0.4rem; font-weight: 600;">
+                    ⚠️ {asistentesAfectadosPorBorrado.length} asistente{asistentesAfectadosPorBorrado.length === 1 ? '' : 's'} usa{asistentesAfectadosPorBorrado.length === 1 ? '' : 'n'} este modelo y dejará{asistentesAfectadosPorBorrado.length === 1 ? '' : 'n'} de funcionar:
+                  </p>
+                  <ul style="margin: 0; padding-left: 1.25rem; font-size: 0.8rem; color: rgba(255,255,255,0.85); line-height: 1.55;">
+                    {#each asistentesAfectadosPorBorrado as a (a.id)}
+                      <li><strong>{a.nombre}</strong> (<code>{a.slug}</code>)</li>
+                    {/each}
+                  </ul>
+                  <p style="font-size: 0.75rem; color: rgba(255,255,255,0.7); margin: 0.5rem 0 0;">
+                    Tendrás que reasignarles otro modelo manualmente desde el form de edición.
+                  </p>
+                </div>
+              {:else}
+                <p style="font-size: 0.85rem; color: rgba(255,255,255,0.7); margin-top: 0.5rem;">
+                  Ningún asistente actual usa este modelo.
+                </p>
+              {/if}
+
+              <p style="font-size: 0.75rem; color: rgba(255,255,255,0.55); margin-top: 0.75rem;">
+                Esta acción es irreversible. Para recuperarlo tendrás que volver a descargarlo con <code>ollama pull {modeloABorrar}</code>.
               </p>
+
+              {#if errorBorrarModelo}
+                <p style="font-size: 0.85rem; color: #fca5a5; background: rgba(180, 30, 30, 0.25); padding: 0.5rem 0.75rem; border-radius: 6px; margin-top: 0.75rem; word-break: break-word;">
+                  ❌ {errorBorrarModelo}
+                </p>
+              {/if}
+
               <div class="modal-buttons">
                 <button
-                  onclick={() => { mostrarConfirmacionBorrarModelo = false; modeloABorrar = ''; }}
+                  onclick={cerrarConfirmacionBorrarModelo}
                   disabled={cargandoBorrarModelo}
                   class="modal-btn cancel"
                 >
@@ -3172,7 +3236,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   disabled={cargandoBorrarModelo}
                   class="modal-btn danger"
                 >
-                  {cargandoBorrarModelo ? '⟳ Borrando...' : 'Sí, borrar'}
+                  {cargandoBorrarModelo ? '⟳ Borrando...' : (asistentesAfectadosPorBorrado.length > 0 ? 'Borrar de todas formas' : 'Sí, borrar')}
                 </button>
               </div>
             </div>
@@ -3247,7 +3311,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     class="modelo-borrar-btn"
                     title={`Borrar el modelo "${modelo}" del server`}
                     aria-label={`Borrar el modelo ${modelo}`}
-                    onclick={(e) => { e.stopPropagation(); modeloABorrar = modelo; mostrarConfirmacionBorrarModelo = true; mensajeBorrarModelo = ''; }}
+                    onclick={(e) => { e.stopPropagation(); abrirConfirmacionBorrarModelo(modelo); }}
                   >
                     <Icon name="borrar" size={14} />
                   </button>
