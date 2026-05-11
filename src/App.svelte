@@ -67,7 +67,7 @@
 
   // Subir esta versión manualmente con cada despliegue para llevar control
   // visual de qué build está corriendo. Se muestra debajo del título del header.
-  const APP_VERSION = '0.1.2';
+  const APP_VERSION = '0.1.3';
 
   // Sin concepto de "ambiente". Las URLs se derivan del host donde corre la
   // app: el API siempre vive en el mismo host en :8077 y el host-asistentes
@@ -3185,64 +3185,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           </div>
         {/if}
 
-        {#if mostrarConfirmacionBorrarModelo && modeloABorrar}
-          <div class="modal-overlay">
-            <div class="modal-content" style="max-width: 520px;">
-              <h3>⚠️ Borrar Modelo</h3>
-              <p>
-                Vas a borrar el modelo <strong>"{modeloABorrar}"</strong> del server (equivalente a <code>ollama rm {modeloABorrar}</code>).
-              </p>
-
-              {#if asistentesAfectadosPorBorrado.length > 0}
-                <div style="margin-top: 0.75rem; padding: 0.75rem; background: rgba(220, 80, 80, 0.22); border: 1px solid rgba(255, 150, 150, 0.4); border-radius: 8px;">
-                  <p style="font-size: 0.85rem; color: rgba(255,255,255,0.95); margin: 0 0 0.4rem; font-weight: 600;">
-                    ⚠️ {asistentesAfectadosPorBorrado.length} asistente{asistentesAfectadosPorBorrado.length === 1 ? '' : 's'} usa{asistentesAfectadosPorBorrado.length === 1 ? '' : 'n'} este modelo y dejará{asistentesAfectadosPorBorrado.length === 1 ? '' : 'n'} de funcionar:
-                  </p>
-                  <ul style="margin: 0; padding-left: 1.25rem; font-size: 0.8rem; color: rgba(255,255,255,0.85); line-height: 1.55;">
-                    {#each asistentesAfectadosPorBorrado as a (a.id)}
-                      <li><strong>{a.nombre}</strong> (<code>{a.slug}</code>)</li>
-                    {/each}
-                  </ul>
-                  <p style="font-size: 0.75rem; color: rgba(255,255,255,0.7); margin: 0.5rem 0 0;">
-                    Tendrás que reasignarles otro modelo manualmente desde el form de edición.
-                  </p>
-                </div>
-              {:else}
-                <p style="font-size: 0.85rem; color: rgba(255,255,255,0.7); margin-top: 0.5rem;">
-                  Ningún asistente actual usa este modelo.
-                </p>
-              {/if}
-
-              <p style="font-size: 0.75rem; color: rgba(255,255,255,0.55); margin-top: 0.75rem;">
-                Esta acción es irreversible. Para recuperarlo tendrás que volver a descargarlo con <code>ollama pull {modeloABorrar}</code>.
-              </p>
-
-              {#if errorBorrarModelo}
-                <p style="font-size: 0.85rem; color: #fca5a5; background: rgba(180, 30, 30, 0.25); padding: 0.5rem 0.75rem; border-radius: 6px; margin-top: 0.75rem; word-break: break-word;">
-                  ❌ {errorBorrarModelo}
-                </p>
-              {/if}
-
-              <div class="modal-buttons">
-                <button
-                  onclick={cerrarConfirmacionBorrarModelo}
-                  disabled={cargandoBorrarModelo}
-                  class="modal-btn cancel"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onclick={borrarModeloConfirmado}
-                  disabled={cargandoBorrarModelo}
-                  class="modal-btn danger"
-                >
-                  {cargandoBorrarModelo ? '⟳ Borrando...' : (asistentesAfectadosPorBorrado.length > 0 ? 'Borrar de todas formas' : 'Sí, borrar')}
-                </button>
-              </div>
-            </div>
-          </div>
-        {/if}
-
       </div>
       <p class="disclaimer">Constructor de Asistentes</p>
       </main>
@@ -3340,6 +3282,64 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   {/each}
                 </div>
               {/if}
+            </div>
+          {/if}
+
+          {#if mostrarConfirmacionBorrarModelo && modeloABorrar}
+            <div class="modal-overlay">
+              <div class="modal-content" style="max-width: 520px;">
+                <h3>⚠️ Borrar Modelo</h3>
+                <p>
+                  Vas a borrar el modelo <strong>"{modeloABorrar}"</strong> del server (equivalente a <code>ollama rm {modeloABorrar}</code>).
+                </p>
+
+                {#if asistentesAfectadosPorBorrado.length > 0}
+                  <div style="margin-top: 0.75rem; padding: 0.75rem; background: rgba(220, 80, 80, 0.22); border: 1px solid rgba(255, 150, 150, 0.4); border-radius: 8px;">
+                    <p style="font-size: 0.85rem; color: rgba(255,255,255,0.95); margin: 0 0 0.4rem; font-weight: 600;">
+                      ⚠️ {asistentesAfectadosPorBorrado.length} asistente{asistentesAfectadosPorBorrado.length === 1 ? '' : 's'} usa{asistentesAfectadosPorBorrado.length === 1 ? '' : 'n'} este modelo y dejará{asistentesAfectadosPorBorrado.length === 1 ? '' : 'n'} de funcionar:
+                    </p>
+                    <ul style="margin: 0; padding-left: 1.25rem; font-size: 0.8rem; color: rgba(255,255,255,0.85); line-height: 1.55;">
+                      {#each asistentesAfectadosPorBorrado as a (a.id)}
+                        <li><strong>{a.nombre}</strong> (<code>{a.slug}</code>)</li>
+                      {/each}
+                    </ul>
+                    <p style="font-size: 0.75rem; color: rgba(255,255,255,0.7); margin: 0.5rem 0 0;">
+                      Tendrás que reasignarles otro modelo manualmente desde el form de edición.
+                    </p>
+                  </div>
+                {:else}
+                  <p style="font-size: 0.85rem; color: rgba(255,255,255,0.7); margin-top: 0.5rem;">
+                    Ningún asistente actual usa este modelo.
+                  </p>
+                {/if}
+
+                <p style="font-size: 0.75rem; color: rgba(255,255,255,0.55); margin-top: 0.75rem;">
+                  Esta acción es irreversible. Para recuperarlo tendrás que volver a descargarlo con <code>ollama pull {modeloABorrar}</code>.
+                </p>
+
+                {#if errorBorrarModelo}
+                  <p style="font-size: 0.85rem; color: #fca5a5; background: rgba(180, 30, 30, 0.25); padding: 0.5rem 0.75rem; border-radius: 6px; margin-top: 0.75rem; word-break: break-word;">
+                    ❌ {errorBorrarModelo}
+                  </p>
+                {/if}
+
+                <div class="modal-buttons">
+                  <button
+                    onclick={cerrarConfirmacionBorrarModelo}
+                    disabled={cargandoBorrarModelo}
+                    class="modal-btn cancel"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onclick={borrarModeloConfirmado}
+                    disabled={cargandoBorrarModelo}
+                    class="modal-btn danger"
+                  >
+                    {cargandoBorrarModelo ? '⟳ Borrando...' : (asistentesAfectadosPorBorrado.length > 0 ? 'Borrar de todas formas' : 'Sí, borrar')}
+                  </button>
+                </div>
+              </div>
             </div>
           {/if}
         </div>
