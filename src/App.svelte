@@ -517,6 +517,41 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let modeloSeleccionado = $state(null);
   let infoModeloSeleccionado = $state(null);
   let cargandoInfoModelo = $state(false);
+  let modeloABorrar = $state('');
+  let mostrarConfirmacionBorrarModelo = $state(false);
+  let cargandoBorrarModelo = $state(false);
+  let mensajeBorrarModelo = $state('');
+
+  async function borrarModeloConfirmado() {
+    if (!modeloABorrar.trim()) return;
+    cargandoBorrarModelo = true;
+    mensajeBorrarModelo = '';
+    try {
+      const nombre = modeloABorrar.trim();
+      const res = await fetch(`${apiUrl.base}/borrarModelo?nombre=${encodeURIComponent(nombre)}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status}: ${txt}`);
+      }
+      mensajeBorrarModelo = `✅ Modelo "${nombre}" borrado`;
+      if (modeloSeleccionado === nombre) {
+        modeloSeleccionado = null;
+        infoModeloSeleccionado = null;
+      }
+      modeloABorrar = '';
+      mostrarConfirmacionBorrarModelo = false;
+      setTimeout(() => {
+        cargarModelos();
+        cargarModelosEmbedding();
+      }, 500);
+    } catch (err) {
+      mensajeBorrarModelo = `❌ ${err.message}`;
+    } finally {
+      cargandoBorrarModelo = false;
+    }
+  }
 
   // ─── Asistentes (CRUD) ───────────────────────────────────────────
   const SLUG_REGEX = /^[a-z][a-z0-9-]{1,63}$/;
@@ -1761,10 +1796,17 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           {/if}
         </span>
       </div>
-      <div class="ambiente-indicador" title={`Sirviendo desde: ${location.host}`}>
+      <button
+        type="button"
+        class="ambiente-indicador ambiente-indicador--btn"
+        title={`Copiar host: ${location.hostname}`}
+        onclick={() => copiarUrl(location.hostname)}
+      >
         <span class="ambiente-indicador-label">Host</span>
-        <span class="ambiente-indicador-valor">{location.hostname}</span>
-      </div>
+        <span class="ambiente-indicador-valor">
+          {urlCopiada === location.hostname ? '✓ copiado' : location.hostname}
+        </span>
+      </button>
     </div>
 
     <div class="tabs-toggle">
@@ -2109,6 +2151,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                           Activar
                         </button>
                       {/if}
+                      <button onclick={() => abrirFormEditarProyecto(p)} class="vectorizacion-action-btn" title="Editar proyecto"><Icon name="editar" size={16} label="Editar" /></button>
                       <button
                         onclick={() => { proyectoActivoId = p.id; vinoDeCambiarProyecto = false; vectorizacionTab = 'contextos'; }}
                         class="vectorizacion-action-btn"
@@ -2116,7 +2159,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                       >
                         <Icon name="base-conocimiento" size={16} label="Bases de Conocimiento" />
                       </button>
-                      <button onclick={() => abrirFormEditarProyecto(p)} class="vectorizacion-action-btn" title="Editar proyecto"><Icon name="editar" size={16} label="Editar" /></button>
                       <button onclick={() => pedirConfirmacionBorrarProyecto(p)} class="vectorizacion-action-btn" title="Borrar proyecto"><Icon name="borrar" size={16} label="Borrar" /></button>
                     </div>
                   </div>
@@ -3107,6 +3149,36 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           </div>
         {/if}
 
+        {#if mostrarConfirmacionBorrarModelo && modeloABorrar}
+          <div class="modal-overlay">
+            <div class="modal-content">
+              <h3>⚠️ Borrar Modelo</h3>
+              <p>
+                ¿Borrar el modelo <strong>"{modeloABorrar}"</strong> del server? Esto ejecuta el equivalente a <code>ollama rm {modeloABorrar}</code>.
+              </p>
+              <p style="font-size: 0.85rem; color: rgba(255,255,255,0.75);">
+                Los asistentes que usen este modelo dejarán de funcionar hasta que reasignes otro. Esta acción es irreversible — para recuperarlo tendrás que volver a descargarlo con <code>ollama pull</code>.
+              </p>
+              <div class="modal-buttons">
+                <button
+                  onclick={() => { mostrarConfirmacionBorrarModelo = false; modeloABorrar = ''; }}
+                  disabled={cargandoBorrarModelo}
+                  class="modal-btn cancel"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onclick={borrarModeloConfirmado}
+                  disabled={cargandoBorrarModelo}
+                  class="modal-btn danger"
+                >
+                  {cargandoBorrarModelo ? '⟳ Borrando...' : 'Sí, borrar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        {/if}
+
       </div>
       <p class="disclaimer">Constructor de Asistentes</p>
       </main>
@@ -3162,15 +3234,31 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           {:else}
             <div class="modelos-grid">
               {#each modelosDisponibles as modelo (modelo)}
-                <button
+                <div
                   class="modelo-card"
                   class:active={modeloSeleccionado === modelo}
+                  role="button"
+                  tabindex="0"
                   onclick={() => { modeloSeleccionado = modelo; cargarInfoModelo(modelo); }}
+                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { modeloSeleccionado = modelo; cargarInfoModelo(modelo); } }}
                 >
                   <span class="modelo-nombre">{modelo}</span>
-                </button>
+                  <button
+                    class="modelo-borrar-btn"
+                    title={`Borrar el modelo "${modelo}" del server`}
+                    aria-label={`Borrar el modelo ${modelo}`}
+                    onclick={(e) => { e.stopPropagation(); modeloABorrar = modelo; mostrarConfirmacionBorrarModelo = true; mensajeBorrarModelo = ''; }}
+                  >
+                    <Icon name="borrar" size={14} />
+                  </button>
+                </div>
               {/each}
             </div>
+            {#if mensajeBorrarModelo}
+              <p class="mensaje-contexto" class:success={mensajeBorrarModelo.includes('✅')} style="margin-top: 0.75rem;">
+                {mensajeBorrarModelo}
+              </p>
+            {/if}
           {/if}
 
           {#if modeloSeleccionado && infoModeloSeleccionado}
@@ -3782,6 +3870,19 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     border-radius: 8px;
     cursor: default;
     user-select: none;
+  }
+
+  .ambiente-indicador--btn {
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s, border-color 0.15s, transform 0.1s;
+  }
+  .ambiente-indicador--btn:hover {
+    background: rgba(0, 0, 0, 0.4);
+    border-color: rgba(255, 255, 255, 0.32);
+  }
+  .ambiente-indicador--btn:active {
+    transform: scale(0.97);
   }
 
   .ambiente-indicador-label {
@@ -5206,6 +5307,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .modelo-card {
+    position: relative;
     padding: 1rem;
     background: rgba(0, 119, 255, 0.15);
     border: 2px solid rgba(0, 119, 255, 0.3);
@@ -5217,6 +5319,33 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     font-family: inherit;
     font-size: 0.9rem;
     font-weight: 600;
+  }
+
+  .modelo-borrar-btn {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    color: rgba(255, 255, 255, 0.7);
+    border-radius: 6px;
+    width: 26px;
+    height: 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s, background 0.15s, border-color 0.15s;
+  }
+  .modelo-card:hover .modelo-borrar-btn,
+  .modelo-card:focus-within .modelo-borrar-btn {
+    opacity: 1;
+  }
+  .modelo-borrar-btn:hover {
+    background: rgba(220, 50, 50, 0.55);
+    border-color: rgba(255, 150, 150, 0.6);
+    color: #fff;
   }
 
   .modelo-card:hover:not(:disabled) {
