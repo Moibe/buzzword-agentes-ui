@@ -67,7 +67,7 @@
 
   // Subir esta versión manualmente con cada despliegue para llevar control
   // visual de qué build está corriendo. Se muestra debajo del título del header.
-  const APP_VERSION = '0.5.0';
+  const APP_VERSION = '0.5.1';
 
   // Sin concepto de "ambiente". Las URLs se derivan del host donde corre la
   // app: el API siempre vive en el mismo host en :8077 y el host-asistentes
@@ -200,7 +200,15 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     typeof localStorage !== 'undefined' ? (localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) || '') : ''
   );
   let adminMensaje = $state('');
-  const isAdmin = $derived(!!adminToken);
+  // Toggle de "vista usuario": cuando es true, isAdmin se comporta como false
+  // sin borrar el token. Permite previsualizar la UI tal como la ven los no-admin
+  // sin tener que volver a pegar el query param. No persiste — cada recarga
+  // arranca con admin completo si hay token.
+  let vistaUsuario = $state(false);
+  // `tieneTokenAdmin` = hay token guardado (independiente del toggle).
+  // `isAdmin` = privilegios efectivos en este momento (respeta el toggle).
+  const tieneTokenAdmin = $derived(!!adminToken);
+  const isAdmin = $derived(!!adminToken && !vistaUsuario);
 
   function adminHeaders() {
     return adminToken ? { 'Authorization': `Bearer ${adminToken}` } : {};
@@ -208,10 +216,20 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   function cerrarSesionAdmin() {
     adminToken = '';
+    vistaUsuario = false;
     if (typeof localStorage !== 'undefined') localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
     if (activeTab === 'admin') activeTab = 'vectorizacion';
     adminMensaje = '🔒 Sesión admin cerrada';
     setTimeout(() => { adminMensaje = ''; }, 2500);
+  }
+
+  function entrarVistaUsuario() {
+    vistaUsuario = true;
+    if (activeTab === 'admin') activeTab = 'vectorizacion';
+  }
+
+  function salirVistaUsuario() {
+    vistaUsuario = false;
   }
 
   // Detección del param ?admin=<token> al cargar. Verifica contra el
@@ -2167,6 +2185,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 {#if adminMensaje}
   <div class="admin-toast">{adminMensaje}</div>
 {/if}
+  {#if vistaUsuario}
+    <div class="vista-usuario-banner" role="status" aria-live="polite">
+      <span>👁 <strong>Vista usuario</strong> — eres admin pero los controles privilegiados están ocultos. Así ve la UI alguien sin tu token.</span>
+      <button type="button" class="vista-usuario-banner__btn" onclick={salirVistaUsuario}>
+        ← Volver a admin
+      </button>
+    </div>
+  {/if}
   <!-- Header -->
   <header class="header">
     <div class="header-left">
@@ -2223,6 +2249,12 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           aria-pressed={activeTab === 'admin'}
           title="Administración"
         ><Icon name="admin" size={18} label="Administración" /></button>
+        <button
+          class="tab-btn vista-usuario-toggle"
+          onclick={entrarVistaUsuario}
+          title="Vista usuario — previsualiza la UI como la verían los no-admin (no cierra sesión)"
+          aria-label="Activar vista usuario"
+        >👁</button>
       {/if}
     </div>
   </header>
@@ -6448,6 +6480,54 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     border-radius: 999px;
     padding: 2px 3px;
     border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+
+  /* ── Vista usuario (preview no-admin) ─────────── */
+  .vista-usuario-banner {
+    background: linear-gradient(90deg, rgba(255, 180, 60, 0.92), rgba(255, 140, 40, 0.92));
+    color: #1a0a00;
+    padding: 0.55rem 1rem;
+    font-size: 0.88rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.2);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    z-index: 1000;
+  }
+  .vista-usuario-banner strong {
+    font-weight: 700;
+  }
+  .vista-usuario-banner__btn {
+    background: rgba(0, 0, 0, 0.7);
+    color: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.8);
+    border-radius: 6px;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s ease, transform 0.15s ease;
+  }
+  .vista-usuario-banner__btn:hover {
+    background: rgba(0, 0, 0, 0.9);
+    transform: translateY(-1px);
+  }
+  .vista-usuario-toggle {
+    font-size: 1.1rem;
+    padding: 0.5rem 0.65rem;
+    opacity: 0.55;
+    line-height: 1;
+    border-bottom: none !important;
+    bottom: 0;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+  }
+  .vista-usuario-toggle:hover:not(:disabled) {
+    opacity: 1;
+    transform: scale(1.1);
   }
 
   /* ── Admin toast ────────────────────── */
