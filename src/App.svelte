@@ -67,7 +67,7 @@
 
   // Subir esta versión manualmente con cada despliegue para llevar control
   // visual de qué build está corriendo. Se muestra debajo del título del header.
-  const APP_VERSION = '0.1.3';
+  const APP_VERSION = '0.1.4';
 
   // Sin concepto de "ambiente". Las URLs se derivan del host donde corre la
   // app: el API siempre vive en el mismo host en :8077 y el host-asistentes
@@ -192,6 +192,59 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let activeTab = $state('vectorizacion');
   let vectorizacionTab = $state('proyectos');
   let adminTab = $state('modelos');
+
+  // ─── Consumo (métricas de uso) ─────────────────────────────────
+  function fechaHaceDias(dias) {
+    const d = new Date();
+    d.setDate(d.getDate() - dias);
+    return d.toISOString().slice(0, 10); // yyyy-mm-dd
+  }
+  function fechaHoy() {
+    return new Date().toISOString().slice(0, 10);
+  }
+  let consumoDesde = $state(fechaHaceDias(30));
+  let consumoHasta = $state(fechaHoy());
+  let consumoData = $state(null);
+  let cargandoConsumo = $state(false);
+  let errorConsumo = $state('');
+
+  async function cargarConsumo() {
+    cargandoConsumo = true;
+    errorConsumo = '';
+    try {
+      const url = `${apiUrl.base}/consumo/resumen?desde=${encodeURIComponent(consumoDesde)}&hasta=${encodeURIComponent(consumoHasta)}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status}${txt ? ': ' + txt : ''}`);
+      }
+      consumoData = await res.json();
+    } catch (err) {
+      errorConsumo = err.message;
+      consumoData = null;
+    } finally {
+      cargandoConsumo = false;
+    }
+  }
+
+  function formatNumero(n) {
+    if (n == null) return '—';
+    return Number(n).toLocaleString('es-MX');
+  }
+  function formatMs(ms) {
+    if (ms == null) return '—';
+    if (ms >= 1000) return `${(ms / 1000).toFixed(2)}s`;
+    return `${Math.round(ms)}ms`;
+  }
+  function formatUsd(n) {
+    if (n == null) return '—';
+    return `$${Number(n).toFixed(2)} USD`;
+  }
+  function formatKb(kb) {
+    if (kb == null) return '—';
+    if (kb >= 1024) return `${(kb / 1024).toFixed(1)} MB`;
+    return `${Math.round(kb)} KB`;
+  }
   let defaultContextGuardado = $state(
     typeof localStorage !== 'undefined' ? (localStorage.getItem('mide_default_context') || '') : ''
   );
@@ -3219,6 +3272,13 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           >
             ⭐ DefaultContext
           </button>
+          <button
+            class="vectorizacion-subtab-btn"
+            class:active={adminTab === 'consumo'}
+            onclick={() => { adminTab = 'consumo'; if (!consumoData) cargarConsumo(); }}
+          >
+            📊 Consumo
+          </button>
         </div>
 
         <!-- Modelos -->
@@ -3480,6 +3540,153 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           <p style="color: rgba(255,255,255,0.5); font-size: 0.8rem; margin-top: 1rem;">
             💾 La selección se guarda en este navegador (localStorage).
           </p>
+        </div>
+        {/if}
+
+        <!-- Consumo -->
+        {#if adminTab === 'consumo'}
+        <div class="modelos-wrap">
+          <div class="seccion-header">
+            <h3>📊 Consumo</h3>
+            <button onclick={cargarConsumo} class="vectorizacion-action-btn" disabled={cargandoConsumo}>
+              ↻ Recargar
+            </button>
+          </div>
+
+          <!-- Filtro de fechas -->
+          <div style="display: flex; gap: 0.75rem; align-items: end; margin-bottom: 1.25rem; flex-wrap: wrap;">
+            <div class="lightbot-field" style="margin: 0;">
+              <label for="consumo-desde" style="display: block;">Desde</label>
+              <input
+                id="consumo-desde"
+                type="date"
+                bind:value={consumoDesde}
+                onchange={cargarConsumo}
+                disabled={cargandoConsumo}
+              />
+            </div>
+            <div class="lightbot-field" style="margin: 0;">
+              <label for="consumo-hasta" style="display: block;">Hasta</label>
+              <input
+                id="consumo-hasta"
+                type="date"
+                bind:value={consumoHasta}
+                onchange={cargarConsumo}
+                disabled={cargandoConsumo}
+              />
+            </div>
+            <div style="display: flex; gap: 0.4rem;">
+              <button class="vectorizacion-action-btn" onclick={() => { consumoDesde = fechaHaceDias(7); consumoHasta = fechaHoy(); cargarConsumo(); }} disabled={cargandoConsumo}>7 días</button>
+              <button class="vectorizacion-action-btn" onclick={() => { consumoDesde = fechaHaceDias(30); consumoHasta = fechaHoy(); cargarConsumo(); }} disabled={cargandoConsumo}>30 días</button>
+              <button class="vectorizacion-action-btn" onclick={() => { consumoDesde = fechaHaceDias(90); consumoHasta = fechaHoy(); cargarConsumo(); }} disabled={cargandoConsumo}>90 días</button>
+            </div>
+          </div>
+
+          {#if cargandoConsumo}
+            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando métricas...</p>
+          {:else if errorConsumo}
+            <p style="color: #fff; font-size: 0.9rem; padding: 1rem; background: rgba(200,40,40,0.85); border-radius: 8px; line-height: 1.5;">
+              ❌ {errorConsumo}
+            </p>
+          {:else if !consumoData}
+            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">Sin datos.</p>
+          {:else}
+            <!-- Stat cards: totales -->
+            <div class="consumo-grid">
+              <div class="consumo-card">
+                <span class="consumo-label">Llamadas /chatbot</span>
+                <span class="consumo-valor">{formatNumero(consumoData.llamadas_chatbot_total)}</span>
+              </div>
+              <div class="consumo-card">
+                <span class="consumo-label">Errores</span>
+                <span class="consumo-valor" class:consumo-valor--error={(consumoData.errores_total ?? 0) > 0}>{formatNumero(consumoData.errores_total)}</span>
+              </div>
+              <div class="consumo-card">
+                <span class="consumo-label">Latencia promedio</span>
+                <span class="consumo-valor">{formatMs(consumoData.latencia_promedio_ms)}</span>
+              </div>
+              <div class="consumo-card">
+                <span class="consumo-label">Costo OpenAI estimado</span>
+                <span class="consumo-valor">{formatUsd(consumoData.tokens_openai?.costo_usd_estimado)}</span>
+              </div>
+            </div>
+
+            <!-- Tokens OpenAI -->
+            {#if consumoData.tokens_openai}
+              <div class="consumo-seccion">
+                <h4>🪙 Tokens OpenAI</h4>
+                <div style="display: flex; gap: 1.25rem; flex-wrap: wrap; font-size: 0.9rem; color: rgba(255,255,255,0.85);">
+                  <div><strong>Input:</strong> {formatNumero(consumoData.tokens_openai.input)}</div>
+                  <div><strong>Output:</strong> {formatNumero(consumoData.tokens_openai.output)}</div>
+                  <div><strong>Total:</strong> {formatNumero((consumoData.tokens_openai.input ?? 0) + (consumoData.tokens_openai.output ?? 0))}</div>
+                  <div><strong>Costo:</strong> {formatUsd(consumoData.tokens_openai.costo_usd_estimado)}</div>
+                </div>
+                {#if consumoData.tokens_openai.por_modelo?.length > 0}
+                  <table class="consumo-tabla">
+                    <thead>
+                      <tr><th>Modelo</th><th>Input</th><th>Output</th><th>Costo</th></tr>
+                    </thead>
+                    <tbody>
+                      {#each consumoData.tokens_openai.por_modelo as m (m.modelo)}
+                        <tr>
+                          <td><code>{m.modelo}</code></td>
+                          <td>{formatNumero(m.input)}</td>
+                          <td>{formatNumero(m.output)}</td>
+                          <td>{formatUsd(m.costo_usd_estimado)}</td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                  </table>
+                {/if}
+              </div>
+            {/if}
+
+            <!-- Llamadas por asistente -->
+            {#if consumoData.llamadas_por_asistente?.length > 0}
+              {@const maxLlamadas = Math.max(...consumoData.llamadas_por_asistente.map(a => a.count || 0))}
+              <div class="consumo-seccion">
+                <h4>🎧 Llamadas por asistente</h4>
+                <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                  {#each consumoData.llamadas_por_asistente as a (a.slug)}
+                    <div class="consumo-bar-row">
+                      <div class="consumo-bar-label">
+                        <strong>{a.nombre || a.slug}</strong>
+                        <code style="font-size: 0.75rem; color: rgba(255,255,255,0.55);">{a.slug}</code>
+                      </div>
+                      <div class="consumo-bar-track">
+                        <div class="consumo-bar-fill" style="width: {maxLlamadas > 0 ? (a.count / maxLlamadas) * 100 : 0}%"></div>
+                      </div>
+                      <div class="consumo-bar-stats">
+                        <span>{formatNumero(a.count)} llamadas</span>
+                        {#if a.errores != null && a.errores > 0}
+                          <span style="color: #fca5a5;"> · {a.errores} err</span>
+                        {/if}
+                        {#if a.latencia_promedio_ms != null}
+                          <span style="color: rgba(255,255,255,0.55);"> · {formatMs(a.latencia_promedio_ms)} avg</span>
+                        {/if}
+                      </div>
+                    </div>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+
+            <!-- Documentos en BCs -->
+            {#if consumoData.documentos}
+              <div class="consumo-seccion">
+                <h4>📄 Documentos en Bases de Conocimiento</h4>
+                <div style="display: flex; gap: 1.25rem; flex-wrap: wrap; font-size: 0.9rem; color: rgba(255,255,255,0.85);">
+                  <div><strong>BCs:</strong> {formatNumero(consumoData.documentos.total_bcs)}</div>
+                  <div><strong>Documentos:</strong> {formatNumero(consumoData.documentos.total_documentos)}</div>
+                  <div><strong>Tamaño total:</strong> {formatKb(consumoData.documentos.tamano_total_kb)}</div>
+                </div>
+              </div>
+            {/if}
+
+            <p style="color: rgba(255,255,255,0.4); font-size: 0.75rem; margin-top: 1.25rem;">
+              Rango: {consumoData.rango?.desde ?? consumoDesde} → {consumoData.rango?.hasta ?? consumoHasta}
+            </p>
+          {/if}
         </div>
         {/if}
       </div>
@@ -5427,6 +5634,103 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   .modelo-nombre {
     display: block;
     word-break: break-word;
+  }
+
+  /* ── Consumo ────────────────────────── */
+  .consumo-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 0.85rem;
+    margin-bottom: 1.5rem;
+  }
+  .consumo-card {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    padding: 1rem 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  .consumo-label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: rgba(255, 255, 255, 0.55);
+    font-weight: 600;
+  }
+  .consumo-valor {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1.1;
+  }
+  .consumo-valor--error {
+    color: #fca5a5;
+  }
+  .consumo-seccion {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 1rem 1.2rem;
+    margin-top: 1rem;
+  }
+  .consumo-seccion h4 {
+    margin: 0 0 0.75rem;
+    color: rgba(255, 255, 255, 0.95);
+    font-size: 0.95rem;
+  }
+  .consumo-tabla {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 0.75rem;
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.85);
+  }
+  .consumo-tabla th {
+    text-align: left;
+    padding: 0.4rem 0.6rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: rgba(255, 255, 255, 0.55);
+  }
+  .consumo-tabla td {
+    padding: 0.4rem 0.6rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  .consumo-bar-row {
+    display: grid;
+    grid-template-columns: minmax(160px, 1.4fr) 1fr auto;
+    gap: 0.75rem;
+    align-items: center;
+    font-size: 0.85rem;
+  }
+  .consumo-bar-label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    color: rgba(255, 255, 255, 0.9);
+    min-width: 0;
+  }
+  .consumo-bar-label strong { font-size: 0.88rem; }
+  .consumo-bar-track {
+    height: 10px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .consumo-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #2563eb, #38bdf8);
+    border-radius: 999px;
+    transition: width 0.3s ease;
+  }
+  .consumo-bar-stats {
+    font-size: 0.78rem;
+    color: rgba(255, 255, 255, 0.85);
+    white-space: nowrap;
   }
 
   .modelo-detalle {
