@@ -27,6 +27,7 @@
     'miniadmin':            { emoji: '🗂️', iconify: 'ph:notebook-fill' },
     'look-and-feel':        { emoji: '🎨', iconify: 'ph:palette-fill' },
     'link':                 { emoji: '🔗', iconify: 'ph:link-fill' },
+    'activar':              { emoji: '⚡', iconify: 'ph:lightning-fill' },
     'contextlight':         { emoji: '🪶', iconify: 'ph:feather-fill' },
     'contextlight-embedder':{ emoji: '📦', iconify: 'ph:package-fill' },
 

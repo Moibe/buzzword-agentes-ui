@@ -67,7 +67,7 @@
 
   // Subir esta versión manualmente con cada despliegue para llevar control
   // visual de qué build está corriendo. Se muestra debajo del título del header.
-  const APP_VERSION = '0.1.4';
+  const APP_VERSION = '0.2.1';
 
   // Sin concepto de "ambiente". Las URLs se derivan del host donde corre la
   // app: el API siempre vive en el mismo host en :8077 y el host-asistentes
@@ -190,6 +190,63 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let isLoading = $state(false);
   let chatContainer = $state(null);
   let activeTab = $state('vectorizacion');
+
+  // ─── Admin gate ────────────────────────────────────────────
+  // Modo admin: visible solo si el usuario entró alguna vez con la URL
+  // mágica ?admin=<token>. El token se guarda en localStorage. Endpoints
+  // sensibles del backend validan el mismo token vía Authorization Bearer.
+  const ADMIN_TOKEN_STORAGE_KEY = 'bzz_admin_token';
+  let adminToken = $state(
+    typeof localStorage !== 'undefined' ? (localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) || '') : ''
+  );
+  let adminMensaje = $state('');
+  const isAdmin = $derived(!!adminToken);
+
+  function adminHeaders() {
+    return adminToken ? { 'Authorization': `Bearer ${adminToken}` } : {};
+  }
+
+  function cerrarSesionAdmin() {
+    adminToken = '';
+    if (typeof localStorage !== 'undefined') localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+    if (activeTab === 'admin') activeTab = 'vectorizacion';
+    adminMensaje = '🔒 Sesión admin cerrada';
+    setTimeout(() => { adminMensaje = ''; }, 2500);
+  }
+
+  // Detección del param ?admin=<token> al cargar. Verifica contra el
+  // backend antes de persistir para que un typo no quede pegado en
+  // localStorage.
+  async function procesarParamAdmin() {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const tokenParam = params.get('admin');
+    if (!tokenParam) return;
+    // Limpia la URL inmediatamente para no dejar el token a la vista.
+    params.delete('admin');
+    const cleanUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '') + window.location.hash;
+    window.history.replaceState({}, '', cleanUrl);
+    // Verifica contra el backend.
+    try {
+      const res = await fetch(`${apiUrl.base}/admin/verify`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${tokenParam}` },
+      });
+      if (res.ok) {
+        adminToken = tokenParam;
+        if (typeof localStorage !== 'undefined') localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, tokenParam);
+        adminMensaje = '🔓 Modo admin activado';
+        setTimeout(() => { adminMensaje = ''; }, 2500);
+      } else {
+        adminMensaje = '❌ Token admin inválido';
+        setTimeout(() => { adminMensaje = ''; }, 4000);
+      }
+    } catch (_) {
+      // Si la API no responde, no guardamos nada. El usuario reintenta.
+      adminMensaje = '❌ No se pudo verificar token admin (API offline)';
+      setTimeout(() => { adminMensaje = ''; }, 4000);
+    }
+  }
   let vectorizacionTab = $state('proyectos');
   let adminTab = $state('modelos');
 
@@ -307,16 +364,12 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let cargandoBorrarProyecto = $state(false);
 
   // Proyecto activo (filtra todo lo de abajo). Persiste cross-sesión.
-  let proyectoActivoId = $state(
-    typeof localStorage !== 'undefined' ? localStorage.getItem('bzz_proyecto_activo') || '' : ''
-  );
+  // Decisión de accesibilidad: ningún proyecto activo al arrancar. El usuario
+  // debe activar explícitamente con el botón ⚡ de la fila de proyecto. Se
+  // limpia cualquier residuo viejo de localStorage para no auto-activar.
+  if (typeof localStorage !== 'undefined') localStorage.removeItem('bzz_proyecto_activo');
+  let proyectoActivoId = $state('');
   const proyectoActivo = $derived(proyectos.find((p) => p.id === proyectoActivoId) ?? null);
-
-  $effect(() => {
-    if (typeof localStorage === 'undefined') return;
-    if (proyectoActivoId) localStorage.setItem('bzz_proyecto_activo', proyectoActivoId);
-    else localStorage.removeItem('bzz_proyecto_activo');
-  });
 
   function resetProyectoForm() {
     proyectoEditandoId = null;
@@ -350,12 +403,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       proyectos = await res.json();
       // Si el proyecto activo ya no existe en este ambiente, limpiar.
+      // (No auto-seleccionamos uno — el usuario debe activar manualmente
+      // con el botón ⚡ para forzar la decisión consciente.)
       if (proyectoActivoId && !proyectos.some((p) => p.id === proyectoActivoId)) {
         proyectoActivoId = '';
-      }
-      // Si no hay proyecto activo y existe al menos uno, auto-seleccionar el primero.
-      if (!proyectoActivoId && proyectos.length > 0) {
-        proyectoActivoId = proyectos[0].id;
       }
     } catch (err) {
       errorCargarProyectos = `No se pudieron cargar los proyectos: ${err.message}`;
@@ -397,7 +448,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
       const res = await fetch(url, {
         method: editando ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...adminHeaders() },
         body: JSON.stringify(body),
       });
 
@@ -440,6 +491,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     try {
       const res = await fetch(`${apiUrl.base}/proyectos/${encodeURIComponent(proyectoABorrar.id)}`, {
         method: 'DELETE',
+        headers: adminHeaders(),
       });
       if (!res.ok && res.status !== 204) {
         if (res.status === 409) {
@@ -610,6 +662,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     try {
       const res = await fetch(`${apiUrl.base}/borrarModelo?nombre=${encodeURIComponent(nombre)}`, {
         method: 'DELETE',
+        headers: adminHeaders(),
       });
       if (!res.ok) {
         const txt = await res.text().catch(() => '');
@@ -1051,6 +1104,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   onMount(() => {
     verificarSalud(); // incluye reprogramarTimer() al terminar
+    procesarParamAdmin();
     return () => clearInterval(timerVerificacion);
   });
 
@@ -1863,6 +1917,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 </script>
 
 <div class="app" class:vectorizacion={activeTab === 'vectorizacion'} class:admin={activeTab === 'admin'}>
+
+{#if adminMensaje}
+  <div class="admin-toast">{adminMensaje}</div>
+{/if}
   <!-- Header -->
   <header class="header">
     <div class="header-left">
@@ -1911,13 +1969,15 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         onclick={() => { activeTab = 'chat'; cargarAsistentes(); verificarSalud(); }}
         aria-pressed={activeTab === 'chat'}
       ><Icon name="chatbot" size={16} /> Chatbot</button>
-      <button
-        class="tab-btn admin-gear-btn"
-        class:active={activeTab === 'admin'}
-        onclick={() => { activeTab = 'admin'; cargarModelos(); cargarModelosEmbedding(); }}
-        aria-pressed={activeTab === 'admin'}
-        title="Administración"
-      ><Icon name="admin" size={18} label="Administración" /></button>
+      {#if isAdmin}
+        <button
+          class="tab-btn admin-gear-btn"
+          class:active={activeTab === 'admin'}
+          onclick={() => { activeTab = 'admin'; cargarModelos(); cargarModelosEmbedding(); }}
+          aria-pressed={activeTab === 'admin'}
+          title="Administración"
+        ><Icon name="admin" size={18} label="Administración" /></button>
+      {/if}
     </div>
   </header>
 
@@ -2122,6 +2182,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               >Cambiar de proyecto</button>
             </div>
           {/if}
+          {#if isAdmin}
           <div class="crear-contexto-wrap" class:abierto={proyectoFormAbierto}>
             <button class="crear-contexto-toggle" onclick={() => proyectoFormAbierto ? cerrarFormProyecto() : abrirFormCrearProyecto()}>
               <h3>
@@ -2198,6 +2259,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               </div>
             {/if}
           </div>
+          {/if}
 
           <div class="contextos-table-wrap">
             <div class="seccion-header">
@@ -2218,6 +2280,16 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 {#each proyectos as p (p.id)}
                   {@const esActivo = p.id === proyectoActivoId}
                   <div style="background: {esActivo ? 'rgba(34,197,94,0.18)' : 'rgba(0,0,0,0.2)'}; border: {esActivo ? '1px solid rgba(34,197,94,0.5)' : '1px solid transparent'}; border-radius: 8px; padding: 1rem; display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;">
+                    <button
+                      onclick={() => { if (!esActivo) { proyectoActivoId = p.id; vinoDeCambiarProyecto = false; } }}
+                      disabled={esActivo}
+                      class="proyecto-activar-btn"
+                      class:proyecto-activar-btn--activo={esActivo}
+                      title={esActivo ? 'Proyecto ya activo' : 'Activar este proyecto'}
+                      aria-label={esActivo ? `Proyecto ${p.nombre} ya activo` : `Activar proyecto ${p.nombre}`}
+                    >
+                      <Icon name="activar" size={20} />
+                    </button>
                     <div style="flex: 1; min-width: 0;">
                       <div style="display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap;">
                         {#if esActivo}
@@ -2235,12 +2307,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                       {/if}
                     </div>
                     <div style="display: flex; gap: 0.4rem; flex-shrink: 0; align-items: center;">
-                      {#if !esActivo}
-                        <button onclick={() => { proyectoActivoId = p.id; vinoDeCambiarProyecto = false; }} class="vectorizacion-action-btn" title="Activar este proyecto" style="background: rgba(34,197,94,0.25); border-color: rgba(34,197,94,0.5);">
-                          Activar
-                        </button>
+                      {#if isAdmin}
+                        <button onclick={() => abrirFormEditarProyecto(p)} class="vectorizacion-action-btn" title="Editar proyecto"><Icon name="editar" size={16} label="Editar" /></button>
                       {/if}
-                      <button onclick={() => abrirFormEditarProyecto(p)} class="vectorizacion-action-btn" title="Editar proyecto"><Icon name="editar" size={16} label="Editar" /></button>
                       <button
                         onclick={() => { proyectoActivoId = p.id; vinoDeCambiarProyecto = false; vectorizacionTab = 'contextos'; }}
                         class="vectorizacion-action-btn"
@@ -2248,7 +2317,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                       >
                         <Icon name="base-conocimiento" size={16} label="Bases de Conocimiento" />
                       </button>
-                      <button onclick={() => pedirConfirmacionBorrarProyecto(p)} class="vectorizacion-action-btn" title="Borrar proyecto"><Icon name="borrar" size={16} label="Borrar" /></button>
+                      {#if isAdmin}
+                        <button onclick={() => pedirConfirmacionBorrarProyecto(p)} class="vectorizacion-action-btn" title="Borrar proyecto"><Icon name="borrar" size={16} label="Borrar" /></button>
+                      {/if}
                     </div>
                   </div>
                 {/each}
@@ -3244,10 +3315,20 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   {/if}
 
   <!-- Administración section -->
-  {#if activeTab === 'admin'}
+  {#if activeTab === 'admin' && isAdmin}
     <main class="vectorizacion-body">
       <div class="vectorizacion-container">
-        <h2 style="color: white; margin-bottom: 1.5rem;">👤 Administración</h2>
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+          <h2 style="color: white; margin: 0;">👤 Administración</h2>
+          <button
+            onclick={cerrarSesionAdmin}
+            class="vectorizacion-action-btn"
+            title="Borra el token del navegador. Para volver a entrar usa la URL ?admin=<token>"
+            style="background: rgba(220, 80, 80, 0.2); border-color: rgba(255, 150, 150, 0.4); color: #fff;"
+          >
+            🔒 Cerrar sesión admin
+          </button>
+        </div>
 
         <!-- Sub-tab bar -->
         <div class="vectorizacion-subtabs">
@@ -5634,6 +5715,62 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   .modelo-nombre {
     display: block;
     word-break: break-word;
+  }
+
+  /* ── Activar proyecto (rayito a la izquierda de cada fila) ── */
+  .proyecto-activar-btn {
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 200, 60, 0.35);
+    background: rgba(255, 200, 60, 0.12);
+    color: #fcd34d;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, border-color 0.15s, transform 0.1s, color 0.15s;
+  }
+  .proyecto-activar-btn:hover:not(:disabled) {
+    background: rgba(255, 200, 60, 0.28);
+    border-color: rgba(255, 200, 60, 0.7);
+    color: #fef08a;
+    transform: scale(1.05);
+  }
+  .proyecto-activar-btn:active:not(:disabled) {
+    transform: scale(0.96);
+  }
+  .proyecto-activar-btn--activo {
+    background: rgba(34, 197, 94, 0.35);
+    border-color: rgba(34, 197, 94, 0.65);
+    color: #fff;
+    cursor: default;
+    box-shadow: 0 0 14px rgba(34, 197, 94, 0.4);
+  }
+  .proyecto-activar-btn--activo:hover {
+    transform: none;
+  }
+
+  /* ── Admin toast ────────────────────── */
+  .admin-toast {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    background: rgba(20, 20, 30, 0.92);
+    color: #fff;
+    padding: 0.6rem 1rem;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    font-size: 0.85rem;
+    font-weight: 500;
+    z-index: 10000;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    animation: slideInRight 0.25s ease;
+  }
+  @keyframes slideInRight {
+    from { opacity: 0; transform: translateX(20px); }
+    to { opacity: 1; transform: translateX(0); }
   }
 
   /* ── Consumo ────────────────────────── */
