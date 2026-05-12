@@ -67,7 +67,7 @@
 
   // Subir esta versión manualmente con cada despliegue para llevar control
   // visual de qué build está corriendo. Se muestra debajo del título del header.
-  const APP_VERSION = '0.2.1';
+  const APP_VERSION = '0.3.0';
 
   // Sin concepto de "ambiente". Las URLs se derivan del host donde corre la
   // app: el API siempre vive en el mismo host en :8077 y el host-asistentes
@@ -357,6 +357,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let proyectoFormSlug = $state('');
   let proyectoFormNombre = $state('');
   let proyectoFormDescripcion = $state('');
+  let proyectoFormPassword = $state('');
+  let proyectoFormPasswordVisible = $state(false);
   let cargandoGuardarProyecto = $state(false);
   let mensajeProyecto = $state('');
   let proyectoABorrar = $state(null);
@@ -371,11 +373,158 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let proyectoActivoId = $state('');
   const proyectoActivo = $derived(proyectos.find((p) => p.id === proyectoActivoId) ?? null);
 
+  // ─── Activación con password ──────────────────────────────────────
+  // Cada proyecto puede tener su propio password (gestionado por admin).
+  // Al hacer click en ⚡:
+  //   - Admin (con token) → activa sin password.
+  //   - Proyecto sin password → activa directo.
+  //   - Proyecto con password ya desbloqueado en esta sesión → activa.
+  //   - Proyecto con password no desbloqueado → modal pide password.
+  let proyectoParaDesbloquear = $state(null); // {id, nombre, slug} mientras el modal está abierto
+  let passwordIntento = $state('');
+  let cargandoVerificarPassword = $state(false);
+  let errorPasswordProyecto = $state('');
+
+  function proyectoUnlockKey(id) { return `bzz_proyecto_unlock_${id}`; }
+
+  function proyectoYaDesbloqueado(id) {
+    if (typeof sessionStorage === 'undefined') return false;
+    return sessionStorage.getItem(proyectoUnlockKey(id)) === '1';
+  }
+
+  function marcarProyectoDesbloqueado(id) {
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem(proyectoUnlockKey(id), '1');
+    }
+  }
+
+  function activarProyectoPorClick(p) {
+    if (p.id === proyectoActivoId) return; // ya activo
+    // Admin bypass total.
+    if (isAdmin) {
+      proyectoActivoId = p.id;
+      vinoDeCambiarProyecto = false;
+      return;
+    }
+    // Sin password → activa directo.
+    if (!p.requires_password) {
+      proyectoActivoId = p.id;
+      vinoDeCambiarProyecto = false;
+      return;
+    }
+    // Ya desbloqueado en esta sesión → activa.
+    if (proyectoYaDesbloqueado(p.id)) {
+      proyectoActivoId = p.id;
+      vinoDeCambiarProyecto = false;
+      return;
+    }
+    // Pedir password.
+    proyectoParaDesbloquear = { id: p.id, nombre: p.nombre, slug: p.slug };
+    passwordIntento = '';
+    errorPasswordProyecto = '';
+  }
+
+  function cerrarPromptPassword() {
+    proyectoParaDesbloquear = null;
+    passwordIntento = '';
+    errorPasswordProyecto = '';
+  }
+
+  async function verificarPasswordProyecto() {
+    if (!proyectoParaDesbloquear) return;
+    const intento = passwordIntento;
+    if (!intento) {
+      errorPasswordProyecto = 'Tipea un password.';
+      return;
+    }
+    cargandoVerificarPassword = true;
+    errorPasswordProyecto = '';
+    try {
+      const res = await fetch(`${apiUrl.base}/proyectos/${encodeURIComponent(proyectoParaDesbloquear.id)}/verificar-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: intento }),
+      });
+      if (res.status === 401) {
+        errorPasswordProyecto = '❌ Password incorrecto';
+        return;
+      }
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status}${txt ? ': ' + txt : ''}`);
+      }
+      // OK
+      marcarProyectoDesbloqueado(proyectoParaDesbloquear.id);
+      proyectoActivoId = proyectoParaDesbloquear.id;
+      vinoDeCambiarProyecto = false;
+      cerrarPromptPassword();
+    } catch (err) {
+      errorPasswordProyecto = `❌ ${err.message}`;
+    } finally {
+      cargandoVerificarPassword = false;
+    }
+  }
+
+  // ─── Admin: gestión centralizada de passwords por proyecto ────────
+  // Edición inline desde el subtab "🔑 Accesos" del engrane. Cada fila
+  // mantiene su propio borrador y mensaje.
+  let accesosBorrador = $state({}); // { [proyectoId]: 'password tipeado' }
+  let accesosVisible = $state({});  // { [proyectoId]: bool } — toggle mostrar/ocultar
+  let accesosMensaje = $state({});  // { [proyectoId]: '✅ Guardado' | '❌ Error...' }
+  let accesosCargando = $state({}); // { [proyectoId]: bool }
+
+  async function patchPasswordProyecto(p, payload) {
+    // payload es { password: 'x' } o { password: null } (quitar) — ya
+    // pre-formateado por el caller.
+    accesosCargando[p.id] = true;
+    accesosMensaje[p.id] = '';
+    try {
+      const res = await fetch(`${apiUrl.base}/proyectos/${encodeURIComponent(p.id)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...adminHeaders() },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status}${txt ? ': ' + txt : ''}`);
+      }
+      accesosMensaje[p.id] = payload.password === null ? '✅ Password removido' : '✅ Password actualizado';
+      accesosBorrador[p.id] = '';
+      accesosVisible[p.id] = false;
+      // Refresca para actualizar `requires_password`.
+      await cargarProyectos();
+      const msgSnap = accesosMensaje[p.id];
+      setTimeout(() => {
+        if (accesosMensaje[p.id] === msgSnap) accesosMensaje[p.id] = '';
+      }, 2500);
+    } catch (err) {
+      accesosMensaje[p.id] = `❌ ${err.message}`;
+    } finally {
+      accesosCargando[p.id] = false;
+    }
+  }
+
+  function guardarPasswordAcceso(p) {
+    const valor = (accesosBorrador[p.id] ?? '').trim();
+    if (!valor) {
+      accesosMensaje[p.id] = '⚠️ Tipea un password antes de guardar';
+      setTimeout(() => { if (accesosMensaje[p.id]?.includes('Tipea')) accesosMensaje[p.id] = ''; }, 2500);
+      return;
+    }
+    patchPasswordProyecto(p, { password: valor });
+  }
+
+  function quitarPasswordAcceso(p) {
+    patchPasswordProyecto(p, { password: null });
+  }
+
   function resetProyectoForm() {
     proyectoEditandoId = null;
     proyectoFormSlug = '';
     proyectoFormNombre = '';
     proyectoFormDescripcion = '';
+    proyectoFormPassword = '';
+    proyectoFormPasswordVisible = false;
     mensajeProyecto = '';
   }
   function abrirFormCrearProyecto() {
@@ -387,6 +536,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     proyectoFormSlug = p.slug;
     proyectoFormNombre = p.nombre;
     proyectoFormDescripcion = p.descripcion ?? '';
+    // Al editar, NO precargamos el password (la API no lo devuelve por
+    // seguridad). Si el usuario deja vacío = mantener el password actual.
+    // Si tipea algo nuevo = reemplazar.
+    proyectoFormPassword = '';
+    proyectoFormPasswordVisible = false;
     mensajeProyecto = '';
     proyectoFormAbierto = true;
   }
@@ -442,9 +596,13 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       const url = editando
         ? `${apiUrl.base}/proyectos/${encodeURIComponent(proyectoEditandoId)}`
         : `${apiUrl.base}/proyectos`;
+      // Password: en CREATE, vacío = sin password; en EDIT, vacío = no tocar el
+      // password existente (no se manda en el body). Solo se manda si el usuario
+      // tipea algo.
+      const passwordInput = proyectoFormPassword.trim();
       const body = editando
-        ? { nombre, descripcion }
-        : { slug, nombre, descripcion };
+        ? (passwordInput ? { nombre, descripcion, password: passwordInput } : { nombre, descripcion })
+        : { slug, nombre, descripcion, password: passwordInput || null };
 
       const res = await fetch(url, {
         method: editando ? 'PUT' : 'POST',
@@ -2234,6 +2392,39 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     placeholder="Para qué sirve este proyecto, qué agrupa..."
                   ></textarea>
                 </div>
+                <div class="form-field">
+                  <label for="proyecto-password" style="display: inline-flex; align-items: center; gap: 0.35rem;">
+                    Password de activación (opcional)
+                    <span
+                      title="Si lo seteas, los usuarios no-admin necesitarán este password para activar el proyecto con ⚡. Déjalo vacío al editar para mantener el password actual sin cambios."
+                      style="display: inline-flex; cursor: help; opacity: 0.65;"
+                      aria-label="Info sobre password de activación"
+                    >
+                      <Icon name="info" size={14} />
+                    </span>
+                  </label>
+                  <div style="display: flex; gap: 0.4rem;">
+                    <input
+                      id="proyecto-password"
+                      type={proyectoFormPasswordVisible ? 'text' : 'password'}
+                      bind:value={proyectoFormPassword}
+                      disabled={cargandoGuardarProyecto}
+                      maxlength="80"
+                      class="contexto-input"
+                      style="flex: 1;"
+                      placeholder={proyectoEditandoId ? 'Vacío = mantener actual; escribe algo nuevo para cambiarlo' : 'Vacío = sin password (cualquiera activa)'}
+                    />
+                    <button
+                      type="button"
+                      onclick={() => proyectoFormPasswordVisible = !proyectoFormPasswordVisible}
+                      class="vectorizacion-action-btn"
+                      title={proyectoFormPasswordVisible ? 'Ocultar' : 'Mostrar'}
+                      style="flex-shrink: 0;"
+                    >
+                      {proyectoFormPasswordVisible ? '🙈' : '👁'}
+                    </button>
+                  </div>
+                </div>
                 <div style="display: flex; gap: 0.5rem;">
                   <button
                     onclick={guardarProyecto}
@@ -2281,14 +2472,18 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   {@const esActivo = p.id === proyectoActivoId}
                   <div style="background: {esActivo ? 'rgba(34,197,94,0.18)' : 'rgba(0,0,0,0.2)'}; border: {esActivo ? '1px solid rgba(34,197,94,0.5)' : '1px solid transparent'}; border-radius: 8px; padding: 1rem; display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;">
                     <button
-                      onclick={() => { if (!esActivo) { proyectoActivoId = p.id; vinoDeCambiarProyecto = false; } }}
+                      onclick={() => activarProyectoPorClick(p)}
                       disabled={esActivo}
                       class="proyecto-activar-btn"
                       class:proyecto-activar-btn--activo={esActivo}
-                      title={esActivo ? 'Proyecto ya activo' : 'Activar este proyecto'}
+                      class:proyecto-activar-btn--locked={p.requires_password && !isAdmin && !proyectoYaDesbloqueado(p.id) && !esActivo}
+                      title={esActivo ? 'Proyecto ya activo' : (p.requires_password && !isAdmin && !proyectoYaDesbloqueado(p.id) ? `Activar (requiere password) — ${p.nombre}` : `Activar ${p.nombre}`)}
                       aria-label={esActivo ? `Proyecto ${p.nombre} ya activo` : `Activar proyecto ${p.nombre}`}
                     >
                       <Icon name="activar" size={20} />
+                      {#if p.requires_password && !isAdmin && !proyectoYaDesbloqueado(p.id) && !esActivo}
+                        <span class="proyecto-activar-lock" aria-hidden="true">🔒</span>
+                      {/if}
                     </button>
                     <div style="flex: 1; min-width: 0;">
                       <div style="display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap;">
@@ -2952,7 +3147,13 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   <div class="documentos-table">
                     {#each vectorizacionDocumentos as doc (doc)}
                       <div class="documento-row">
-                        <span class="documento-nombre">📋 {doc}</span>
+                        <a
+                          class="documento-nombre documento-nombre--link"
+                          href={`${apiUrl.base}/obtenerDocumento?contexto=${encodeURIComponent(contextoSeleccionadoParaDocumentos)}&filename=${encodeURIComponent(doc)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={`Abrir "${doc}" en una nueva pestaña`}
+                        >📋 {doc}</a>
                         <button
                           class="documento-borrar-btn"
                           title="Borrar documento"
@@ -3314,6 +3515,56 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       </main>
   {/if}
 
+  <!-- Modal: pedir password para activar proyecto -->
+  {#if proyectoParaDesbloquear}
+    <div class="modal-overlay" onclick={cerrarPromptPassword} role="presentation">
+      <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 440px;">
+        <h3>🔒 Activar proyecto</h3>
+        <p>
+          Para activar <strong>{proyectoParaDesbloquear.nombre}</strong> (<code>{proyectoParaDesbloquear.slug}</code>) necesitas su password.
+        </p>
+        <form
+          onsubmit={(e) => { e.preventDefault(); verificarPasswordProyecto(); }}
+          style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.75rem;"
+        >
+          <input
+            type="password"
+            bind:value={passwordIntento}
+            disabled={cargandoVerificarPassword}
+            placeholder="Password del proyecto"
+            class="contexto-input"
+            autocomplete="off"
+            autofocus
+          />
+          {#if errorPasswordProyecto}
+            <p style="font-size: 0.85rem; color: #fca5a5; margin: 0;">{errorPasswordProyecto}</p>
+          {/if}
+          <p style="font-size: 0.75rem; color: rgba(255,255,255,0.55); margin: 0;">
+            Si lo tipeas bien, queda desbloqueado en este navegador hasta que cierres la pestaña.
+          </p>
+          <div class="modal-buttons" style="margin-top: 0.25rem;">
+            <button
+              type="button"
+              onclick={cerrarPromptPassword}
+              disabled={cargandoVerificarPassword}
+              class="modal-btn cancel"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={cargandoVerificarPassword}
+              class="modal-btn danger"
+              style="background: rgba(34,197,94,0.75); border-color: rgba(34,197,94,0.85);"
+            >
+              {cargandoVerificarPassword ? '⟳ Verificando...' : '⚡ Activar'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  {/if}
+
   <!-- Administración section -->
   {#if activeTab === 'admin' && isAdmin}
     <main class="vectorizacion-body">
@@ -3359,6 +3610,20 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             onclick={() => { adminTab = 'consumo'; if (!consumoData) cargarConsumo(); }}
           >
             📊 Consumo
+          </button>
+          <button
+            class="vectorizacion-subtab-btn"
+            class:active={adminTab === 'accesos'}
+            onclick={() => { adminTab = 'accesos'; cargarProyectos(); }}
+          >
+            🔑 Accesos
+          </button>
+          <button
+            class="vectorizacion-subtab-btn"
+            class:active={adminTab === 'registros'}
+            onclick={() => { adminTab = 'registros'; }}
+          >
+            📝 Registros
           </button>
         </div>
 
@@ -3644,6 +3909,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 bind:value={consumoDesde}
                 onchange={cargarConsumo}
                 disabled={cargandoConsumo}
+                style="font-size: 1rem; padding: 0.6rem 0.85rem; min-width: 180px;"
               />
             </div>
             <div class="lightbot-field" style="margin: 0;">
@@ -3654,6 +3920,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 bind:value={consumoHasta}
                 onchange={cargarConsumo}
                 disabled={cargandoConsumo}
+                style="font-size: 1rem; padding: 0.6rem 0.85rem; min-width: 180px;"
               />
             </div>
             <div style="display: flex; gap: 0.4rem;">
@@ -5435,6 +5702,16 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     flex: 1;
   }
 
+  .documento-nombre--link {
+    text-decoration: none;
+    cursor: pointer;
+    transition: color 0.15s;
+  }
+  .documento-nombre--link:hover {
+    color: #93c5fd;
+    text-decoration: underline;
+  }
+
   .documento-borrar-btn {
     background: none;
     border: none;
@@ -5750,6 +6027,25 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
   .proyecto-activar-btn--activo:hover {
     transform: none;
+  }
+  .proyecto-activar-btn {
+    position: relative;
+  }
+  .proyecto-activar-btn--locked {
+    border-color: rgba(180, 180, 180, 0.45);
+    background: rgba(120, 120, 120, 0.18);
+    color: rgba(255, 255, 255, 0.7);
+  }
+  .proyecto-activar-lock {
+    position: absolute;
+    bottom: -3px;
+    right: -3px;
+    font-size: 0.7rem;
+    line-height: 1;
+    background: rgba(0, 0, 0, 0.75);
+    border-radius: 999px;
+    padding: 2px 3px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
   }
 
   /* ── Admin toast ────────────────────── */
