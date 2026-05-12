@@ -67,7 +67,7 @@
 
   // Subir esta versión manualmente con cada despliegue para llevar control
   // visual de qué build está corriendo. Se muestra debajo del título del header.
-  const APP_VERSION = '0.3.0';
+  const APP_VERSION = '0.5.0';
 
   // Sin concepto de "ambiente". Las URLs se derivan del host donde corre la
   // app: el API siempre vive en el mismo host en :8077 y el host-asistentes
@@ -301,6 +301,94 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     if (kb == null) return '—';
     if (kb >= 1024) return `${(kb / 1024).toFixed(1)} MB`;
     return `${Math.round(kb)} KB`;
+  }
+
+  // === Registros ===
+  // Bitácora de interacciones /chatbot. Consume GET /registros con filtros y
+  // paginación. El "user" del sistema es el proyecto (quien tiene su password).
+  let registrosDesde = $state(fechaHaceDias(7));
+  let registrosHasta = $state(fechaHoy());
+  let registrosProyectoFiltro = $state('');
+  let registrosAsistenteFiltro = $state('');
+  let registrosSoloErrores = $state(false);
+  let registrosLimit = $state(50);
+  let registrosOffset = $state(0);
+  let registrosData = $state(null); // { items, total, limit, offset, rango }
+  let cargandoRegistros = $state(false);
+  let errorRegistros = $state('');
+  let registroExpandidoId = $state(null);
+
+  async function cargarRegistros() {
+    cargandoRegistros = true;
+    errorRegistros = '';
+    try {
+      const params = new URLSearchParams({
+        desde: registrosDesde,
+        hasta: registrosHasta,
+        limit: String(registrosLimit),
+        offset: String(registrosOffset),
+      });
+      if (registrosProyectoFiltro) params.set('proyecto', registrosProyectoFiltro);
+      if (registrosAsistenteFiltro) params.set('asistente', registrosAsistenteFiltro);
+      if (registrosSoloErrores) params.set('solo_errores', 'true');
+      const res = await fetch(`${apiUrl.base}/registros?${params.toString()}`, {
+        headers: adminHeaders(),
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status}${txt ? ': ' + txt : ''}`);
+      }
+      registrosData = await res.json();
+    } catch (err) {
+      errorRegistros = err.message;
+      registrosData = null;
+    } finally {
+      cargandoRegistros = false;
+    }
+  }
+
+  function aplicarFiltrosRegistros() {
+    registrosOffset = 0;
+    registroExpandidoId = null;
+    cargarRegistros();
+  }
+
+  function paginaSiguienteRegistros() {
+    if (!registrosData) return;
+    const nuevo = registrosOffset + registrosLimit;
+    if (nuevo >= (registrosData.total ?? 0)) return;
+    registrosOffset = nuevo;
+    registroExpandidoId = null;
+    cargarRegistros();
+  }
+
+  function paginaAnteriorRegistros() {
+    const nuevo = Math.max(0, registrosOffset - registrosLimit);
+    if (nuevo === registrosOffset) return;
+    registrosOffset = nuevo;
+    registroExpandidoId = null;
+    cargarRegistros();
+  }
+
+  function formatTimestamp(ts) {
+    if (!ts) return '—';
+    try {
+      const d = new Date(ts);
+      if (isNaN(d.getTime())) return ts;
+      return d.toLocaleString('es-MX', {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hour12: false,
+      });
+    } catch {
+      return ts;
+    }
+  }
+
+  function truncar(texto, max = 80) {
+    if (!texto) return '—';
+    if (texto.length <= max) return texto;
+    return texto.slice(0, max) + '…';
   }
   let defaultContextGuardado = $state(
     typeof localStorage !== 'undefined' ? (localStorage.getItem('mide_default_context') || '') : ''
@@ -3621,7 +3709,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           <button
             class="vectorizacion-subtab-btn"
             class:active={adminTab === 'registros'}
-            onclick={() => { adminTab = 'registros'; }}
+            onclick={() => { adminTab = 'registros'; if (!registrosData) cargarRegistros(); if (proyectos.length === 0) cargarProyectos(); }}
           >
             📝 Registros
           </button>
@@ -4033,6 +4121,320 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
             <p style="color: rgba(255,255,255,0.4); font-size: 0.75rem; margin-top: 1.25rem;">
               Rango: {consumoData.rango?.desde ?? consumoDesde} → {consumoData.rango?.hasta ?? consumoHasta}
+            </p>
+          {/if}
+        </div>
+        {/if}
+
+        <!-- Accesos -->
+        {#if adminTab === 'accesos'}
+        <div class="modelos-wrap">
+          <div class="seccion-header">
+            <h3>🔑 Accesos</h3>
+            <button onclick={cargarProyectos} class="vectorizacion-action-btn" disabled={cargandoProyectos}>
+              ↻ Recargar
+            </button>
+          </div>
+
+          <p style="color: rgba(255,255,255,0.7); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
+            Administra los passwords de activación de cada proyecto. Tú (admin) puedes activar cualquier proyecto sin password; los demás usuarios deberán tipear el password cuando hagan clic en el ⚡ del proyecto.
+          </p>
+
+          {#if cargandoProyectos}
+            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando proyectos...</p>
+          {:else if proyectos.length === 0}
+            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">No hay proyectos creados todavía.</p>
+          {:else}
+            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+              {#each proyectos as p (p.id)}
+                {@const tienePass = p.requires_password === true}
+                {@const visible = !!accesosVisible[p.id]}
+                {@const cargando = !!accesosCargando[p.id]}
+                {@const mensaje = accesosMensaje[p.id] || ''}
+                <div style="background: rgba(0,0,0,0.25); border-radius: 8px; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem;">
+                  <!-- Encabezado de la fila -->
+                  <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+                    <strong style="color: #fff; font-size: 1rem;">{p.nombre}</strong>
+                    <code style="background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; color: rgba(255,255,255,0.75);">{p.slug}</code>
+                    {#if tienePass}
+                      <span style="display: inline-flex; align-items: center; gap: 0.3rem; color: #4ade80; font-size: 0.8rem; font-weight: 600;">
+                        🔒 Con password
+                      </span>
+                    {:else}
+                      <span style="display: inline-flex; align-items: center; gap: 0.3rem; color: rgba(255,255,255,0.55); font-size: 0.8rem;">
+                        🔓 Sin password (abierto)
+                      </span>
+                    {/if}
+                  </div>
+
+                  <!-- Zona de acción -->
+                  {#if !visible}
+                    <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+                      <button
+                        onclick={() => { accesosVisible[p.id] = true; if (accesosBorrador[p.id] == null) accesosBorrador[p.id] = ''; accesosMensaje[p.id] = ''; }}
+                        class="vectorizacion-action-btn"
+                        disabled={cargando}
+                      >
+                        {tienePass ? '✏️ Cambiar password' : '➕ Agregar password'}
+                      </button>
+                      {#if tienePass}
+                        <button
+                          onclick={() => quitarPasswordAcceso(p)}
+                          class="vectorizacion-action-btn"
+                          disabled={cargando}
+                          style="background: rgba(200,40,40,0.55); border-color: rgba(200,40,40,0.7);"
+                          title="Eliminar el password (el proyecto quedará abierto a cualquier usuario)"
+                        >
+                          🗑️ Quitar password
+                        </button>
+                      {/if}
+                    </div>
+                  {:else}
+                    <form
+                      onsubmit={(e) => { e.preventDefault(); guardarPasswordAcceso(p); }}
+                      style="display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center;"
+                    >
+                      <input
+                        type="text"
+                        bind:value={accesosBorrador[p.id]}
+                        placeholder={tienePass ? 'Nuevo password (reemplaza el actual)' : 'Password de activación'}
+                        disabled={cargando}
+                        style="flex: 1; min-width: 220px; padding: 0.55rem 0.75rem; font-size: 0.95rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.3); color: #fff;"
+                      />
+                      <button
+                        type="submit"
+                        class="crear-contexto-btn"
+                        disabled={cargando}
+                        style="padding: 0.55rem 0.95rem;"
+                      >
+                        {cargando ? '⟳ Guardando...' : '💾 Guardar'}
+                      </button>
+                      <button
+                        type="button"
+                        onclick={() => { accesosVisible[p.id] = false; accesosBorrador[p.id] = ''; accesosMensaje[p.id] = ''; }}
+                        class="vectorizacion-action-btn"
+                        disabled={cargando}
+                      >
+                        Cancelar
+                      </button>
+                    </form>
+                  {/if}
+
+                  <!-- Mensaje de feedback -->
+                  {#if mensaje}
+                    <p style="margin: 0; font-size: 0.85rem; color: {mensaje.startsWith('❌') ? '#fca5a5' : (mensaje.startsWith('⚠️') ? '#fde68a' : '#4ade80')};">
+                      {mensaje}
+                    </p>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+
+            <p style="color: rgba(255,255,255,0.45); font-size: 0.75rem; margin-top: 1rem; line-height: 1.4;">
+              💡 El password se almacena en el servidor por proyecto. Quitar el password deja el proyecto abierto — cualquier usuario podrá activarlo con ⚡ sin prompt.
+            </p>
+          {/if}
+        </div>
+        {/if}
+
+        <!-- Registros -->
+        {#if adminTab === 'registros'}
+        <div class="modelos-wrap">
+          <div class="seccion-header">
+            <h3>📝 Registros</h3>
+            <button onclick={cargarRegistros} class="vectorizacion-action-btn" disabled={cargandoRegistros}>
+              ↻ Recargar
+            </button>
+          </div>
+
+          <p style="color: rgba(255,255,255,0.7); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
+            Bitácora de interacciones con los asistentes. La identidad del usuario es el proyecto (quien tiene su password).
+          </p>
+
+          <!-- Filtros -->
+          <div style="display: flex; gap: 0.75rem; align-items: end; margin-bottom: 1.25rem; flex-wrap: wrap;">
+            <div class="lightbot-field" style="margin: 0;">
+              <label for="registros-desde" style="display: block;">Desde</label>
+              <input
+                id="registros-desde"
+                type="date"
+                bind:value={registrosDesde}
+                onchange={aplicarFiltrosRegistros}
+                disabled={cargandoRegistros}
+                style="font-size: 1rem; padding: 0.6rem 0.85rem; min-width: 180px;"
+              />
+            </div>
+            <div class="lightbot-field" style="margin: 0;">
+              <label for="registros-hasta" style="display: block;">Hasta</label>
+              <input
+                id="registros-hasta"
+                type="date"
+                bind:value={registrosHasta}
+                onchange={aplicarFiltrosRegistros}
+                disabled={cargandoRegistros}
+                style="font-size: 1rem; padding: 0.6rem 0.85rem; min-width: 180px;"
+              />
+            </div>
+            <div class="lightbot-field" style="margin: 0;">
+              <label for="registros-proyecto" style="display: block;">Proyecto</label>
+              <select
+                id="registros-proyecto"
+                bind:value={registrosProyectoFiltro}
+                onchange={aplicarFiltrosRegistros}
+                disabled={cargandoRegistros}
+                class="contexto-select"
+                style="padding: 0.55rem 0.75rem; min-width: 200px;"
+              >
+                <option value="">(todos)</option>
+                {#each proyectos as p (p.id)}
+                  <option value={p.slug}>{p.nombre}</option>
+                {/each}
+              </select>
+            </div>
+            <div class="lightbot-field" style="margin: 0;">
+              <label for="registros-asistente" style="display: block;">Asistente (slug)</label>
+              <input
+                id="registros-asistente"
+                type="text"
+                bind:value={registrosAsistenteFiltro}
+                onkeydown={(e) => { if (e.key === 'Enter') aplicarFiltrosRegistros(); }}
+                onblur={aplicarFiltrosRegistros}
+                disabled={cargandoRegistros}
+                placeholder="(todos)"
+                style="padding: 0.55rem 0.75rem; min-width: 180px; font-size: 0.95rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.3); color: #fff;"
+              />
+            </div>
+            <label style="display: flex; align-items: center; gap: 0.4rem; color: rgba(255,255,255,0.85); font-size: 0.88rem; cursor: pointer; padding: 0.55rem 0;">
+              <input
+                type="checkbox"
+                bind:checked={registrosSoloErrores}
+                onchange={aplicarFiltrosRegistros}
+                disabled={cargandoRegistros}
+                style="width: 16px; height: 16px; cursor: pointer;"
+              />
+              Solo errores
+            </label>
+          </div>
+
+          {#if cargandoRegistros}
+            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando registros...</p>
+          {:else if errorRegistros}
+            <p style="color: #fff; font-size: 0.9rem; padding: 1rem; background: rgba(200,40,40,0.85); border-radius: 8px; line-height: 1.5;">
+              ❌ {errorRegistros}
+            </p>
+            <p style="color: rgba(255,255,255,0.55); font-size: 0.8rem; margin-top: 0.5rem;">
+              Si el endpoint <code>GET /registros</code> todavía no está publicado en la API, este error es esperado — el UI se conecta automáticamente cuando esté listo.
+            </p>
+          {:else if !registrosData || (registrosData.items?.length ?? 0) === 0}
+            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">
+              Sin registros para este rango y filtros.
+            </p>
+          {:else}
+            {@const items = registrosData.items}
+            {@const total = registrosData.total ?? items.length}
+            {@const offset = registrosData.offset ?? registrosOffset}
+            {@const limit = registrosData.limit ?? registrosLimit}
+            {@const desde = offset + 1}
+            {@const hasta = Math.min(offset + items.length, total)}
+
+            <table class="consumo-tabla">
+              <thead>
+                <tr>
+                  <th style="width: 1.5rem;"></th>
+                  <th>Timestamp</th>
+                  <th>Proyecto</th>
+                  <th>Asistente</th>
+                  <th>Pregunta</th>
+                  <th style="text-align: right;">Latencia</th>
+                  <th style="text-align: right;">Tokens</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each items as r (r.id ?? `${r.timestamp}-${r.asistente_slug}`)}
+                  {@const expandido = registroExpandidoId === r.id}
+                  {@const tieneError = r.error != null && r.error !== ''}
+                  <tr
+                    class="registro-row"
+                    class:registro-row--error={tieneError}
+                    class:registro-row--expandido={expandido}
+                    onclick={() => { registroExpandidoId = expandido ? null : r.id; }}
+                    role="button"
+                    tabindex="0"
+                    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); registroExpandidoId = expandido ? null : r.id; } }}
+                  >
+                    <td>{expandido ? '▾' : '▸'}</td>
+                    <td><code style="font-size: 0.78rem;">{formatTimestamp(r.timestamp)}</code></td>
+                    <td>{r.proyecto_slug ?? '—'}</td>
+                    <td>{r.asistente_slug ?? '—'}</td>
+                    <td>
+                      {#if tieneError}
+                        <span style="color: #fca5a5;">⚠️ </span>
+                      {/if}
+                      {truncar(r.pregunta, 70)}
+                    </td>
+                    <td style="text-align: right;">{formatMs(r.latencia_ms)}</td>
+                    <td style="text-align: right;">{formatNumero((r.tokens_in ?? 0) + (r.tokens_out ?? 0))}</td>
+                  </tr>
+                  {#if expandido}
+                    <tr class="registro-detalle">
+                      <td colspan="7">
+                        <div style="display: flex; flex-direction: column; gap: 0.85rem; padding: 0.5rem 0.25rem;">
+                          <div>
+                            <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(255,255,255,0.5); margin-bottom: 0.3rem;">Pregunta</div>
+                            <div style="background: rgba(0,0,0,0.3); padding: 0.75rem; border-radius: 6px; color: #fff; white-space: pre-wrap; line-height: 1.5; font-size: 0.9rem;">{r.pregunta ?? '—'}</div>
+                          </div>
+                          <div>
+                            <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(255,255,255,0.5); margin-bottom: 0.3rem;">Respuesta</div>
+                            <div style="background: rgba(0,0,0,0.3); padding: 0.75rem; border-radius: 6px; color: #fff; white-space: pre-wrap; line-height: 1.5; font-size: 0.9rem;">{r.respuesta ?? '—'}</div>
+                          </div>
+                          <div style="display: flex; gap: 1.25rem; flex-wrap: wrap; font-size: 0.8rem; color: rgba(255,255,255,0.7);">
+                            <div><strong>Modelo:</strong> <code>{r.modelo ?? '—'}</code></div>
+                            <div><strong>Tokens in:</strong> {formatNumero(r.tokens_in)}</div>
+                            <div><strong>Tokens out:</strong> {formatNumero(r.tokens_out)}</div>
+                            <div><strong>Latencia:</strong> {formatMs(r.latencia_ms)}</div>
+                            {#if r.id != null}
+                              <div><strong>ID:</strong> <code>{r.id}</code></div>
+                            {/if}
+                          </div>
+                          {#if tieneError}
+                            <div>
+                              <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #fca5a5; margin-bottom: 0.3rem;">Error</div>
+                              <div style="background: rgba(200,40,40,0.25); border: 1px solid rgba(200,40,40,0.5); padding: 0.75rem; border-radius: 6px; color: #fecaca; white-space: pre-wrap; line-height: 1.5; font-size: 0.85rem;">{r.error}</div>
+                            </div>
+                          {/if}
+                        </div>
+                      </td>
+                    </tr>
+                  {/if}
+                {/each}
+              </tbody>
+            </table>
+
+            <!-- Paginación -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; flex-wrap: wrap; gap: 0.75rem;">
+              <span style="color: rgba(255,255,255,0.6); font-size: 0.85rem;">
+                Mostrando {formatNumero(desde)}–{formatNumero(hasta)} de {formatNumero(total)}
+              </span>
+              <div style="display: flex; gap: 0.4rem;">
+                <button
+                  onclick={paginaAnteriorRegistros}
+                  class="vectorizacion-action-btn"
+                  disabled={cargandoRegistros || offset === 0}
+                >
+                  ← Anterior
+                </button>
+                <button
+                  onclick={paginaSiguienteRegistros}
+                  class="vectorizacion-action-btn"
+                  disabled={cargandoRegistros || (offset + limit) >= total}
+                >
+                  Siguiente →
+                </button>
+              </div>
+            </div>
+
+            <p style="color: rgba(255,255,255,0.4); font-size: 0.75rem; margin-top: 1rem;">
+              Rango: {registrosData.rango?.desde ?? registrosDesde} → {registrosData.rango?.hasta ?? registrosHasta}
             </p>
           {/if}
         </div>
@@ -6132,6 +6534,27 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   .consumo-tabla td {
     padding: 0.4rem 0.6rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  .registro-row {
+    cursor: pointer;
+    transition: background 0.12s ease;
+  }
+  .registro-row:hover {
+    background: rgba(255, 255, 255, 0.04);
+  }
+  .registro-row--expandido {
+    background: rgba(255, 255, 255, 0.06);
+  }
+  .registro-row--expandido:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+  .registro-row--error td {
+    color: rgba(252, 165, 165, 0.9);
+  }
+  .registro-detalle td {
+    background: rgba(0, 0, 0, 0.25);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    padding: 0.75rem 0.6rem 1rem;
   }
   .consumo-bar-row {
     display: grid;
