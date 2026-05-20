@@ -67,7 +67,7 @@
 
   // Subir esta versión manualmente con cada despliegue para llevar control
   // visual de qué build está corriendo. Se muestra debajo del título del header.
-  const APP_VERSION = '0.5.1';
+  const APP_VERSION = '0.6.3';
 
   // Sin concepto de "ambiente". Las URLs se derivan del host donde corre la
   // app: el API siempre vive en el mismo host en :8077 y el host-asistentes
@@ -230,6 +230,32 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   function salirVistaUsuario() {
     vistaUsuario = false;
+  }
+
+  // Abre un documento original (binario) en una pestaña nueva.
+  // Hace fetch primero para detectar 404 (docs históricos sin binario) y
+  // mostrar un toast amigable en vez de la pestaña con JSON crudo.
+  async function abrirDocumento(contexto, filename) {
+    if (!contexto || !filename) return;
+    try {
+      const url = `${apiUrl.base}/obtenerDocumento?contexto=${encodeURIComponent(contexto)}&filename=${encodeURIComponent(filename)}`;
+      const resp = await fetch(url);
+      if (resp.ok) {
+        const blob = await resp.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        window.open(blobUrl, '_blank', 'noopener,noreferrer');
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+      } else if (resp.status === 404) {
+        adminMensaje = '⚠️ Documento no disponible — fue subido antes de la feature de archivos. Vuélvelo a subir para habilitar la previsualización.';
+        setTimeout(() => { adminMensaje = ''; }, 5500);
+      } else {
+        adminMensaje = `❌ Error al abrir el documento (HTTP ${resp.status})`;
+        setTimeout(() => { adminMensaje = ''; }, 4000);
+      }
+    } catch (err) {
+      adminMensaje = `❌ Error al abrir el documento: ${err.message}`;
+      setTimeout(() => { adminMensaje = ''; }, 4000);
+    }
   }
 
   // Detección del param ?admin=<token> al cargar. Verifica contra el
@@ -408,6 +434,84 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     if (texto.length <= max) return texto;
     return texto.slice(0, max) + '…';
   }
+
+  function formatBytes(n) {
+    if (n == null) return '—';
+    const num = Number(n);
+    if (!Number.isFinite(num)) return '—';
+    if (num < 1024) return `${num} B`;
+    if (num < 1024 * 1024) return `${Math.round(num / 1024)} KB`;
+    return `${(num / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  // === Historial de documentos ===
+  // Lista de binarios persistidos en disco (incluye "fantasmas" de docs/BCs
+  // que ya fueron eliminados). Consume GET /historialDocumentos con admin Bearer.
+  let historialData = $state(null); // { items, total }
+  let cargandoHistorial = $state(false);
+  let errorHistorial = $state('');
+  let historialContextoFiltro = $state('');
+
+  async function cargarHistorial() {
+    cargandoHistorial = true;
+    errorHistorial = '';
+    try {
+      const params = new URLSearchParams();
+      if (historialContextoFiltro) params.set('contexto', historialContextoFiltro);
+      const qs = params.toString();
+      const url = `${apiUrl.base}/historialDocumentos${qs ? '?' + qs : ''}`;
+      const res = await fetch(url, { headers: adminHeaders() });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status}${txt ? ': ' + txt : ''}`);
+      }
+      historialData = await res.json();
+    } catch (err) {
+      errorHistorial = err.message;
+      historialData = null;
+    } finally {
+      cargandoHistorial = false;
+    }
+  }
+
+  // Agrupa items por contexto, preservando el orden de aparición.
+  // Devuelve [{ contexto, contexto_estado, items: [...] }, ...].
+  const historialGrupos = $derived.by(() => {
+    if (!historialData?.items) return [];
+    const mapa = new Map();
+    for (const it of historialData.items) {
+      const key = it.contexto ?? '(sin contexto)';
+      if (!mapa.has(key)) {
+        mapa.set(key, {
+          contexto: key,
+          contexto_estado: it.contexto_estado ?? 'activo',
+          items: [],
+        });
+      }
+      mapa.get(key).items.push(it);
+    }
+    return Array.from(mapa.values());
+  });
+
+  // Contextos únicos para el dropdown de filtro.
+  const historialContextosUnicos = $derived.by(() => {
+    if (!historialData?.items) return [];
+    const set = new Set();
+    for (const it of historialData.items) {
+      if (it.contexto) set.add(it.contexto);
+    }
+    return Array.from(set).sort();
+  });
+
+  // Conteo activos vs borrados (suma sobre items).
+  const historialTotales = $derived.by(() => {
+    const items = historialData?.items ?? [];
+    let activos = 0, borrados = 0;
+    for (const it of items) {
+      if (it.estado === 'borrado') borrados++; else activos++;
+    }
+    return { total: items.length, activos, borrados };
+  });
   let defaultContextGuardado = $state(
     typeof localStorage !== 'undefined' ? (localStorage.getItem('mide_default_context') || '') : ''
   );
@@ -879,6 +983,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let cargandoBorrarDocumento = $state(false);
   let mensajeBorrarDocumento = $state('');
   let mostrarConfirmacionBorrarDocumento = $state(false);
+  // === Snippet (Q&A corta sin PDF) ===
+  let snippetFilename = $state('');
+  let snippetContenido = $state('');
+  let cargandoAgregarSnippet = $state(false);
+  let mensajeAgregarSnippet = $state('');
   let integracionEnCurso = $state(null);
   let modelosDisponibles = $state([]);
   let cargandoModelos = $state(false);
@@ -973,6 +1082,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let asistenteFormModelo = $state('mistral');
   let asistenteFormHistorialMax = $state(3);
   let asistenteFormMensajeInicial = $state('');
+  // top_k: cuántos chunks de Chroma se recuperan por respuesta (1-20, default 1).
+  let asistenteFormTopK = $state(1);
   const placeholderInstrucciones = $derived(
     PLACEHOLDER_INSTRUCCIONES[asistenteFormModelo] ?? PLACEHOLDER_INSTRUCCIONES_FALLBACK
   );
@@ -1143,6 +1254,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     asistenteFormModelo = 'mistral';
     asistenteFormHistorialMax = 3;
     asistenteFormMensajeInicial = '';
+    asistenteFormTopK = 1;
     // Limpia el mapa de variables para que sincronizar arranque con los
     // defaults de la plantilla (regla critica pre-llena, etc.) en cada nueva creación.
     asistenteFormVariables = {};
@@ -1165,6 +1277,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     asistenteFormModelo = asistente.modelo_llm;
     asistenteFormHistorialMax = asistente.historial_max;
     asistenteFormMensajeInicial = asistente.mensaje_inicial ?? '';
+    asistenteFormTopK = asistente.top_k ?? 1;
     mensajeAsistente = '';
     sincronizarVariablesAsistente();
     variablesTocadasEnEdicion = false;
@@ -1202,6 +1315,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     const modelo_llm = asistenteFormModelo.trim();
     const historial_max = parseInt(asistenteFormHistorialMax, 10);
     const mensaje_inicial = asistenteFormMensajeInicial.trim();
+    const top_k = parseInt(asistenteFormTopK, 10);
 
     if (!asistenteEditandoId && !SLUG_REGEX.test(slug)) {
       mensajeAsistente = '❌ Slug inválido. Usa minúsculas, dígitos y guiones (2-64 chars, empieza con letra).';
@@ -1224,6 +1338,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       mensajeAsistente = '❌ Historial max debe ser entero entre 0 y 50.';
       return;
     }
+    if (isNaN(top_k) || top_k < 1 || top_k > 20) {
+      mensajeAsistente = '❌ Profundidad de búsqueda (top_k) debe ser entero entre 1 y 20.';
+      return;
+    }
     if (!proyectoActivoId) {
       mensajeAsistente = '❌ No hay proyecto activo. Selecciona uno en el header o crea uno en la subtab Proyectos.';
       return;
@@ -1244,8 +1362,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       // Mensaje inicial vacío = usar default del frontend.
       const mensajeInicialPayload = mensaje_inicial === '' ? null : mensaje_inicial;
       const body = editando
-        ? { nombre, instrucciones, contexto: contextoPayload, modelo_llm, historial_max, mensaje_inicial: mensajeInicialPayload }
-        : { slug, nombre, instrucciones, contexto: contextoPayload, modelo_llm, historial_max, mensaje_inicial: mensajeInicialPayload, proyecto_id: proyectoActivoId };
+        ? { nombre, instrucciones, contexto: contextoPayload, modelo_llm, historial_max, mensaje_inicial: mensajeInicialPayload, top_k }
+        : { slug, nombre, instrucciones, contexto: contextoPayload, modelo_llm, historial_max, mensaje_inicial: mensajeInicialPayload, proyecto_id: proyectoActivoId, top_k };
 
       const res = await fetch(url, {
         method: editando ? 'PUT' : 'POST',
@@ -1883,6 +2001,55 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       cargandoIntegrarDocumento = false;
       localStorage.removeItem('mide_integracion_pendiente');
       integracionEnCurso = null;
+    }
+  }
+
+  // POST /agregarSnippet — agrega una Q&A corta sin subir PDF.
+  // Internamente la API la persiste como .txt en data/documentos/<ctx>/, igual
+  // que un doc subido, y la vectoriza a Chroma.
+  async function agregarSnippet() {
+    const filename = snippetFilename.trim();
+    const contenido = snippetContenido.trim();
+    if (!contextoSeleccionadoParaDocumentos.trim()) {
+      mensajeAgregarSnippet = '❌ Selecciona una base de conocimiento primero.';
+      return;
+    }
+    if (!filename) {
+      mensajeAgregarSnippet = '❌ Necesitas un nombre de archivo (ej. horario.txt).';
+      return;
+    }
+    if (!contenido) {
+      mensajeAgregarSnippet = '❌ El contenido no puede estar vacío.';
+      return;
+    }
+
+    cargandoAgregarSnippet = true;
+    mensajeAgregarSnippet = '';
+    try {
+      const url = `${apiUrl.base}/agregarSnippet?contexto=${encodeURIComponent(contextoSeleccionadoParaDocumentos)}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename, contenido }),
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        let msg = txt;
+        try {
+          const j = JSON.parse(txt);
+          msg = typeof j.detail === 'string' ? j.detail : (j.detail ? JSON.stringify(j.detail) : msg);
+        } catch {}
+        throw new Error(`HTTP ${res.status}: ${msg}`);
+      }
+      mensajeAgregarSnippet = '✅ Snippet agregado y vectorizado';
+      snippetFilename = '';
+      snippetContenido = '';
+      await cargarDocumentosVectorizacion(contextoSeleccionadoParaDocumentos);
+      setTimeout(() => { mensajeAgregarSnippet = ''; }, 2500);
+    } catch (err) {
+      mensajeAgregarSnippet = `❌ ${err.message}`;
+    } finally {
+      cargandoAgregarSnippet = false;
     }
   }
 
@@ -2892,6 +3059,32 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     <option value={10}>10 turnos</option>
                   </select>
                 </div>
+                <div class="form-field">
+                  <label for="asistente-topk" style="display: inline-flex; align-items: center; gap: 0.35rem;">
+                    Profundidad de búsqueda (top_k)
+                    <span
+                      title="Cuántos fragmentos recupera el sistema de la base de conocimiento por respuesta. Si subes FAQs (preguntas+respuestas), 1 es suficiente. Si subes PDFs informativos donde una respuesta puede estar en varias secciones, prueba 3 o 5. Rango: 1-20. Default: 1."
+                      style="display: inline-flex; cursor: help; opacity: 0.65;"
+                      aria-label="Información sobre top_k"
+                    >
+                      <Icon name="info" size={14} />
+                    </span>
+                  </label>
+                  <input
+                    id="asistente-topk"
+                    type="number"
+                    min="1"
+                    max="20"
+                    step="1"
+                    bind:value={asistenteFormTopK}
+                    disabled={cargandoGuardarAsistente}
+                    class="contexto-input"
+                    style="display: block; width: 100%;"
+                  />
+                  <p style="margin: 0.35rem 0 0; color: rgba(10, 26, 58, 0.7); font-size: 0.78rem; line-height: 1.45;">
+                    <strong>1</strong> = FAQs autocontenidos · <strong>3-5</strong> = PDFs informativos · <strong>6+</strong> = casos avanzados. A más alto, más tokens y respuestas levemente más largas.
+                  </p>
+                </div>
                 <div style="display: flex; gap: 0.5rem;">
                   <button
                     onclick={guardarAsistente}
@@ -2958,6 +3151,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                         {/if}
                         <span style="display: inline-flex; align-items: center; gap: 0.3rem;"><Icon name="modelo" size={16} /> {asistente.modelo_llm}</span>
                         <span style="display: inline-flex; align-items: center; gap: 0.3rem;"><Icon name="historial" size={16} /> {asistente.historial_max} turnos</span>
+                        {#if asistente.contexto}
+                          <span title="Profundidad de búsqueda (top_k): chunks recuperados por respuesta" style="display: inline-flex; align-items: center; gap: 0.3rem;">🔎 k={asistente.top_k ?? 1}</span>
+                        {/if}
                         <button
                           type="button"
                           onclick={() => copiarUrl(asistenteEmbedUrl)}
@@ -3267,13 +3463,12 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   <div class="documentos-table">
                     {#each vectorizacionDocumentos as doc (doc)}
                       <div class="documento-row">
-                        <a
+                        <button
+                          type="button"
                           class="documento-nombre documento-nombre--link"
-                          href={`${apiUrl.base}/obtenerDocumento?contexto=${encodeURIComponent(contextoSeleccionadoParaDocumentos)}&filename=${encodeURIComponent(doc)}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                          onclick={() => abrirDocumento(contextoSeleccionadoParaDocumentos, doc)}
                           title={`Abrir "${doc}" en una nueva pestaña`}
-                        >📋 {doc}</a>
+                        >📋 {doc}</button>
                         <button
                           class="documento-borrar-btn"
                           title="Borrar documento"
@@ -3338,6 +3533,56 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             {#if mensajeIntegrarDocumento}
               <p class="mensaje-documento" class:success={mensajeIntegrarDocumento.includes('✅')}>
                 {mensajeIntegrarDocumento}
+              </p>
+            {/if}
+          </div>
+
+          <!-- Agregar Snippet (Q&A sin PDF) -->
+          <div class="integrar-documento-wrap" style="margin-top: 1rem;">
+            <h3>✍️ Agregar Snippet (Q&amp;A) a <strong>{contextoSeleccionadoParaDocumentos}</strong></h3>
+            <p style="margin: 0 0 0.75rem; color: rgba(10, 26, 58, 0.7); font-size: 0.82rem; line-height: 1.45;">
+              Alternativa rápida a subir un PDF cuando solo quieres meter una pregunta con su respuesta. Se guarda como archivo de texto en la BC y se vectoriza igual que cualquier documento.
+            </p>
+            <div class="integrar-documento-form" style="flex-direction: column; align-items: stretch; gap: 0.85rem;">
+              <div class="form-field">
+                <label for="snippet-filename">Nombre de archivo</label>
+                <input
+                  id="snippet-filename"
+                  type="text"
+                  bind:value={snippetFilename}
+                  disabled={cargandoAgregarSnippet}
+                  placeholder="ej. horario-atencion.txt"
+                  class="documento-input"
+                />
+                <small style="color: rgba(10, 26, 58, 0.6); font-size: 0.75rem;">
+                  Se guarda como archivo en la BC; si repites un filename existente con contenido distinto, lo reemplaza.
+                </small>
+              </div>
+              <div class="form-field">
+                <label for="snippet-contenido">Contenido (pregunta + respuesta)</label>
+                <textarea
+                  id="snippet-contenido"
+                  bind:value={snippetContenido}
+                  disabled={cargandoAgregarSnippet}
+                  rows="6"
+                  placeholder={'P: ¿Cuál es el horario de atención?\nR: Lunes a viernes de 9 a 18 hrs.'}
+                  class="documento-input"
+                  style="font-family: inherit; resize: vertical; line-height: 1.5;"
+                ></textarea>
+              </div>
+              <button
+                onclick={agregarSnippet}
+                disabled={cargandoAgregarSnippet || !contextoSeleccionadoParaDocumentos.trim() || !snippetFilename.trim() || !snippetContenido.trim()}
+                class="integrar-documento-btn"
+                style="align-self: flex-start;"
+              >
+                {cargandoAgregarSnippet ? '⟳ Vectorizando...' : '✓ Agregar snippet'}
+              </button>
+            </div>
+
+            {#if mensajeAgregarSnippet}
+              <p class="mensaje-documento" class:success={mensajeAgregarSnippet.includes('✅')}>
+                {mensajeAgregarSnippet}
               </p>
             {/if}
           </div>
@@ -3744,6 +3989,13 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             onclick={() => { adminTab = 'registros'; if (!registrosData) cargarRegistros(); if (proyectos.length === 0) cargarProyectos(); }}
           >
             📝 Registros
+          </button>
+          <button
+            class="vectorizacion-subtab-btn"
+            class:active={adminTab === 'historial'}
+            onclick={() => { adminTab = 'historial'; if (!historialData) cargarHistorial(); }}
+          >
+            🗂️ Historial
           </button>
         </div>
 
@@ -4467,6 +4719,104 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
             <p style="color: rgba(255,255,255,0.4); font-size: 0.75rem; margin-top: 1rem;">
               Rango: {registrosData.rango?.desde ?? registrosDesde} → {registrosData.rango?.hasta ?? registrosHasta}
+            </p>
+          {/if}
+        </div>
+        {/if}
+
+        <!-- Historial -->
+        {#if adminTab === 'historial'}
+        <div class="modelos-wrap">
+          <div class="seccion-header">
+            <h3>🗂️ Historial</h3>
+            <button onclick={cargarHistorial} class="vectorizacion-action-btn" disabled={cargandoHistorial}>
+              ↻ Recargar
+            </button>
+          </div>
+
+          <p style="color: rgba(255,255,255,0.7); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
+            Auditoría de los binarios persistidos en disco. Incluye documentos activos y "fantasmas" — archivos que se conservan tras un borrado de documento o de Base de Conocimiento.
+          </p>
+
+          <!-- Filtro -->
+          <div style="display: flex; gap: 0.75rem; align-items: end; margin-bottom: 1rem; flex-wrap: wrap;">
+            <div class="lightbot-field" style="margin: 0;">
+              <label for="historial-contexto" style="display: block;">Contexto</label>
+              <select
+                id="historial-contexto"
+                bind:value={historialContextoFiltro}
+                onchange={cargarHistorial}
+                disabled={cargandoHistorial}
+                class="contexto-select"
+                style="padding: 0.55rem 0.75rem; min-width: 220px;"
+              >
+                <option value="">(todos)</option>
+                {#each historialContextosUnicos as ctx (ctx)}
+                  <option value={ctx}>{ctx}</option>
+                {/each}
+              </select>
+            </div>
+            {#if historialData}
+              <div style="color: rgba(255,255,255,0.75); font-size: 0.88rem; padding: 0.55rem 0;">
+                Total: <strong>{formatNumero(historialTotales.total)}</strong> documentos
+                (<span style="color: #4ade80;">{formatNumero(historialTotales.activos)} activos</span>,
+                <span style="color: #fca5a5;">{formatNumero(historialTotales.borrados)} borrados</span>)
+              </div>
+            {/if}
+          </div>
+
+          {#if cargandoHistorial}
+            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando historial...</p>
+          {:else if errorHistorial}
+            <p style="color: #fff; font-size: 0.9rem; padding: 1rem; background: rgba(200,40,40,0.85); border-radius: 8px; line-height: 1.5;">
+              ❌ {errorHistorial}
+            </p>
+          {:else if !historialData || historialGrupos.length === 0}
+            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">
+              {historialContextoFiltro
+                ? `Sin documentos en disco para el contexto "${historialContextoFiltro}".`
+                : 'Sin documentos persistidos en disco.'}
+            </p>
+          {:else}
+            <div style="display: flex; flex-direction: column; gap: 1rem;">
+              {#each historialGrupos as grupo (grupo.contexto)}
+                {@const ctxBorrado = grupo.contexto_estado === 'borrado'}
+                <div class="historial-grupo" class:historial-grupo--borrado={ctxBorrado}>
+                  <div class="historial-grupo__header">
+                    <span class="historial-grupo__nombre" class:historial-grupo__nombre--tachado={ctxBorrado}>
+                      {grupo.contexto}
+                    </span>
+                    {#if ctxBorrado}
+                      <span class="historial-badge historial-badge--ctx-borrado">Contexto eliminado</span>
+                    {/if}
+                    <span style="color: rgba(255,255,255,0.5); font-size: 0.78rem; margin-left: auto;">
+                      {grupo.items.length} {grupo.items.length === 1 ? 'doc' : 'docs'}
+                    </span>
+                  </div>
+                  <div class="historial-items">
+                    {#each grupo.items as item (item.filename)}
+                      {@const itemBorrado = item.estado === 'borrado'}
+                      <div class="historial-item" class:historial-item--borrado={itemBorrado}>
+                        <button
+                          type="button"
+                          class="historial-item__nombre"
+                          onclick={() => abrirDocumento(grupo.contexto, item.filename)}
+                          title={`Abrir "${item.filename}" en nueva pestaña`}
+                        >📄 {item.filename}</button>
+                        {#if itemBorrado}
+                          <span class="historial-badge historial-badge--item-borrado">Borrado de la BC</span>
+                        {/if}
+                        <span class="historial-item__meta">{formatBytes(item.tamano_bytes)}</span>
+                        <span class="historial-item__meta">{formatTimestamp(item.fecha_modificacion)}</span>
+                      </div>
+                    {/each}
+                  </div>
+                </div>
+              {/each}
+            </div>
+
+            <p style="color: rgba(255,255,255,0.4); font-size: 0.75rem; margin-top: 1rem; line-height: 1.45;">
+              💡 Los binarios se conservan en disco aunque se borre el doc de Chroma o se elimine la BC completa — son <em>fantasmas</em> auditables solo desde esta vista. Docs subidos antes de la feature de archivos no aparecen aquí (vivían solo como vectores).
             </p>
           {/if}
         </div>
@@ -6140,10 +6490,21 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     text-decoration: none;
     cursor: pointer;
     transition: color 0.15s;
+    /* Reset cuando es <button> */
+    background: none;
+    border: none;
+    padding: 0;
+    font-family: inherit;
+    font-size: 0.9rem;
+    text-align: left;
+    color: rgba(255, 255, 255, 0.9);
   }
   .documento-nombre--link:hover {
     color: #93c5fd;
     text-decoration: underline;
+  }
+  .app.vectorizacion .documento-nombre--link {
+    color: rgba(10, 26, 58, 0.9);
   }
 
   .documento-borrar-btn {
@@ -6635,6 +6996,110 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     background: rgba(0, 0, 0, 0.25);
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     padding: 0.75rem 0.6rem 1rem;
+  }
+
+  /* ── Historial ──────────────────────── */
+  .historial-grupo {
+    background: rgba(0, 0, 0, 0.22);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .historial-grupo--borrado {
+    background: rgba(0, 0, 0, 0.32);
+    border-color: rgba(255, 150, 80, 0.25);
+    opacity: 0.78;
+  }
+  .historial-grupo__header {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.7rem 0.9rem;
+    background: rgba(255, 255, 255, 0.04);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    flex-wrap: wrap;
+  }
+  .historial-grupo__nombre {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.95);
+  }
+  .historial-grupo__nombre--tachado {
+    text-decoration: line-through;
+    color: rgba(255, 255, 255, 0.55);
+  }
+  .historial-items {
+    display: flex;
+    flex-direction: column;
+  }
+  .historial-item {
+    display: grid;
+    grid-template-columns: 1fr auto auto auto;
+    gap: 0.85rem;
+    align-items: center;
+    padding: 0.55rem 0.9rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    font-size: 0.86rem;
+  }
+  .historial-item:last-child {
+    border-bottom: none;
+  }
+  .historial-item--borrado {
+    opacity: 0.6;
+    font-style: italic;
+  }
+  .historial-item__nombre {
+    background: none;
+    border: none;
+    padding: 0;
+    color: rgba(255, 255, 255, 0.9);
+    font-family: inherit;
+    font-size: 0.88rem;
+    text-align: left;
+    cursor: pointer;
+    transition: color 0.15s;
+    word-break: break-word;
+  }
+  .historial-item__nombre:hover {
+    color: #93c5fd;
+    text-decoration: underline;
+  }
+  .historial-item--borrado .historial-item__nombre {
+    color: rgba(255, 255, 255, 0.55);
+  }
+  .historial-item__meta {
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 0.78rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .historial-badge {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    line-height: 1.4;
+    white-space: nowrap;
+  }
+  .historial-badge--ctx-borrado {
+    background: rgba(255, 140, 60, 0.2);
+    border: 1px solid rgba(255, 140, 60, 0.45);
+    color: #fdba74;
+  }
+  .historial-badge--item-borrado {
+    background: rgba(220, 80, 80, 0.18);
+    border: 1px solid rgba(220, 80, 80, 0.4);
+    color: #fca5a5;
+  }
+  @media (max-width: 700px) {
+    .historial-item {
+      grid-template-columns: 1fr;
+      gap: 0.25rem;
+    }
   }
   .consumo-bar-row {
     display: grid;
