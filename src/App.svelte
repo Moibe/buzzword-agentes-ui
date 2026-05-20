@@ -67,7 +67,7 @@
 
   // Subir esta versión manualmente con cada despliegue para llevar control
   // visual de qué build está corriendo. Se muestra debajo del título del header.
-  const APP_VERSION = '0.6.4';
+  const APP_VERSION = '0.6.8';
 
   // Sin concepto de "ambiente". Las URLs se derivan del host donde corre la
   // app: el API siempre vive en el mismo host en :8077 y el host-asistentes
@@ -232,22 +232,45 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     vistaUsuario = false;
   }
 
-  // Abre un documento: snippets (text/*) en modal inline, PDFs/binarios en
-  // pestaña nueva. Hace fetch primero para detectar 404 (docs históricos sin
-  // binario) y mostrar un toast amigable en vez de la pestaña con JSON crudo.
+  // Abre un documento: texto en modal inline, PDFs/binarios en pestaña nueva.
+  // Estrategia: si NO se reconoce explícitamente como binario (mime o
+  // extensión), default a modal. Esto cubre snippets sin extensión que la API
+  // sirve como application/octet-stream. Hace fetch primero para detectar 404
+  // (docs históricos sin binario) con toast amigable.
   async function abrirDocumento(contexto, filename) {
     if (!contexto || !filename) return;
     try {
       const url = `${apiUrl.base}/obtenerDocumento?contexto=${encodeURIComponent(contexto)}&filename=${encodeURIComponent(filename)}`;
-      const resp = await fetch(url);
+      // cache: 'no-store' bypasa el Cache-Control: max-age=3600 que pone la
+      // API. Necesario para que al re-abrir un snippet recién editado se vea
+      // el contenido nuevo, no el cacheado. Costo: PDFs se re-descargan en
+      // cada apertura, aceptable para admin tool.
+      const resp = await fetch(url, { cache: 'no-store' });
       if (resp.ok) {
         const contentType = (resp.headers.get('content-type') || '').toLowerCase();
-        const esTextoPlano = contentType.startsWith('text/') ||
-                             contentType.includes('json') ||
-                             /\.(txt|md|csv|json|log)$/i.test(filename);
-        if (esTextoPlano) {
+        const extMatch = filename.match(/\.([^.]+)$/);
+        const ext = extMatch ? extMatch[1].toLowerCase() : '';
+        const EXT_BINARIO = new Set([
+          'pdf','doc','docx','xls','xlsx','ppt','pptx','odt','ods','odp',
+          'zip','rar','7z','tar','gz',
+          'png','jpg','jpeg','gif','webp','svg','bmp','tiff','ico',
+          'mp3','mp4','wav','ogg','webm','avi','mov',
+        ]);
+        const mimeEsBinario =
+          contentType.includes('pdf') ||
+          contentType.includes('officedocument') ||
+          contentType.includes('msword') ||
+          contentType.includes('image/') ||
+          contentType.includes('audio/') ||
+          contentType.includes('video/') ||
+          contentType.includes('zip');
+        const esBinario = mimeEsBinario || EXT_BINARIO.has(ext);
+        if (!esBinario) {
           const contenido = await resp.text();
-          documentoVisualizar = { filename, contenido };
+          documentoVisualizar = { contexto, filename, contenido };
+          documentoEditando = false;
+          documentoBorrador = '';
+          mensajeEdicion = '';
         } else {
           const blob = await resp.blob();
           const blobUrl = URL.createObjectURL(blob);
@@ -999,7 +1022,13 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let mensajeAgregarSnippet = $state('');
   // Modal de visualización inline para archivos de texto (snippets).
   // PDFs y binarios siguen abriendo en pestaña nueva vía blob URL.
-  let documentoVisualizar = $state(null); // { filename, contenido }
+  // contexto se guarda para poder hacer "Guardar" (POST /agregarSnippet con mismo
+  // filename y nuevo contenido — la API hace upsert).
+  let documentoVisualizar = $state(null); // { contexto, filename, contenido }
+  let documentoEditando = $state(false);
+  let documentoBorrador = $state('');
+  let cargandoGuardarEdicion = $state(false);
+  let mensajeEdicion = $state('');
   let integracionEnCurso = $state(null);
   let modelosDisponibles = $state([]);
   let cargandoModelos = $state(false);
@@ -2020,20 +2049,23 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   // Internamente la API la persiste como .txt en data/documentos/<ctx>/, igual
   // que un doc subido, y la vectoriza a Chroma.
   async function agregarSnippet() {
-    const filename = snippetFilename.trim();
+    const filenameRaw = snippetFilename.trim();
     const contenido = snippetContenido.trim();
     if (!contextoSeleccionadoParaDocumentos.trim()) {
       mensajeAgregarSnippet = '❌ Selecciona una base de conocimiento primero.';
       return;
     }
-    if (!filename) {
-      mensajeAgregarSnippet = '❌ Necesitas un nombre de archivo (ej. horario.txt).';
+    if (!filenameRaw) {
+      mensajeAgregarSnippet = '❌ Necesitas un nombre de archivo.';
       return;
     }
     if (!contenido) {
       mensajeAgregarSnippet = '❌ El contenido no puede estar vacío.';
       return;
     }
+    // Si el filename no tiene extensión, le ponemos .txt automáticamente
+    // (es un snippet de texto). Si ya trae cualquier extensión, la respetamos.
+    const filename = /\.[a-zA-Z0-9]+$/.test(filenameRaw) ? filenameRaw : `${filenameRaw}.txt`;
 
     cargandoAgregarSnippet = true;
     mensajeAgregarSnippet = '';
@@ -2062,6 +2094,92 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       mensajeAgregarSnippet = `❌ ${err.message}`;
     } finally {
       cargandoAgregarSnippet = false;
+    }
+  }
+
+  // === Edición de snippet desde el modal de visualización ===
+  // Reusa el endpoint POST /agregarSnippet con el mismo filename (la API tiene
+  // semántica de upsert: si existe filename con OTRO contenido, lo reemplaza
+  // atómicamente — borra chunks viejos en Chroma, vectoriza nuevo, sobrescribe
+  // el archivo en disco).
+  function iniciarEdicionSnippet() {
+    if (!documentoVisualizar) return;
+    documentoBorrador = documentoVisualizar.contenido;
+    documentoEditando = true;
+    mensajeEdicion = '';
+  }
+
+  function cancelarEdicionSnippet() {
+    if (!documentoVisualizar) return;
+    const haCambios = documentoBorrador !== documentoVisualizar.contenido;
+    if (haCambios && !window.confirm('Tienes cambios sin guardar. ¿Descartar la edición?')) {
+      return;
+    }
+    documentoEditando = false;
+    documentoBorrador = '';
+    mensajeEdicion = '';
+  }
+
+  function cerrarModalDocumento() {
+    if (documentoEditando) {
+      const haCambios = documentoBorrador !== documentoVisualizar?.contenido;
+      if (haCambios && !window.confirm('Tienes cambios sin guardar. ¿Descartar la edición y cerrar?')) {
+        return;
+      }
+    }
+    documentoVisualizar = null;
+    documentoEditando = false;
+    documentoBorrador = '';
+    mensajeEdicion = '';
+  }
+
+  async function guardarEdicionSnippet() {
+    if (!documentoVisualizar) return;
+    const { contexto, filename } = documentoVisualizar;
+    const contenido = documentoBorrador.trim();
+    if (!contenido) {
+      mensajeEdicion = '❌ El contenido no puede estar vacío.';
+      return;
+    }
+    if (contenido === documentoVisualizar.contenido.trim()) {
+      // Nada cambió — solo salimos del modo edición sin hit a la API.
+      documentoEditando = false;
+      documentoBorrador = '';
+      return;
+    }
+    cargandoGuardarEdicion = true;
+    mensajeEdicion = '';
+    try {
+      const url = `${apiUrl.base}/agregarSnippet?contexto=${encodeURIComponent(contexto)}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename, contenido }),
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        let msg = txt;
+        try {
+          const j = JSON.parse(txt);
+          msg = typeof j.detail === 'string' ? j.detail : (j.detail ? JSON.stringify(j.detail) : msg);
+        } catch {}
+        throw new Error(`HTTP ${res.status}: ${msg}`);
+      }
+      // Éxito: actualiza el contenido visible y sale del modo edición.
+      documentoVisualizar = { ...documentoVisualizar, contenido };
+      documentoEditando = false;
+      documentoBorrador = '';
+      mensajeEdicion = '✅ Guardado y re-vectorizado';
+      // Refresca la lista de documentos en background (filename no cambió,
+      // pero por si la UI tiene contadores u otros derivados).
+      if (contextoSeleccionadoParaDocumentos === contexto) {
+        cargarDocumentosVectorizacion(contexto);
+      }
+      setTimeout(() => { mensajeEdicion = ''; }, 2500);
+    } catch (err) {
+      mensajeEdicion = `❌ ${err.message}`;
+    } finally {
+      cargandoGuardarEdicion = false;
     }
   }
 
@@ -3563,11 +3681,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   type="text"
                   bind:value={snippetFilename}
                   disabled={cargandoAgregarSnippet}
-                  placeholder="ej. horario-atencion.txt"
+                  placeholder="ej. horario-atencion"
                   class="documento-input"
                 />
                 <small style="color: rgba(10, 26, 58, 0.6); font-size: 0.75rem;">
-                  Se guarda como archivo en la BC; si repites un filename existente con contenido distinto, lo reemplaza.
+                  La extensión <code>.txt</code> se agrega sola si no la tipeas. Si repites un nombre existente con contenido distinto, lo reemplaza.
                 </small>
               </div>
               <div class="form-field">
@@ -3942,59 +4060,118 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     </div>
   {/if}
 
-  <!-- Modal: visualizar contenido de un documento de texto (snippet) -->
+  <!-- Modal: visualizar / editar contenido de un documento de texto (snippet) -->
   {#if documentoVisualizar}
-    <div class="modal-overlay" onclick={() => documentoVisualizar = null} role="presentation">
+    <div class="modal-overlay" onclick={cerrarModalDocumento} role="presentation">
       <div
         class="modal-content"
         onclick={(e) => e.stopPropagation()}
         role="dialog"
         tabindex="-1"
-        style="max-width: 760px; width: 92vw; max-height: 80vh; display: flex; flex-direction: column;"
+        style="max-width: 760px; width: 92vw; max-height: 85vh; display: flex; flex-direction: column;"
       >
         <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 0.85rem;">
-          <h3 style="margin: 0; word-break: break-word;">📄 {documentoVisualizar.filename}</h3>
+          <h3 style="margin: 0; word-break: break-word;">
+            {documentoEditando ? '✏️' : '📄'} {documentoVisualizar.filename}
+          </h3>
           <button
             type="button"
-            onclick={() => documentoVisualizar = null}
+            onclick={cerrarModalDocumento}
             class="modal-btn cancel"
             style="padding: 0.4rem 0.7rem; font-size: 0.95rem;"
             aria-label="Cerrar"
             title="Cerrar (Esc)"
+            disabled={cargandoGuardarEdicion}
           >✕</button>
         </div>
-        <pre style="
-          flex: 1;
-          overflow: auto;
-          background: rgba(0, 0, 0, 0.35);
-          color: rgba(255, 255, 255, 0.92);
-          padding: 1rem;
-          border-radius: 8px;
-          font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
-          font-size: 0.88rem;
-          line-height: 1.55;
-          white-space: pre-wrap;
-          word-break: break-word;
-          margin: 0;
-        ">{documentoVisualizar.contenido}</pre>
+
+        {#if documentoEditando}
+          <textarea
+            bind:value={documentoBorrador}
+            disabled={cargandoGuardarEdicion}
+            style="
+              flex: 1;
+              min-height: 280px;
+              background: rgba(0, 0, 0, 0.4);
+              color: rgba(255, 255, 255, 0.95);
+              padding: 1rem;
+              border-radius: 8px;
+              border: 1px solid rgba(255, 255, 255, 0.2);
+              font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+              font-size: 0.88rem;
+              line-height: 1.55;
+              resize: vertical;
+              margin: 0;
+            "
+          ></textarea>
+          <p style="margin: 0.5rem 0 0; font-size: 0.75rem; color: rgba(255, 255, 255, 0.55); line-height: 1.4;">
+            💡 Al guardar, los chunks viejos en Chroma se borran y este contenido se vuelve a vectorizar. Atómico, una sola llamada.
+          </p>
+        {:else}
+          <pre style="
+            flex: 1;
+            overflow: auto;
+            background: rgba(0, 0, 0, 0.35);
+            color: rgba(255, 255, 255, 0.92);
+            padding: 1rem;
+            border-radius: 8px;
+            font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+            font-size: 0.88rem;
+            line-height: 1.55;
+            white-space: pre-wrap;
+            word-break: break-word;
+            margin: 0;
+          ">{documentoVisualizar.contenido}</pre>
+        {/if}
+
+        {#if mensajeEdicion}
+          <p style="margin: 0.75rem 0 0; font-size: 0.85rem; color: {mensajeEdicion.startsWith('❌') ? '#fca5a5' : '#4ade80'};">
+            {mensajeEdicion}
+          </p>
+        {/if}
+
         <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.85rem; flex-wrap: wrap;">
-          <button
-            type="button"
-            onclick={() => {
-              try {
-                navigator.clipboard.writeText(documentoVisualizar.contenido);
-                adminMensaje = '✅ Contenido copiado al portapapeles';
-                setTimeout(() => { adminMensaje = ''; }, 2000);
-              } catch {}
-            }}
-            class="modal-btn"
-            style="background: rgba(255,255,255,0.15); color: #fff; border-color: rgba(255,255,255,0.3);"
-          >📋 Copiar</button>
-          <button
-            type="button"
-            onclick={() => documentoVisualizar = null}
-            class="modal-btn cancel"
-          >Cerrar</button>
+          {#if documentoEditando}
+            <button
+              type="button"
+              onclick={guardarEdicionSnippet}
+              disabled={cargandoGuardarEdicion || !documentoBorrador.trim()}
+              class="modal-btn"
+              style="background: rgba(34,197,94,0.85); color: #fff; border-color: rgba(34,197,94,1);"
+            >
+              {cargandoGuardarEdicion ? '⟳ Guardando...' : '💾 Guardar'}
+            </button>
+            <button
+              type="button"
+              onclick={cancelarEdicionSnippet}
+              disabled={cargandoGuardarEdicion}
+              class="modal-btn cancel"
+            >Cancelar</button>
+          {:else}
+            <button
+              type="button"
+              onclick={() => {
+                try {
+                  navigator.clipboard.writeText(documentoVisualizar.contenido);
+                  adminMensaje = '✅ Contenido copiado al portapapeles';
+                  setTimeout(() => { adminMensaje = ''; }, 2000);
+                } catch {}
+              }}
+              class="modal-btn"
+              style="background: rgba(255,255,255,0.15); color: #fff; border-color: rgba(255,255,255,0.3);"
+            >📋 Copiar</button>
+            <button
+              type="button"
+              onclick={iniciarEdicionSnippet}
+              class="modal-btn"
+              style="background: rgba(59,130,246,0.85); color: #fff; border-color: rgba(59,130,246,1);"
+            >✏️ Editar</button>
+            <button
+              type="button"
+              onclick={cerrarModalDocumento}
+              class="modal-btn cancel"
+            >Cerrar</button>
+          {/if}
         </div>
       </div>
     </div>
