@@ -67,7 +67,7 @@
 
   // Subir esta versión manualmente con cada despliegue para llevar control
   // visual de qué build está corriendo. Se muestra debajo del título del header.
-  const APP_VERSION = '0.6.3';
+  const APP_VERSION = '0.6.4';
 
   // Sin concepto de "ambiente". Las URLs se derivan del host donde corre la
   // app: el API siempre vive en el mismo host en :8077 y el host-asistentes
@@ -232,19 +232,28 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     vistaUsuario = false;
   }
 
-  // Abre un documento original (binario) en una pestaña nueva.
-  // Hace fetch primero para detectar 404 (docs históricos sin binario) y
-  // mostrar un toast amigable en vez de la pestaña con JSON crudo.
+  // Abre un documento: snippets (text/*) en modal inline, PDFs/binarios en
+  // pestaña nueva. Hace fetch primero para detectar 404 (docs históricos sin
+  // binario) y mostrar un toast amigable en vez de la pestaña con JSON crudo.
   async function abrirDocumento(contexto, filename) {
     if (!contexto || !filename) return;
     try {
       const url = `${apiUrl.base}/obtenerDocumento?contexto=${encodeURIComponent(contexto)}&filename=${encodeURIComponent(filename)}`;
       const resp = await fetch(url);
       if (resp.ok) {
-        const blob = await resp.blob();
-        const blobUrl = URL.createObjectURL(blob);
-        window.open(blobUrl, '_blank', 'noopener,noreferrer');
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+        const contentType = (resp.headers.get('content-type') || '').toLowerCase();
+        const esTextoPlano = contentType.startsWith('text/') ||
+                             contentType.includes('json') ||
+                             /\.(txt|md|csv|json|log)$/i.test(filename);
+        if (esTextoPlano) {
+          const contenido = await resp.text();
+          documentoVisualizar = { filename, contenido };
+        } else {
+          const blob = await resp.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          window.open(blobUrl, '_blank', 'noopener,noreferrer');
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+        }
       } else if (resp.status === 404) {
         adminMensaje = '⚠️ Documento no disponible — fue subido antes de la feature de archivos. Vuélvelo a subir para habilitar la previsualización.';
         setTimeout(() => { adminMensaje = ''; }, 5500);
@@ -988,6 +997,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let snippetContenido = $state('');
   let cargandoAgregarSnippet = $state(false);
   let mensajeAgregarSnippet = $state('');
+  // Modal de visualización inline para archivos de texto (snippets).
+  // PDFs y binarios siguen abriendo en pestaña nueva vía blob URL.
+  let documentoVisualizar = $state(null); // { filename, contenido }
   let integracionEnCurso = $state(null);
   let modelosDisponibles = $state([]);
   let cargandoModelos = $state(false);
@@ -3926,6 +3938,64 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  {/if}
+
+  <!-- Modal: visualizar contenido de un documento de texto (snippet) -->
+  {#if documentoVisualizar}
+    <div class="modal-overlay" onclick={() => documentoVisualizar = null} role="presentation">
+      <div
+        class="modal-content"
+        onclick={(e) => e.stopPropagation()}
+        role="dialog"
+        tabindex="-1"
+        style="max-width: 760px; width: 92vw; max-height: 80vh; display: flex; flex-direction: column;"
+      >
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 0.85rem;">
+          <h3 style="margin: 0; word-break: break-word;">📄 {documentoVisualizar.filename}</h3>
+          <button
+            type="button"
+            onclick={() => documentoVisualizar = null}
+            class="modal-btn cancel"
+            style="padding: 0.4rem 0.7rem; font-size: 0.95rem;"
+            aria-label="Cerrar"
+            title="Cerrar (Esc)"
+          >✕</button>
+        </div>
+        <pre style="
+          flex: 1;
+          overflow: auto;
+          background: rgba(0, 0, 0, 0.35);
+          color: rgba(255, 255, 255, 0.92);
+          padding: 1rem;
+          border-radius: 8px;
+          font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+          font-size: 0.88rem;
+          line-height: 1.55;
+          white-space: pre-wrap;
+          word-break: break-word;
+          margin: 0;
+        ">{documentoVisualizar.contenido}</pre>
+        <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.85rem; flex-wrap: wrap;">
+          <button
+            type="button"
+            onclick={() => {
+              try {
+                navigator.clipboard.writeText(documentoVisualizar.contenido);
+                adminMensaje = '✅ Contenido copiado al portapapeles';
+                setTimeout(() => { adminMensaje = ''; }, 2000);
+              } catch {}
+            }}
+            class="modal-btn"
+            style="background: rgba(255,255,255,0.15); color: #fff; border-color: rgba(255,255,255,0.3);"
+          >📋 Copiar</button>
+          <button
+            type="button"
+            onclick={() => documentoVisualizar = null}
+            class="modal-btn cancel"
+          >Cerrar</button>
+        </div>
       </div>
     </div>
   {/if}
