@@ -67,7 +67,7 @@
 
   // Subir esta versión manualmente con cada despliegue para llevar control
   // visual de qué build está corriendo. Se muestra debajo del título del header.
-  const APP_VERSION = '0.6.8';
+  const APP_VERSION = '0.7.0';
 
   // Sin concepto de "ambiente". Las URLs se derivan del host donde corre la
   // app: el API siempre vive en el mismo host en :8077 y el host-asistentes
@@ -1020,6 +1020,19 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let snippetContenido = $state('');
   let cargandoAgregarSnippet = $state(false);
   let mensajeAgregarSnippet = $state('');
+
+  // === Batch de preguntas y respuestas ===
+  // Acumula varias Q&As en una lista y las integra de un jalón a la BC.
+  // Cada Q&A se convierte en su propio snippet (filename auto-generado por
+  // slugify de la pregunta), lo que mejora la calidad de retrieval con top_k=1.
+  let batchPreguntas = $state([]); // [{ id, pregunta, respuesta }]
+  let batchFormAbierto = $state(false);
+  let batchPreguntaTexto = $state('');
+  let batchRespuestaTexto = $state('');
+  let batchEditandoId = $state(null); // si distinto de null, el form está editando un item de la lista
+  let cargandoIntegrarBatch = $state(false);
+  let mensajeBatch = $state('');
+  let batchResultados = $state(null); // { ok: N, fail: N, errores: [...] } después de un Integrar
   // Modal de visualización inline para archivos de texto (snippets).
   // PDFs y binarios siguen abriendo en pestaña nueva vía blob URL.
   // contexto se guarda para poder hacer "Guardar" (POST /agregarSnippet con mismo
@@ -2094,6 +2107,151 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       mensajeAgregarSnippet = `❌ ${err.message}`;
     } finally {
       cargandoAgregarSnippet = false;
+    }
+  }
+
+  // === Batch de Q&As: helpers + funciones ===
+  // Convierte un texto a slug ASCII apto como filename (sin acentos, sin
+  // espacios, sin caracteres especiales). Cap a 50 chars para que el nombre
+  // sea legible. Si queda vacío, devuelve 'snippet'.
+  function slugifyPregunta(texto) {
+    const limpio = (texto || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '') // quita diacríticos (combining marks)
+      .replace(/[¿?¡!.,;:"'`(){}\[\]<>]/g, '') // quita puntuación común
+      .replace(/[^a-z0-9\s-]/g, '')           // quita lo demás no alfanumérico
+      .trim()
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 50)
+      .replace(/-+$/, '');
+    return limpio || 'snippet';
+  }
+
+  function abrirFormPregunta() {
+    batchFormAbierto = true;
+    batchEditandoId = null;
+    batchPreguntaTexto = '';
+    batchRespuestaTexto = '';
+    mensajeBatch = '';
+  }
+
+  function cancelarFormPregunta() {
+    batchFormAbierto = false;
+    batchEditandoId = null;
+    batchPreguntaTexto = '';
+    batchRespuestaTexto = '';
+  }
+
+  function confirmarPregunta() {
+    const pregunta = batchPreguntaTexto.trim();
+    const respuesta = batchRespuestaTexto.trim();
+    if (!pregunta) {
+      mensajeBatch = '❌ La pregunta no puede estar vacía.';
+      return;
+    }
+    if (!respuesta) {
+      mensajeBatch = '❌ La respuesta no puede estar vacía.';
+      return;
+    }
+    mensajeBatch = '';
+    if (batchEditandoId) {
+      batchPreguntas = batchPreguntas.map(p =>
+        p.id === batchEditandoId ? { ...p, pregunta, respuesta } : p
+      );
+    } else {
+      batchPreguntas = [
+        ...batchPreguntas,
+        { id: `q-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, pregunta, respuesta },
+      ];
+    }
+    cancelarFormPregunta();
+  }
+
+  function editarPreguntaDelBatch(item) {
+    batchFormAbierto = true;
+    batchEditandoId = item.id;
+    batchPreguntaTexto = item.pregunta;
+    batchRespuestaTexto = item.respuesta;
+    mensajeBatch = '';
+  }
+
+  function removerPreguntaDelBatch(id) {
+    batchPreguntas = batchPreguntas.filter(p => p.id !== id);
+  }
+
+  function limpiarBatch() {
+    if (!batchPreguntas.length) return;
+    if (!window.confirm(`Borrar las ${batchPreguntas.length} preguntas pendientes?`)) return;
+    batchPreguntas = [];
+    batchResultados = null;
+    cancelarFormPregunta();
+  }
+
+  async function integrarPreguntasBatch() {
+    if (!contextoSeleccionadoParaDocumentos.trim()) {
+      mensajeBatch = '❌ Selecciona una base de conocimiento primero.';
+      return;
+    }
+    if (batchPreguntas.length === 0) {
+      mensajeBatch = '❌ No hay preguntas en la lista.';
+      return;
+    }
+    cargandoIntegrarBatch = true;
+    mensajeBatch = '';
+    batchResultados = null;
+    const contexto = contextoSeleccionadoParaDocumentos;
+    // Genera filenames evitando duplicados dentro del mismo batch
+    // (si dos preguntas slugifican igual, se le agrega -2, -3, etc.).
+    const usados = new Set();
+    const items = batchPreguntas.map(p => {
+      let base = slugifyPregunta(p.pregunta);
+      let filename = `${base}.txt`;
+      let n = 2;
+      while (usados.has(filename)) {
+        filename = `${base}-${n}.txt`;
+        n++;
+      }
+      usados.add(filename);
+      return { ...p, filename };
+    });
+    // POSTs en paralelo
+    const results = await Promise.allSettled(items.map(async (it) => {
+      const url = `${apiUrl.base}/agregarSnippet?contexto=${encodeURIComponent(contexto)}`;
+      const body = { filename: it.filename, contenido: `P: ${it.pregunta}\nR: ${it.respuesta}` };
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        let msg = txt;
+        try { const j = JSON.parse(txt); msg = j.detail ?? msg; } catch {}
+        throw new Error(`HTTP ${res.status}: ${msg}`);
+      }
+      return it;
+    }));
+    const ok = results.filter(r => r.status === 'fulfilled').length;
+    const fail = results.length - ok;
+    const errores = results
+      .map((r, i) => r.status === 'rejected' ? { item: items[i], error: r.reason?.message ?? String(r.reason) } : null)
+      .filter(Boolean);
+    batchResultados = { ok, fail, errores };
+    cargandoIntegrarBatch = false;
+    if (fail === 0) {
+      mensajeBatch = `✅ ${ok} ${ok === 1 ? 'pregunta integrada' : 'preguntas integradas'} y vectorizadas`;
+      batchPreguntas = [];
+      await cargarDocumentosVectorizacion(contexto);
+      setTimeout(() => { mensajeBatch = ''; batchResultados = null; }, 3500);
+    } else {
+      mensajeBatch = `⚠️ ${ok} OK, ${fail} fallaron. Revisa los detalles abajo.`;
+      // Conservamos en batchPreguntas SOLO las que fallaron, para reintentar
+      const idsFallados = new Set(errores.map(e => e.item.id));
+      batchPreguntas = batchPreguntas.filter(p => idsFallados.has(p.id));
+      await cargarDocumentosVectorizacion(contexto);
     }
   }
 
@@ -3714,6 +3872,157 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               <p class="mensaje-documento" class:success={mensajeAgregarSnippet.includes('✅')}>
                 {mensajeAgregarSnippet}
               </p>
+            {/if}
+          </div>
+
+          <!-- Batch de Preguntas y Respuestas -->
+          <div class="integrar-documento-wrap" style="margin-top: 1rem;">
+            <h3>📚 Batch de Preguntas a <strong>{contextoSeleccionadoParaDocumentos}</strong></h3>
+            <p style="margin: 0 0 0.85rem; color: rgba(10, 26, 58, 0.7); font-size: 0.82rem; line-height: 1.45;">
+              Acumula varias Q&amp;As y vectorízalas todas de un jalón. Cada pregunta se guarda como su propio archivo (filename auto-generado), lo que mejora la precisión del retrieval — cada respuesta es un chunk independiente.
+            </p>
+
+            {#if !batchFormAbierto}
+              <button
+                type="button"
+                onclick={abrirFormPregunta}
+                disabled={cargandoIntegrarBatch}
+                class="integrar-documento-btn"
+                style="background: rgba(34,197,94,0.85); border-color: rgba(34,197,94,1);"
+              >
+                + Nueva Pregunta
+              </button>
+            {:else}
+              <div style="background: rgba(10, 26, 58, 0.08); border: 1px solid rgba(10, 26, 58, 0.2); border-radius: 8px; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem;">
+                <div class="form-field">
+                  <label for="batch-pregunta">Pregunta</label>
+                  <input
+                    id="batch-pregunta"
+                    type="text"
+                    bind:value={batchPreguntaTexto}
+                    placeholder="ej. ¿Cuál es el horario de atención?"
+                    class="documento-input"
+                    onkeydown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) confirmarPregunta(); }}
+                  />
+                </div>
+                <div class="form-field">
+                  <label for="batch-respuesta">Respuesta</label>
+                  <textarea
+                    id="batch-respuesta"
+                    bind:value={batchRespuestaTexto}
+                    rows="4"
+                    placeholder="ej. Lunes a viernes de 9 a 18 hrs."
+                    class="documento-input"
+                    style="font-family: inherit; resize: vertical; line-height: 1.5;"
+                  ></textarea>
+                </div>
+                <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+                  <button
+                    type="button"
+                    onclick={confirmarPregunta}
+                    disabled={!batchPreguntaTexto.trim() || !batchRespuestaTexto.trim()}
+                    class="integrar-documento-btn"
+                  >
+                    {batchEditandoId ? '✓ Actualizar' : '✓ OK'}
+                  </button>
+                  <button
+                    type="button"
+                    onclick={cancelarFormPregunta}
+                    class="integrar-documento-btn"
+                    style="background: rgba(10, 26, 58, 0.4); border-color: rgba(10, 26, 58, 0.5);"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            {/if}
+
+            {#if batchPreguntas.length > 0}
+              <div style="margin-top: 1rem;">
+                <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 0.5rem;">
+                  <h4 style="margin: 0; color: rgba(10, 26, 58, 0.85);">
+                    Tu set de preguntas ({batchPreguntas.length})
+                  </h4>
+                  <button
+                    type="button"
+                    onclick={limpiarBatch}
+                    disabled={cargandoIntegrarBatch}
+                    class="integrar-documento-btn"
+                    style="background: rgba(10, 26, 58, 0.3); border-color: rgba(10, 26, 58, 0.4); font-size: 0.78rem; padding: 0.35rem 0.7rem;"
+                  >
+                    🗑️ Limpiar lista
+                  </button>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.65rem;">
+                  {#each batchPreguntas as item, i (item.id)}
+                    {@const filenamePreview = `${slugifyPregunta(item.pregunta)}.txt`}
+                    <div style="background: rgba(255,255,255,0.55); border: 1px solid rgba(10, 26, 58, 0.2); border-radius: 6px; padding: 0.65rem 0.85rem; display: flex; gap: 0.75rem; align-items: flex-start;">
+                      <span style="color: rgba(10, 26, 58, 0.55); font-weight: 600; font-size: 0.8rem; min-width: 1.5rem;">{i + 1}.</span>
+                      <div style="flex: 1; min-width: 0;">
+                        <div style="color: rgba(10, 26, 58, 0.95); font-weight: 600; font-size: 0.88rem; word-break: break-word;">
+                          {item.pregunta}
+                        </div>
+                        <div style="color: rgba(10, 26, 58, 0.7); font-size: 0.82rem; margin-top: 0.2rem; line-height: 1.4; word-break: break-word;">
+                          {item.respuesta}
+                        </div>
+                        <code style="display: inline-block; margin-top: 0.3rem; font-size: 0.72rem; color: rgba(10, 26, 58, 0.5); background: rgba(10, 26, 58, 0.08); padding: 1px 6px; border-radius: 3px;">
+                          → {filenamePreview}
+                        </code>
+                      </div>
+                      <div style="display: flex; gap: 0.3rem; flex-shrink: 0;">
+                        <button
+                          type="button"
+                          onclick={() => editarPreguntaDelBatch(item)}
+                          disabled={cargandoIntegrarBatch}
+                          class="vectorizacion-action-btn"
+                          title="Editar"
+                          style="padding: 0.3rem 0.5rem;"
+                        ><Icon name="editar" size={14} /></button>
+                        <button
+                          type="button"
+                          onclick={() => removerPreguntaDelBatch(item.id)}
+                          disabled={cargandoIntegrarBatch}
+                          class="vectorizacion-action-btn"
+                          title="Remover"
+                          style="padding: 0.3rem 0.5rem;"
+                        ><Icon name="borrar" size={14} /></button>
+                      </div>
+                    </div>
+                  {/each}
+                </div>
+
+                <button
+                  type="button"
+                  onclick={integrarPreguntasBatch}
+                  disabled={cargandoIntegrarBatch || batchPreguntas.length === 0 || !contextoSeleccionadoParaDocumentos.trim()}
+                  class="integrar-documento-btn"
+                  style="margin-top: 0.85rem;"
+                >
+                  {cargandoIntegrarBatch
+                    ? `⟳ Vectorizando ${batchPreguntas.length}...`
+                    : `✓ Integrar ${batchPreguntas.length} ${batchPreguntas.length === 1 ? 'Pregunta' : 'Preguntas'}`}
+                </button>
+              </div>
+            {/if}
+
+            {#if mensajeBatch}
+              <p class="mensaje-documento" class:success={mensajeBatch.includes('✅')} style="margin-top: 0.75rem;">
+                {mensajeBatch}
+              </p>
+            {/if}
+
+            {#if batchResultados && batchResultados.fail > 0}
+              <div style="margin-top: 0.75rem; padding: 0.75rem; background: rgba(200,40,40,0.12); border: 1px solid rgba(200,40,40,0.35); border-radius: 6px;">
+                <strong style="color: rgba(150,20,20,0.95); font-size: 0.85rem;">Errores ({batchResultados.fail}):</strong>
+                <ul style="margin: 0.4rem 0 0 1.2rem; padding: 0; color: rgba(150,20,20,0.85); font-size: 0.8rem;">
+                  {#each batchResultados.errores as err (err.item.id)}
+                    <li><strong>{err.item.pregunta}</strong> — {err.error}</li>
+                  {/each}
+                </ul>
+                <p style="margin: 0.5rem 0 0; font-size: 0.75rem; color: rgba(10,26,58,0.65);">
+                  Las preguntas fallidas se quedan en la lista para que las reintentes.
+                </p>
+              </div>
             {/if}
           </div>
         {/if}
