@@ -2872,6 +2872,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             class="vectorizacion-subtab-btn"
             class:active={vectorizacionTab === 'contextos' || vectorizacionTab === 'documentos'}
             onclick={() => { vectorizacionTab = 'contextos'; vinoDeEditarContexto = false; }}
+            disabled={!proyectoActivo}
+            title={!proyectoActivo ? 'Selecciona un proyecto primero' : ''}
           >
             <Icon name="base-conocimiento" size={16} /> Bases de Conocimiento
           </button>
@@ -2879,6 +2881,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             class="vectorizacion-subtab-btn"
             class:active={vectorizacionTab === 'asistente'}
             onclick={() => { vectorizacionTab = 'asistente'; cargarAsistentes(); cargarContextos(); }}
+            disabled={!proyectoActivo}
+            title={!proyectoActivo ? 'Selecciona un proyecto primero' : ''}
           >
             <Icon name="asistente" size={16} /> Asistentes
           </button>
@@ -2886,6 +2890,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             class="vectorizacion-subtab-btn"
             class:active={vectorizacionTab === 'sandbox'}
             onclick={() => { vectorizacionTab = 'sandbox'; cargarAsistentes(); }}
+            disabled={!proyectoActivo}
+            title={!proyectoActivo ? 'Selecciona un proyecto primero' : ''}
           >
             <Icon name="sandbox" size={16} /> Sandbox
           </button>
@@ -2893,6 +2899,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             class="vectorizacion-subtab-btn"
             class:active={vectorizacionTab === 'miniadmin'}
             onclick={() => { vectorizacionTab = 'miniadmin'; cargarAsistentes(); }}
+            disabled={!proyectoActivo}
+            title={!proyectoActivo ? 'Selecciona un proyecto primero' : ''}
           >
             <Icon name="miniadmin" size={16} /> MiniAdmin
           </button>
