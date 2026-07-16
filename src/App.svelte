@@ -646,18 +646,21 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     if (isAdmin) {
       proyectoActivoId = p.id;
       vinoDeCambiarProyecto = false;
+      vinoDeActivarProyecto = true;
       return;
     }
     // Sin password → activa directo.
     if (!p.requires_password) {
       proyectoActivoId = p.id;
       vinoDeCambiarProyecto = false;
+      vinoDeActivarProyecto = true;
       return;
     }
     // Ya desbloqueado en esta sesión → activa.
     if (proyectoYaDesbloqueado(p.id)) {
       proyectoActivoId = p.id;
       vinoDeCambiarProyecto = false;
+      vinoDeActivarProyecto = true;
       return;
     }
     // Pedir password.
@@ -699,6 +702,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       marcarProyectoDesbloqueado(proyectoParaDesbloquear.id);
       proyectoActivoId = proyectoParaDesbloquear.id;
       vinoDeCambiarProyecto = false;
+      vinoDeActivarProyecto = true;
       cerrarPromptPassword();
     } catch (err) {
       errorPasswordProyecto = `❌ ${err.message}`;
@@ -866,11 +870,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       const proyectoCreado = await res.json();
       mensajeProyecto = editando ? '✅ Proyecto actualizado' : '✅ Proyecto creado';
       await cargarProyectos();
-      // Si fue creación, auto-activarlo y marcar el flujo "vino de crear proyecto"
+      // Si fue creación, auto-activarlo y marcar el flujo "vino de activar proyecto"
       // para que aparezca la flechita guiando hacia Base de Conocimiento.
       if (!editando && proyectoCreado?.id) {
         proyectoActivoId = proyectoCreado.id;
-        vinoDeCrearProyecto = true;
+        vinoDeActivarProyecto = true;
       }
       setTimeout(() => cerrarFormProyecto(), 800);
     } catch (err) {
@@ -1005,7 +1009,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let documentoSeleccionadoParaBorrar = $state('');
   let contextoSeleccionadoParaDocumentos = $state('');
   let vinoDeEditarContexto = $state(false);
-  let vinoDeCrearProyecto = $state(false);
+  let vinoDeActivarProyecto = $state(false);
   let vinoDeCambiarProyecto = $state(false);
   let crearContextoAbierto = $state(false);
   let archivoParaIntegrar = $state(null);
@@ -2861,17 +2865,17 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           <button
             class="vectorizacion-subtab-btn"
             class:active={vectorizacionTab === 'proyectos'}
-            onclick={() => { vectorizacionTab = 'proyectos'; vinoDeCrearProyecto = false; vinoDeCambiarProyecto = false; cargarProyectos(); }}
+            onclick={() => { vectorizacionTab = 'proyectos'; vinoDeActivarProyecto = false; vinoDeCambiarProyecto = false; cargarProyectos(); }}
           >
             <Icon name="proyecto" size={16} /> Proyectos
           </button>
-          {#if vinoDeCrearProyecto && vectorizacionContextos.length === 0}
+          {#if vinoDeActivarProyecto && proyectoActivo}
             <span class="subtab-arrow-indicator" aria-hidden="true">»</span>
           {/if}
           <button
             class="vectorizacion-subtab-btn"
             class:active={vectorizacionTab === 'contextos' || vectorizacionTab === 'documentos'}
-            onclick={() => { vectorizacionTab = 'contextos'; vinoDeEditarContexto = false; }}
+            onclick={() => { vectorizacionTab = 'contextos'; vinoDeEditarContexto = false; vinoDeActivarProyecto = false; }}
             disabled={!proyectoActivo}
             title={!proyectoActivo ? 'Selecciona un proyecto primero' : ''}
           >
