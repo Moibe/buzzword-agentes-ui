@@ -1357,6 +1357,17 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       asistentes = await res.json();
+      // Sandbox/MiniAdmin recuerdan el último asistente elegido en localStorage,
+      // pero esa selección no está atada a un proyecto. Si al cambiar de
+      // proyecto el asistente seleccionado ya no aparece en la lista (es de
+      // otro proyecto o fue borrado), limpiarla para no seguir apuntando al
+      // widget equivocado.
+      if (lightbotAsistenteSlug && !asistentes.some((a) => a.slug === lightbotAsistenteSlug)) {
+        lightbotAsistenteSlug = '';
+      }
+      if (contextlightAsistenteSlug && !asistentes.some((a) => a.slug === contextlightAsistenteSlug)) {
+        contextlightAsistenteSlug = '';
+      }
     } catch (err) {
       errorCargarAsistentes = `No se pudieron cargar los asistentes: ${err.message}`;
       asistentes = [];
