@@ -189,7 +189,17 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let inputText = $state('');
   let isLoading = $state(false);
   let chatContainer = $state(null);
+  let chatTextareaEl = $state(null);
   let activeTab = $state('vectorizacion');
+
+  // Autocrece el textarea del chat con el contenido para que nunca se vea una
+  // línea cortada a la mitad — o se ve la línea completa, o el textarea crece.
+  $effect(() => {
+    inputText;
+    if (!chatTextareaEl) return;
+    chatTextareaEl.style.height = 'auto';
+    chatTextareaEl.style.height = `${chatTextareaEl.scrollHeight}px`;
+  });
 
   // ─── Admin gate ────────────────────────────────────────────
   // Modo admin: visible solo si el usuario entró alguna vez con la URL
@@ -2824,6 +2834,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         </svg>
       </button>
       <textarea
+        bind:this={chatTextareaEl}
         bind:value={inputText}
         onkeydown={handleKeydown}
         placeholder={asistenteSeleccionado ? "Escribe tu mensaje..." : "Selecciona un asistente primero"}
@@ -6130,6 +6141,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   textarea {
     flex: 1;
+    box-sizing: border-box;
     background: none;
     border: none;
     outline: none;

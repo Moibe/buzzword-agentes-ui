@@ -17,7 +17,17 @@
   let inputText = $state('');
   let isLoading = $state(false);
   let chatContainer;
+  let textareaEl;
   let configError = $state('');
+
+  // Autocrece el textarea con el contenido para que nunca se vea una línea
+  // cortada a la mitad — o se ve la línea completa, o el textarea crece.
+  $effect(() => {
+    inputText;
+    if (!textareaEl) return;
+    textareaEl.style.height = 'auto';
+    textareaEl.style.height = `${textareaEl.scrollHeight}px`;
+  });
 
   const maxTurnos = $derived(asistente?.historial_max ?? 5);
 
@@ -280,6 +290,7 @@
   <footer class="embed-input-area">
     <div class="embed-input-container">
       <textarea
+        bind:this={textareaEl}
         bind:value={inputText}
         onkeydown={handleKeydown}
         placeholder={asistente ? "Escribe tu mensaje..." : "Cargando asistente..."}
@@ -559,6 +570,7 @@
 
   textarea {
     flex: 1;
+    box-sizing: border-box;
     background: none;
     border: none;
     outline: none;
