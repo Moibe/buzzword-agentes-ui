@@ -1378,6 +1378,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       if (contextlightAsistenteSlug && !asistentes.some((a) => a.slug === contextlightAsistenteSlug)) {
         contextlightAsistenteSlug = '';
       }
+      // Mismo caso para el tab Chatbot: si el asistente seleccionado ya no
+      // pertenece al proyecto activo, limpiarlo.
+      if (asistenteSeleccionadoId && !asistentes.some((a) => a.id === asistenteSeleccionadoId)) {
+        asistenteSeleccionadoId = '';
+      }
     } catch (err) {
       errorCargarAsistentes = `No se pudieron cargar los asistentes: ${err.message}`;
       asistentes = [];
@@ -2431,9 +2436,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   const maxTurnos = $derived(asistenteSeleccionado?.historial_max ?? 5);
 
   $effect(() => {
-    if (typeof localStorage !== 'undefined' && asistenteSeleccionadoId) {
-      localStorage.setItem('mide_agente_id', asistenteSeleccionadoId);
-    }
+    if (typeof localStorage === 'undefined') return;
+    if (asistenteSeleccionadoId) localStorage.setItem('mide_agente_id', asistenteSeleccionadoId);
+    else localStorage.removeItem('mide_agente_id');
   });
 
   // Construye el historial en formato role/content (últimos N turnos)
@@ -2505,13 +2510,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     inputText = '';
   }
 
-  // Cuando el usuario cambia el asistente seleccionado y aún no hay
-  // conversación activa, sincroniza el saludo de bienvenida con el
-  // mensaje_inicial del nuevo asistente. Usamos untrack al leer messages
-  // para evitar un loop reactivo (el effect se gatilla solo por
-  // asistenteSeleccionado, no por su propia escritura).
+  // Cuando cambia el asistente seleccionado (incluido el caso en que deja de
+  // ser válido, p.ej. al cambiar de proyecto) y aún no hay conversación
+  // activa, sincroniza el saludo de bienvenida con el mensaje_inicial del
+  // asistente actual (o el genérico si ya no hay ninguno). Usamos untrack al
+  // leer messages para evitar un loop reactivo (el effect se gatilla solo
+  // por asistenteSeleccionado, no por su propia escritura).
   $effect(() => {
-    if (!asistenteSeleccionado) return;
+    asistenteSeleccionado; // dependencia explícita (no operación, solo tracking)
     untrack(() => {
       if (messages.length === 1 && messages[0]?.role === 'bot') {
         messages = [buildMensajeInicial()];
