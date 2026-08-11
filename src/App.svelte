@@ -1445,6 +1445,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let mostrarConfirmacionBorrarUsuario = $state(false);
   let usuarioABorrar = $state(null);
   let cargandoBorrarUsuario = $state(false);
+  // Un usuario es del proyecto, no de un asistente puntual — si el proyecto
+  // tiene varios asistentes, el admin elige para cuál generar el link.
+  // { [usuarioId]: slugAsistenteElegido }
+  let usuarioUrlAsistenteSlug = $state({});
 
   async function cargarUsuarios() {
     if (!proyectoActivoId) { usuarios = []; return; }
@@ -3929,6 +3933,33 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                         <p style="color: rgba(255,255,255,0.7); font-size: 0.85rem; margin: 0.5rem 0 0 0; line-height: 1.4;">
                           {u.notas}
                         </p>
+                      {/if}
+                      {#if asistentes.length === 0}
+                        <p style="margin: 0.6rem 0 0 0; font-size: 0.78rem; color: rgba(255,255,255,0.5);">
+                          Crea un asistente en este proyecto para generar el link de este usuario.
+                        </p>
+                      {:else}
+                        {@const slugAsistenteElegido = usuarioUrlAsistenteSlug[u.id] || asistentes[0].slug}
+                        {@const urlUsuario = `${hostAsistentesBase}/embed/chat/${encodeURIComponent(slugAsistenteElegido)}?usuario=${encodeURIComponent(u.slug)}`}
+                        <div style="margin-top: 0.6rem; padding-top: 0.6rem; border-top: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
+                          {#if asistentes.length > 1}
+                            <select
+                              value={slugAsistenteElegido}
+                              onchange={(e) => { usuarioUrlAsistenteSlug = { ...usuarioUrlAsistenteSlug, [u.id]: e.target.value }; }}
+                              class="contexto-select"
+                              style="padding: 0.3rem 0.5rem; font-size: 0.78rem; flex-shrink: 0;"
+                              title="Para qué asistente generar el link"
+                            >
+                              {#each asistentes as a (a.id)}
+                                <option value={a.slug}>{a.nombre}</option>
+                              {/each}
+                            </select>
+                          {/if}
+                          <code style="background: rgba(0,0,0,0.3); padding: 3px 8px; border-radius: 4px; font-size: 0.78rem; color: rgba(255,255,255,0.85); word-break: break-all; flex: 1; min-width: 200px;">{urlUsuario}</code>
+                          <button class="url-action-btn" onclick={() => copiarUrl(urlUsuario)} title="Copiar URL">
+                            {urlCopiada === urlUsuario ? '✓ Copiado' : '📋 Copiar'}
+                          </button>
+                        </div>
                       {/if}
                     </div>
                     {#if isAdmin}
