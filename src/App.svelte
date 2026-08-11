@@ -1450,6 +1450,17 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     usuarioFormAbierto = true;
   }
 
+  // El slug no puede llevar espacios (va literal en la URL ?usuario=<slug>).
+  // En vez de solo rechazar al guardar, lo convertimos mientras se escribe:
+  // espacios → guion, minúsculas, y se descarta cualquier otro carácter que
+  // no sea a-z/0-9/guion.
+  function sanitizarSlugUsuario(e) {
+    usuarioFormSlug = e.target.value
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9-]/g, '');
+  }
+
   function cerrarFormUsuario() {
     usuarioFormAbierto = false;
   }
@@ -3779,7 +3790,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             </div>
           {/if}
 
-          <p style="color: rgba(255,255,255,0.65); font-size: 0.85rem; margin: 0 0 1rem 0; line-height: 1.5; max-width: 720px;">
+          <p style="background: rgba(0,0,0,0.18); border-radius: 8px; padding: 0.75rem 1rem; color: rgba(255,255,255,0.85); font-size: 0.85rem; margin: 0 0 1rem 0; line-height: 1.5; max-width: 720px;">
             No es login: los widgets se embeben sin cuenta ni password. Esto es una
             etiqueta para identificar a quién le atribuir cada consulta en Registros
             y Consumo (ej. testers de un cliente). Comparte la URL del widget con
@@ -3808,11 +3819,12 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     type="text"
                     placeholder="ej: cristian-qa"
                     bind:value={usuarioFormSlug}
+                    oninput={sanitizarSlugUsuario}
                     disabled={guardandoUsuario || !!usuarioEditandoId}
                     class="contexto-input"
                   />
                   <small style="font-size: 0.75rem; color: rgba(0,0,0,0.6); line-height: 1.3; display: block; margin-top: 0.25rem;">
-                    Va en la URL como <code>?usuario={usuarioFormSlug || '&lt;slug&gt;'}</code>. Lowercase, dígitos y guiones.
+                    Va en la URL literal como <code>?usuario={usuarioFormSlug || '&lt;slug&gt;'}</code>. No lleva espacios — si tipeas uno, se convierte a guion automáticamente.
                   </small>
                 </div>
                 <div class="form-field">
