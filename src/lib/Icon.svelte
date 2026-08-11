@@ -19,6 +19,7 @@
     'admin':                { emoji: '⚙️', iconify: 'ph:gear-fill' },
     'proyecto':             { emoji: '📁', iconify: 'ph:folders-fill' },
     'asistente':            { emoji: '🎧', iconify: 'ph:headset-fill' },
+    'usuario':              { emoji: '🙋', iconify: 'ph:identification-card-fill' },
     'base-conocimiento':    { emoji: '📚', iconify: 'ph:books-fill' },
     'documentos':           { emoji: '📄', iconify: 'ph:file-text-fill' },
     'lightbot':             { emoji: '🤖', iconify: 'ph:robot-fill' },

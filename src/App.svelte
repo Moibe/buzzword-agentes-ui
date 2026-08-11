@@ -107,6 +107,7 @@
     untrack(() => {
       cargarContextos();
       cargarAsistentes();
+      cargarUsuarios();
       if (activeTab === 'vectorizacion') {
         cargarContextosVectorizacion();
       }
@@ -347,6 +348,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
   let consumoDesde = $state(fechaHaceDias(30));
   let consumoHasta = $state(fechaHoy());
+  let consumoUsuarioFiltro = $state('');
   let consumoData = $state(null);
   let cargandoConsumo = $state(false);
   let errorConsumo = $state('');
@@ -355,7 +357,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     cargandoConsumo = true;
     errorConsumo = '';
     try {
-      const url = `${apiUrl.base}/consumo/resumen?desde=${encodeURIComponent(consumoDesde)}&hasta=${encodeURIComponent(consumoHasta)}`;
+      let url = `${apiUrl.base}/consumo/resumen?desde=${encodeURIComponent(consumoDesde)}&hasta=${encodeURIComponent(consumoHasta)}`;
+      if (consumoUsuarioFiltro) url += `&usuario=${encodeURIComponent(consumoUsuarioFiltro)}`;
       const res = await fetch(url);
       if (!res.ok) {
         const txt = await res.text().catch(() => '');
@@ -396,6 +399,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let registrosHasta = $state(fechaHoy());
   let registrosProyectoFiltro = $state('');
   let registrosAsistenteFiltro = $state('');
+  let registrosUsuarioFiltro = $state('');
   let registrosSoloErrores = $state(false);
   let registrosLimit = $state(50);
   let registrosOffset = $state(0);
@@ -416,6 +420,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       });
       if (registrosProyectoFiltro) params.set('proyecto', registrosProyectoFiltro);
       if (registrosAsistenteFiltro) params.set('asistente', registrosAsistenteFiltro);
+      if (registrosUsuarioFiltro) params.set('usuario', registrosUsuarioFiltro);
       if (registrosSoloErrores) params.set('solo_errores', 'true');
       const res = await fetch(`${apiUrl.base}/registros?${params.toString()}`, {
         headers: adminHeaders(),
@@ -1388,6 +1393,153 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       asistentes = [];
     } finally {
       cargandoAsistentes = false;
+    }
+  }
+
+  // ─── Usuarios finales (CRUD) ────────────────────────────────────
+  // Identificación NO autenticada de quien usa el widget embebido (ej.
+  // "Cristian QA", "Bryan PO"), scoped por proyecto. El backend los resuelve
+  // vía ?usuario=<slug> en /chatbot y los denormaliza en chat_logs — ver
+  // constructor-agente-rag/usuarios.py.
+  let usuarios = $state([]);
+  let cargandoUsuarios = $state(false);
+  let errorCargarUsuarios = $state('');
+  let usuarioFormAbierto = $state(false);
+  let usuarioEditandoId = $state(null);
+  let usuarioFormSlug = $state('');
+  let usuarioFormNombre = $state('');
+  let usuarioFormNotas = $state('');
+  let guardandoUsuario = $state(false);
+  let mensajeUsuario = $state('');
+  let mostrarConfirmacionBorrarUsuario = $state(false);
+  let usuarioABorrar = $state(null);
+  let cargandoBorrarUsuario = $state(false);
+
+  async function cargarUsuarios() {
+    if (!proyectoActivoId) { usuarios = []; return; }
+    cargandoUsuarios = true;
+    errorCargarUsuarios = '';
+    try {
+      const res = await fetch(`${apiUrl.base}/usuarios?proyecto_id=${encodeURIComponent(proyectoActivoId)}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      usuarios = data.usuarios ?? [];
+    } catch (err) {
+      errorCargarUsuarios = `No se pudieron cargar los usuarios: ${err.message}`;
+      usuarios = [];
+    } finally {
+      cargandoUsuarios = false;
+    }
+  }
+
+  function abrirFormCrearUsuario() {
+    usuarioEditandoId = null;
+    usuarioFormSlug = '';
+    usuarioFormNombre = '';
+    usuarioFormNotas = '';
+    mensajeUsuario = '';
+    usuarioFormAbierto = true;
+  }
+
+  function abrirFormEditarUsuario(u) {
+    usuarioEditandoId = u.id;
+    usuarioFormSlug = u.slug;
+    usuarioFormNombre = u.nombre;
+    usuarioFormNotas = u.notas ?? '';
+    mensajeUsuario = '';
+    usuarioFormAbierto = true;
+  }
+
+  function cerrarFormUsuario() {
+    usuarioFormAbierto = false;
+  }
+
+  async function guardarUsuario() {
+    const slug = usuarioFormSlug.trim();
+    const nombre = usuarioFormNombre.trim();
+    if (!usuarioEditandoId && !proyectoActivoId) {
+      mensajeUsuario = '❌ No hay proyecto activo. Selecciona uno en la subtab Proyectos.';
+      return;
+    }
+    if (!usuarioEditandoId && !SLUG_REGEX.test(slug)) {
+      mensajeUsuario = '❌ Slug inválido. Minúsculas, dígitos y guiones (ej: cristian-qa).';
+      return;
+    }
+    if (!nombre) {
+      mensajeUsuario = '❌ El nombre no puede estar vacío.';
+      return;
+    }
+    guardandoUsuario = true;
+    mensajeUsuario = '';
+    try {
+      const editando = !!usuarioEditandoId;
+      const url = editando
+        ? `${apiUrl.base}/usuarios/${encodeURIComponent(usuarioEditandoId)}`
+        : `${apiUrl.base}/usuarios`;
+      const body = editando
+        ? { nombre, notas: usuarioFormNotas || null }
+        : { proyecto_id: proyectoActivoId, slug, nombre, notas: usuarioFormNotas || null };
+
+      const res = await fetch(url, {
+        method: editando ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json', ...adminHeaders() },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        let msg = txt;
+        try {
+          const j = JSON.parse(txt);
+          msg = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail ?? j);
+        } catch {}
+        if (res.status === 409) throw new Error('Ya existe un usuario con ese slug en este proyecto.');
+        throw new Error(`HTTP ${res.status}: ${msg}`);
+      }
+      mensajeUsuario = editando ? '✅ Usuario actualizado' : '✅ Usuario creado';
+      await cargarUsuarios();
+      setTimeout(() => cerrarFormUsuario(), 800);
+    } catch (err) {
+      mensajeUsuario = `❌ ${err.message}`;
+    } finally {
+      guardandoUsuario = false;
+    }
+  }
+
+  async function toggleActivoUsuario(u) {
+    try {
+      const res = await fetch(`${apiUrl.base}/usuarios/${encodeURIComponent(u.id)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...adminHeaders() },
+        body: JSON.stringify({ activo: !u.activo }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await cargarUsuarios();
+    } catch (err) {
+      errorCargarUsuarios = `No se pudo actualizar el usuario: ${err.message}`;
+    }
+  }
+
+  function pedirConfirmacionBorrarUsuario(u) {
+    usuarioABorrar = u;
+    mostrarConfirmacionBorrarUsuario = true;
+  }
+
+  async function borrarUsuarioConfirmado() {
+    if (!usuarioABorrar) return;
+    cargandoBorrarUsuario = true;
+    try {
+      const res = await fetch(`${apiUrl.base}/usuarios/${encodeURIComponent(usuarioABorrar.id)}`, {
+        method: 'DELETE',
+        headers: adminHeaders(),
+      });
+      if (!res.ok && res.status !== 204) throw new Error(`HTTP ${res.status}`);
+      mostrarConfirmacionBorrarUsuario = false;
+      usuarioABorrar = null;
+      await cargarUsuarios();
+    } catch (err) {
+      errorCargarUsuarios = `No se pudo borrar el usuario: ${err.message}`;
+    } finally {
+      cargandoBorrarUsuario = false;
     }
   }
 
@@ -2920,6 +3072,15 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           </button>
           <button
             class="vectorizacion-subtab-btn"
+            class:active={vectorizacionTab === 'usuarios'}
+            onclick={() => { vectorizacionTab = 'usuarios'; cargarUsuarios(); }}
+            disabled={!proyectoActivo}
+            title={!proyectoActivo ? 'Selecciona un proyecto primero' : ''}
+          >
+            <Icon name="usuario" size={16} /> Usuarios
+          </button>
+          <button
+            class="vectorizacion-subtab-btn"
             class:active={vectorizacionTab === 'sandbox'}
             onclick={() => { vectorizacionTab = 'sandbox'; cargarAsistentes(); }}
             disabled={!proyectoActivo}
@@ -3591,6 +3752,178 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     {cargandoGuardarTema ? '⟳ Guardando...' : '✓ Guardar'}
                   </button>
                 </div>
+              </div>
+            </div>
+          {/if}
+        {/if}
+
+        <!-- Usuarios -->
+        {#if vectorizacionTab === 'usuarios'}
+          {#if proyectoActivo}
+            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.85rem; background: rgba(0,0,0,0.18); border-radius: 8px; margin-bottom: 1rem; font-size: 0.85rem; color: rgba(255,255,255,0.85);">
+              <Icon name="proyecto" size={14} />
+              <span>Trabajando en proyecto: <strong>{proyectoActivo.nombre}</strong></span>
+              <code style="background: rgba(0,0,0,0.3); padding: 1px 6px; border-radius: 4px; font-size: 0.75rem; color: rgba(255,255,255,0.7);">{proyectoActivo.slug}</code>
+              <button
+                onclick={() => { vectorizacionTab = 'proyectos'; vinoDeCambiarProyecto = true; cargarProyectos(); }}
+                style="margin-left: auto; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.9); cursor: pointer; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 5px; transition: background 0.15s;"
+                onmouseover={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.22)'}
+                onmouseout={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.12)'}
+                title="Ir a Proyectos para cambiar el proyecto activo"
+              >Cambiar de proyecto</button>
+            </div>
+          {:else}
+            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1rem; background: rgba(200,40,40,0.85); border-radius: 8px; margin-bottom: 1rem; color: #fff; font-size: 0.9rem;">
+              <Icon name="warning" size={16} />
+              <span>No hay proyecto activo. Crea o selecciona uno en <strong>📁 Proyectos</strong> antes de crear usuarios.</span>
+            </div>
+          {/if}
+
+          <p style="color: rgba(255,255,255,0.65); font-size: 0.85rem; margin: 0 0 1rem 0; line-height: 1.5; max-width: 720px;">
+            No es login: los widgets se embeben sin cuenta ni password. Esto es una
+            etiqueta para identificar a quién le atribuir cada consulta en Registros
+            y Consumo (ej. testers de un cliente). Comparte la URL del widget con
+            <code style="background: rgba(0,0,0,0.3); padding: 1px 6px; border-radius: 4px;">?usuario=&lt;slug&gt;</code>
+            una sola vez — el navegador de esa persona lo recuerda después, y puede
+            volver a usar la URL universal sin el query param.
+          </p>
+
+          {#if isAdmin}
+          <div class="crear-contexto-wrap" class:abierto={usuarioFormAbierto}>
+            <button class="crear-contexto-toggle" onclick={() => usuarioFormAbierto ? cerrarFormUsuario() : abrirFormCrearUsuario()}>
+              <h3>
+                {#if usuarioEditandoId}
+                  <Icon name="editar" size={18} /> Editar Usuario
+                {:else}
+                  <Icon name="crear" size={18} /> Crear Nuevo Usuario
+                {/if}
+              </h3>
+            </button>
+            {#if usuarioFormAbierto}
+              <div class="crear-contexto-form" style="flex-direction: column; align-items: stretch; max-width: 600px;">
+                <div class="form-field">
+                  <label for="usuario-slug">Slug {usuarioEditandoId ? '(no modificable)' : ''}</label>
+                  <input
+                    id="usuario-slug"
+                    type="text"
+                    placeholder="ej: cristian-qa"
+                    bind:value={usuarioFormSlug}
+                    disabled={guardandoUsuario || !!usuarioEditandoId}
+                    class="contexto-input"
+                  />
+                  <small style="font-size: 0.75rem; color: rgba(0,0,0,0.6); line-height: 1.3; display: block; margin-top: 0.25rem;">
+                    Va en la URL como <code>?usuario={usuarioFormSlug || '&lt;slug&gt;'}</code>. Lowercase, dígitos y guiones.
+                  </small>
+                </div>
+                <div class="form-field">
+                  <label for="usuario-nombre">Nombre</label>
+                  <input
+                    id="usuario-nombre"
+                    type="text"
+                    placeholder="ej: Cristian QA"
+                    bind:value={usuarioFormNombre}
+                    disabled={guardandoUsuario}
+                    maxlength="80"
+                    class="contexto-input"
+                  />
+                </div>
+                <div class="form-field">
+                  <label for="usuario-notas">Notas (opcional)</label>
+                  <textarea
+                    id="usuario-notas"
+                    bind:value={usuarioFormNotas}
+                    disabled={guardandoUsuario}
+                    rows="2"
+                    maxlength="300"
+                    class="contexto-input"
+                    style="font-family: inherit; resize: vertical;"
+                    placeholder="Para qué prueba, a qué empresa pertenece..."
+                  ></textarea>
+                </div>
+                {#if mensajeUsuario}
+                  <p class="mensaje-contexto">{mensajeUsuario}</p>
+                {/if}
+                <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                  <button onclick={cerrarFormUsuario} disabled={guardandoUsuario} class="crear-contexto-btn" style="background: rgba(0,0,0,0.45); color: rgba(255,255,255,0.95);">
+                    Cancelar
+                  </button>
+                  <button onclick={guardarUsuario} disabled={guardandoUsuario} class="crear-contexto-btn">
+                    {guardandoUsuario ? '⟳ Guardando...' : '✓ Guardar'}
+                  </button>
+                </div>
+              </div>
+            {/if}
+          </div>
+          {/if}
+
+          <div class="contextos-table-wrap">
+            <div class="seccion-header">
+              <h3><Icon name="usuario" size={18} /> Usuarios de este Proyecto</h3>
+              <button onclick={cargarUsuarios} class="vectorizacion-action-btn contextos-recargar-btn" disabled={cargandoUsuarios} aria-label="Recargar usuarios" title="Recargar usuarios">
+                <Icon name="recargar" size={16} />
+              </button>
+            </div>
+            {#if errorCargarUsuarios}
+              <p class="mensaje-contexto" style="margin-top: 0.5rem;">❌ {errorCargarUsuarios}</p>
+            {/if}
+            {#if cargandoUsuarios}
+              <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando usuarios...</p>
+            {:else if usuarios.length === 0}
+              <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem; padding: 1rem 0;">No hay usuarios creados todavía para este proyecto.</p>
+            {:else}
+              <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.5rem;">
+                {#each usuarios as u (u.id)}
+                  <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 1rem; display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; opacity: {u.activo ? 1 : 0.55};">
+                    <div style="flex: 1; min-width: 0;">
+                      <div style="display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap;">
+                        {#if !u.activo}
+                          <span style="color: rgba(255,255,255,0.6); font-size: 0.75rem; font-weight: 600;">INACTIVO</span>
+                        {/if}
+                        <strong style="color: #fff; font-size: 1rem;">{u.nombre}</strong>
+                        <code style="background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; color: rgba(255,255,255,0.75);">{u.slug}</code>
+                      </div>
+                      {#if u.notas}
+                        <p style="color: rgba(255,255,255,0.7); font-size: 0.85rem; margin: 0.5rem 0 0 0; line-height: 1.4;">
+                          {u.notas}
+                        </p>
+                      {/if}
+                    </div>
+                    {#if isAdmin}
+                      <div style="display: flex; gap: 0.4rem; flex-shrink: 0; align-items: center;">
+                        <button onclick={() => toggleActivoUsuario(u)} class="vectorizacion-action-btn" title={u.activo ? 'Desactivar' : 'Activar'}>
+                          <Icon name={u.activo ? 'reset' : 'check'} size={16} label={u.activo ? 'Desactivar' : 'Activar'} />
+                        </button>
+                        <button onclick={() => abrirFormEditarUsuario(u)} class="vectorizacion-action-btn" title="Editar usuario">
+                          <Icon name="editar" size={16} label="Editar" />
+                        </button>
+                        <button onclick={() => pedirConfirmacionBorrarUsuario(u)} class="vectorizacion-action-btn" title="Borrar usuario">
+                          <Icon name="borrar" size={16} label="Borrar" />
+                        </button>
+                      </div>
+                    {/if}
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          </div>
+
+          {#if mostrarConfirmacionBorrarUsuario && usuarioABorrar}
+            <div class="confirmacion-borrar">
+              <h3><Icon name="warning" size={18} /> Confirmar Borrado de Usuario</h3>
+              <p style="color: rgba(255,255,255,0.85);">
+                ¿Estás seguro de borrar a <strong>{usuarioABorrar.nombre}</strong> (<code>{usuarioABorrar.slug}</code>)?
+              </p>
+              <p style="color: rgba(0,0,0,0.55); font-size: 0.85rem;">
+                Sus registros históricos en Registros/Consumo conservan el nombre tal
+                como estaba; esto solo evita que se le sigan atribuyendo consultas nuevas.
+              </p>
+              <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                <button onclick={borrarUsuarioConfirmado} disabled={cargandoBorrarUsuario} class="crear-contexto-btn" style="background: #c8102e;">
+                  {cargandoBorrarUsuario ? '⟳ Borrando...' : '🗑️ Sí, borrar'}
+                </button>
+                <button onclick={() => { mostrarConfirmacionBorrarUsuario = false; usuarioABorrar = null; }} disabled={cargandoBorrarUsuario} class="crear-contexto-btn" style="background: rgba(0,0,0,0.45); color: rgba(255,255,255,0.95);">
+                  Cancelar
+                </button>
               </div>
             </div>
           {/if}
@@ -4896,6 +5229,19 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               <button class="vectorizacion-action-btn" onclick={() => { consumoDesde = fechaHaceDias(30); consumoHasta = fechaHoy(); cargarConsumo(); }} disabled={cargandoConsumo}>30 días</button>
               <button class="vectorizacion-action-btn" onclick={() => { consumoDesde = fechaHaceDias(90); consumoHasta = fechaHoy(); cargarConsumo(); }} disabled={cargandoConsumo}>90 días</button>
             </div>
+            <div class="lightbot-field" style="margin: 0;">
+              <label for="consumo-usuario" style="display: block;">Usuario (slug)</label>
+              <input
+                id="consumo-usuario"
+                type="text"
+                bind:value={consumoUsuarioFiltro}
+                onkeydown={(e) => { if (e.key === 'Enter') cargarConsumo(); }}
+                onblur={cargarConsumo}
+                disabled={cargandoConsumo}
+                placeholder="(todos)"
+                style="padding: 0.55rem 0.75rem; min-width: 160px; font-size: 0.95rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.3); color: #fff;"
+              />
+            </div>
           </div>
 
           {#if cargandoConsumo}
@@ -5128,7 +5474,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           </div>
 
           <p style="color: rgba(255,255,255,0.7); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
-            Bitácora de interacciones con los asistentes. La identidad del usuario es el proyecto (quien tiene su password).
+            Bitácora de interacciones con los asistentes. El proyecto identifica quién opera el asistente (quien tiene su password); la columna Usuario, cuando existe, identifica a la persona final que escribió — ver subtab Usuarios de cada proyecto.
           </p>
 
           <!-- Filtros -->
@@ -5184,6 +5530,19 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 style="padding: 0.55rem 0.75rem; min-width: 180px; font-size: 0.95rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.3); color: #fff;"
               />
             </div>
+            <div class="lightbot-field" style="margin: 0;">
+              <label for="registros-usuario" style="display: block;">Usuario (slug)</label>
+              <input
+                id="registros-usuario"
+                type="text"
+                bind:value={registrosUsuarioFiltro}
+                onkeydown={(e) => { if (e.key === 'Enter') aplicarFiltrosRegistros(); }}
+                onblur={aplicarFiltrosRegistros}
+                disabled={cargandoRegistros}
+                placeholder="(todos)"
+                style="padding: 0.55rem 0.75rem; min-width: 180px; font-size: 0.95rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.3); color: #fff;"
+              />
+            </div>
             <label style="display: flex; align-items: center; gap: 0.4rem; color: rgba(255,255,255,0.85); font-size: 0.88rem; cursor: pointer; padding: 0.55rem 0;">
               <input
                 type="checkbox"
@@ -5224,6 +5583,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   <th>Timestamp</th>
                   <th>Proyecto</th>
                   <th>Asistente</th>
+                  <th>Usuario</th>
                   <th>Pregunta</th>
                   <th style="text-align: right;">Latencia</th>
                   <th style="text-align: right;">Tokens</th>
@@ -5247,6 +5607,13 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     <td>{r.proyecto_slug ?? '—'}</td>
                     <td>{r.asistente_slug ?? '—'}</td>
                     <td>
+                      {#if r.usuario_nombre}
+                        {r.usuario_nombre}
+                      {:else}
+                        <span style="color: rgba(255,255,255,0.4);">anónimo</span>
+                      {/if}
+                    </td>
+                    <td>
                       {#if tieneError}
                         <span style="color: #fca5a5;">⚠️ </span>
                       {/if}
@@ -5257,7 +5624,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   </tr>
                   {#if expandido}
                     <tr class="registro-detalle">
-                      <td colspan="7">
+                      <td colspan="8">
                         <div style="display: flex; flex-direction: column; gap: 0.85rem; padding: 0.5rem 0.25rem;">
                           <div>
                             <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(255,255,255,0.5); margin-bottom: 0.3rem;">Pregunta</div>
@@ -5272,6 +5639,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                             <div><strong>Tokens in:</strong> {formatNumero(r.tokens_in)}</div>
                             <div><strong>Tokens out:</strong> {formatNumero(r.tokens_out)}</div>
                             <div><strong>Latencia:</strong> {formatMs(r.latencia_ms)}</div>
+                            {#if r.usuario_slug}
+                              <div><strong>Usuario:</strong> {r.usuario_nombre} <code>{r.usuario_slug}</code></div>
+                            {/if}
                             {#if r.id != null}
                               <div><strong>ID:</strong> <code>{r.id}</code></div>
                             {/if}
