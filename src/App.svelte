@@ -401,12 +401,41 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let registrosAsistenteFiltro = $state('');
   let registrosUsuarioFiltro = $state('');
   let registrosSoloErrores = $state(false);
+  let registrosOrdenPor = $state('timestamp');
+  let registrosOrdenDir = $state('desc');
   let registrosLimit = $state(50);
   let registrosOffset = $state(0);
   let registrosData = $state(null); // { items, total, limit, offset, rango }
   let cargandoRegistros = $state(false);
   let errorRegistros = $state('');
   let registroExpandidoId = $state(null);
+
+  // Columnas de texto se leen mejor A→Z al hacer el primer click; timestamp,
+  // latencia y tokens se leen mejor "el más grande/reciente primero".
+  const REGISTROS_COLUMNAS_ASC_POR_DEFAULT = new Set(['proyecto', 'asistente', 'usuario', 'pregunta']);
+
+  function ordenarRegistrosPor(campo) {
+    if (registrosOrdenPor === campo) {
+      registrosOrdenDir = registrosOrdenDir === 'asc' ? 'desc' : 'asc';
+    } else {
+      registrosOrdenPor = campo;
+      registrosOrdenDir = REGISTROS_COLUMNAS_ASC_POR_DEFAULT.has(campo) ? 'asc' : 'desc';
+    }
+    registrosOffset = 0;
+    registroExpandidoId = null;
+    cargarRegistros();
+  }
+
+  // Filtro rápido: click en una celda de Proyecto/Asistente/Usuario filtra
+  // por ese valor exacto sin tener que ir al formulario de arriba.
+  function filtrarRegistrosPorCelda(campo, valor, e) {
+    e.stopPropagation(); // no disparar el onclick de la fila (expandir detalle)
+    if (!valor) return;
+    if (campo === 'proyecto') registrosProyectoFiltro = valor;
+    else if (campo === 'asistente') registrosAsistenteFiltro = valor;
+    else if (campo === 'usuario') registrosUsuarioFiltro = valor;
+    aplicarFiltrosRegistros();
+  }
 
   async function cargarRegistros() {
     cargandoRegistros = true;
@@ -415,6 +444,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       const params = new URLSearchParams({
         desde: registrosDesde,
         hasta: registrosHasta,
+        orden_por: registrosOrdenPor,
+        orden_dir: registrosOrdenDir,
         limit: String(registrosLimit),
         offset: String(registrosOffset),
       });
@@ -5592,13 +5623,27 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               <thead>
                 <tr>
                   <th style="width: 1.5rem;"></th>
-                  <th>Timestamp</th>
-                  <th>Proyecto</th>
-                  <th>Asistente</th>
-                  <th>Usuario</th>
-                  <th>Pregunta</th>
-                  <th style="text-align: right;">Latencia</th>
-                  <th style="text-align: right;">Tokens</th>
+                  <th class="registro-th-ordenable" onclick={() => ordenarRegistrosPor('timestamp')}>
+                    Timestamp{#if registrosOrdenPor === 'timestamp'}<span class="registro-th-arrow">{registrosOrdenDir === 'asc' ? ' ▲' : ' ▼'}</span>{/if}
+                  </th>
+                  <th class="registro-th-ordenable" onclick={() => ordenarRegistrosPor('proyecto')}>
+                    Proyecto{#if registrosOrdenPor === 'proyecto'}<span class="registro-th-arrow">{registrosOrdenDir === 'asc' ? ' ▲' : ' ▼'}</span>{/if}
+                  </th>
+                  <th class="registro-th-ordenable" onclick={() => ordenarRegistrosPor('asistente')}>
+                    Asistente{#if registrosOrdenPor === 'asistente'}<span class="registro-th-arrow">{registrosOrdenDir === 'asc' ? ' ▲' : ' ▼'}</span>{/if}
+                  </th>
+                  <th class="registro-th-ordenable" onclick={() => ordenarRegistrosPor('usuario')}>
+                    Usuario{#if registrosOrdenPor === 'usuario'}<span class="registro-th-arrow">{registrosOrdenDir === 'asc' ? ' ▲' : ' ▼'}</span>{/if}
+                  </th>
+                  <th class="registro-th-ordenable" onclick={() => ordenarRegistrosPor('pregunta')}>
+                    Pregunta{#if registrosOrdenPor === 'pregunta'}<span class="registro-th-arrow">{registrosOrdenDir === 'asc' ? ' ▲' : ' ▼'}</span>{/if}
+                  </th>
+                  <th class="registro-th-ordenable" style="text-align: right;" onclick={() => ordenarRegistrosPor('latencia')}>
+                    Latencia{#if registrosOrdenPor === 'latencia'}<span class="registro-th-arrow">{registrosOrdenDir === 'asc' ? ' ▲' : ' ▼'}</span>{/if}
+                  </th>
+                  <th class="registro-th-ordenable" style="text-align: right;" onclick={() => ordenarRegistrosPor('tokens')}>
+                    Tokens{#if registrosOrdenPor === 'tokens'}<span class="registro-th-arrow">{registrosOrdenDir === 'asc' ? ' ▲' : ' ▼'}</span>{/if}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -5616,11 +5661,19 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   >
                     <td>{expandido ? '▾' : '▸'}</td>
                     <td><code style="font-size: 0.78rem;">{formatTimestamp(r.timestamp)}</code></td>
-                    <td>{r.proyecto_slug ?? '—'}</td>
-                    <td>{r.asistente_slug ?? '—'}</td>
+                    <td>
+                      {#if r.proyecto_slug}
+                        <button class="registro-celda-filtrable" title="Filtrar por este proyecto" onclick={(e) => filtrarRegistrosPorCelda('proyecto', r.proyecto_slug, e)}>{r.proyecto_slug}</button>
+                      {:else}—{/if}
+                    </td>
+                    <td>
+                      {#if r.asistente_slug}
+                        <button class="registro-celda-filtrable" title="Filtrar por este asistente" onclick={(e) => filtrarRegistrosPorCelda('asistente', r.asistente_slug, e)}>{r.asistente_slug}</button>
+                      {:else}—{/if}
+                    </td>
                     <td>
                       {#if r.usuario_nombre}
-                        {r.usuario_nombre}
+                        <button class="registro-celda-filtrable" title="Filtrar por este usuario" onclick={(e) => filtrarRegistrosPorCelda('usuario', r.usuario_slug, e)}>{r.usuario_nombre}</button>
                       {:else}
                         <span style="color: rgba(255,255,255,0.4);">anónimo</span>
                       {/if}
@@ -7970,6 +8023,34 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
   .registro-row--error td {
     color: rgba(252, 165, 165, 0.9);
+  }
+  .registro-th-ordenable {
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.12s ease;
+  }
+  .registro-th-ordenable:hover {
+    color: rgba(255, 255, 255, 0.85);
+  }
+  .registro-th-arrow {
+    color: #60a5fa;
+  }
+  .registro-celda-filtrable {
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-decoration-color: rgba(255, 255, 255, 0.35);
+    text-underline-offset: 2px;
+  }
+  .registro-celda-filtrable:hover {
+    color: #93c5fd;
+    text-decoration-color: #93c5fd;
   }
   .registro-detalle td {
     background: rgba(0, 0, 0, 0.25);
