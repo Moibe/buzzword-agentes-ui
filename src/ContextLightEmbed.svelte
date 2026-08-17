@@ -1,14 +1,13 @@
 <script>
   // ─── Config ──────────────────────────────────────────
-  // Sin ambientes. El API vive en el mismo host de la app, puerto 8077.
-  const API_PORT = 8077;
   const params = new URLSearchParams(window.location.search);
   const asistenteSlugParam = (params.get('agente') || '').trim();
 
-  const apiUrl = (() => {
-    const url = `${location.protocol}//${location.hostname}:${API_PORT}`;
-    return { real: url, base: url };
-  })();
+  // Ruta relativa: quien sirve este widget (Vite dev/preview local, o el
+  // reverse proxy en el servidor real) reenvía /api/* al backend en
+  // 127.0.0.1:8077 — ver vite.config.js. El navegador del usuario final nunca
+  // necesita alcanzar el puerto 8077 directamente.
+  const apiUrl = { base: '/api', real: `${location.origin}/api` };
 
   // ─── Estado ──────────────────────────────────────────
   let asistente = $state(null);

@@ -69,17 +69,18 @@
   // visual de qué build está corriendo. Se muestra debajo del título del header.
   const APP_VERSION = '0.7.0';
 
-  // Sin concepto de "ambiente". Las URLs se derivan del host donde corre la
-  // app: el API siempre vive en el mismo host en :8077 y el host-asistentes
-  // (embeds públicos) en :4176. Esto hace que local y server sean idénticos
-  // sin build-mode flags ni .env files.
+  // Sin concepto de "ambiente". El host-asistentes (embeds públicos) vive en
+  // el mismo host en :4176. Esto hace que local y server sean idénticos sin
+  // build-mode flags ni .env files.
   const HOST_ASISTENTES_PORT = 4176;
-  const API_PORT = 8077;
 
-  const apiUrl = (() => {
-    const url = `${location.protocol}//${location.hostname}:${API_PORT}`;
-    return { real: url, base: url };
-  })();
+  // El API se llama por ruta relativa (/api/...): quien sirve este admin
+  // (Vite dev/preview local, o el reverse proxy en el servidor real) reenvía
+  // /api/* al backend en 127.0.0.1:8077 — ver vite.config.js. Esto evita que
+  // el navegador necesite alcanzar el puerto 8077 directamente (mixed-content
+  // si el admin se sirve por HTTPS vía dominio, o bloqueos de firewalls que
+  // solo permiten salida por 443).
+  const apiUrl = { base: '/api', real: `${location.origin}/api` };
   const hostAsistentesBase = `${location.protocol}//${location.hostname}:${HOST_ASISTENTES_PORT}`;
 
   // Exponer helpers de log en consola para depuración
