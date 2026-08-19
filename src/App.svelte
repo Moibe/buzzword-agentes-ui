@@ -621,6 +621,12 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         headers: adminHeaders(),
       });
       if (!res.ok && res.status !== 204) throw new Error(`HTTP ${res.status}`);
+      // Si el borrado se pidió desde dentro del form de edición, ciérralo —
+      // ya no hay nada que editar.
+      if (hitoEditandoId === hitoABorrar.id) {
+        hitoFormAbierto = false;
+        hitoEditandoId = null;
+      }
       hitoABorrar = null;
       await cargarHitos();
     } catch (err) {
@@ -639,7 +645,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   const itemsRegistrosConHitos = $derived.by(() => {
     const items = registrosData?.items ?? [];
     if (registrosOrdenPor !== 'timestamp' || hitos.length === 0 || items.length === 0) {
-      return items.map((item) => ({ tipo: 'registro', item }));
+      return items.map((item, indice) => ({ tipo: 'registro', item, indice }));
     }
     const desc = registrosOrdenDir === 'desc';
     const hitosOrdenados = [...hitos].sort((a, b) =>
@@ -652,7 +658,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     const resultado = [];
     let hitoIdx = 0;
     let fechaAnterior = null;
-    for (const item of items) {
+    for (let indice = 0; indice < items.length; indice++) {
+      const item = items[indice];
       while (
         hitoIdx < hitosOrdenados.length &&
         fechaAnterior !== null &&
@@ -661,11 +668,66 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         resultado.push({ tipo: 'hito', item: hitosOrdenados[hitoIdx] });
         hitoIdx++;
       }
-      resultado.push({ tipo: 'registro', item });
+      resultado.push({ tipo: 'registro', item, indice });
       fechaAnterior = item.timestamp;
     }
     return resultado;
   });
+
+  // ── Arrastrar la línea de hito para reubicarlo cronológicamente ──────
+  // Se suelta SOBRE una fila de registro: el hito queda posicionado justo
+  // entre esa fila y la siguiente tal como se muestran hoy (mismo criterio
+  // que el interlineado de arriba), sin importar el orden asc/desc — el
+  // "siguiente" en pantalla ya viene resuelto por `indice` sobre
+  // registrosData.items en su orden real.
+  let hitoArrastrando = $state(null);
+
+  function fechaIntermediaEntre(fechaA, fechaB) {
+    const a = new Date(fechaA).getTime();
+    // Si no hay fila siguiente (se soltó en la última), lo dejamos 1s
+    // "después" de esa fila en vez de promediar con nada.
+    const b = fechaB ? new Date(fechaB).getTime() : a - 1000;
+    return new Date((a + b) / 2).toISOString();
+  }
+
+  function onDragStartHito(h, e) {
+    hitoArrastrando = h;
+    if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+  }
+
+  function onDragEndHito() {
+    hitoArrastrando = null;
+  }
+
+  async function moverHitoEntreFilas(indiceFilaSoltada, e) {
+    e.preventDefault();
+    e.currentTarget.classList.remove('registro-row--drop-target');
+    if (!hitoArrastrando) return;
+    const h = hitoArrastrando;
+    hitoArrastrando = null;
+
+    const items = registrosData?.items ?? [];
+    const filaSoltada = items[indiceFilaSoltada];
+    const filaSiguiente = items[indiceFilaSoltada + 1];
+    if (!filaSoltada) return;
+    const nuevaFecha = fechaIntermediaEntre(filaSoltada.timestamp, filaSiguiente?.timestamp);
+
+    const fechaAnteriorLocal = h.fecha;
+    hitos = hitos.map((x) => (x.id === h.id ? { ...x, fecha: nuevaFecha } : x));
+    try {
+      const res = await fetch(`${apiUrl.base}/hitos/${encodeURIComponent(h.id)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...adminHeaders() },
+        body: JSON.stringify({ fecha: nuevaFecha }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch (err) {
+      // Revertir el optimista y avisar — no nos quedamos con una fecha que
+      // el servidor nunca confirmó.
+      hitos = hitos.map((x) => (x.id === h.id ? { ...x, fecha: fechaAnteriorLocal } : x));
+      errorHitos = `No se pudo mover el hito: ${err.message}`;
+    }
+  }
 
   function formatTimestamp(ts) {
     if (!ts) return '—';
@@ -5779,6 +5841,16 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 <p class="mensaje-contexto">{mensajeHito}</p>
               {/if}
               <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                {#if hitoEditandoId}
+                  <button
+                    onclick={() => pedirConfirmacionBorrarHito({ id: hitoEditandoId, nombre: hitoFormNombre })}
+                    disabled={guardandoHito}
+                    class="crear-contexto-btn"
+                    style="background: #c8102e; margin-right: auto;"
+                  >
+                    🗑️ Borrar
+                  </button>
+                {/if}
                 <button onclick={cerrarFormHito} disabled={guardandoHito} class="crear-contexto-btn" style="background: rgba(0,0,0,0.45); color: rgba(255,255,255,0.95);">
                   Cancelar
                 </button>
@@ -6011,14 +6083,20 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 {#each itemsRegistrosConHitos as entry (entry.tipo === 'hito' ? `hito-${entry.item.id}` : (entry.item.id ?? `${entry.item.timestamp}-${entry.item.asistente_slug}`))}
                 {#if entry.tipo === 'hito'}
                   {@const h = entry.item}
-                  <tr class="hito-marcador-row">
+                  <tr
+                    class="hito-marcador-row"
+                    class:hito-marcador-row--arrastrable={isAdmin}
+                    draggable={isAdmin}
+                    ondragstart={(e) => onDragStartHito(h, e)}
+                    ondragend={onDragEndHito}
+                  >
                     <td colspan="10">
-                      <div class="hito-linea">
+                      <div class="hito-linea" title={isAdmin ? 'Arrastra la línea a otra fila para reubicar el hito' : ''}>
                         <span class="hito-linea-segmento"></span>
                         <span class="hito-linea-label">
                           🏁 {h.nombre} — {formatTimestamp(h.fecha)}
                           {#if isAdmin}
-                            <button class="hito-borrar-btn" title="Borrar hito" onclick={() => pedirConfirmacionBorrarHito(h)}>×</button>
+                            <button class="hito-editar-btn" title="Editar hito" onclick={() => abrirFormEditarHito(h)}>✏️</button>
                           {/if}
                         </span>
                         <span class="hito-linea-segmento"></span>
@@ -6037,6 +6115,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     role="button"
                     tabindex="0"
                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); registroExpandidoId = expandido ? null : r.id; } }}
+                    ondragover={(e) => { if (hitoArrastrando) e.preventDefault(); }}
+                    ondragenter={(e) => { if (hitoArrastrando) e.currentTarget.classList.add('registro-row--drop-target'); }}
+                    ondragleave={(e) => e.currentTarget.classList.remove('registro-row--drop-target')}
+                    ondrop={(e) => moverHitoEntreFilas(entry.indice, e)}
                   >
                     <td>{expandido ? '▾' : '▸'}</td>
                     <td><code style="font-size: 0.78rem;">{formatTimestamp(r.timestamp)}</code></td>
@@ -8467,21 +8549,30 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     white-space: nowrap;
     letter-spacing: 0.02em;
   }
-  .hito-borrar-btn {
+  .hito-editar-btn {
     background: rgba(0, 0, 0, 0.3);
     border: 1px solid rgba(255, 215, 94, 0.4);
     color: #ffd75e;
     border-radius: 4px;
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
     line-height: 1;
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     cursor: pointer;
     padding: 0;
     text-shadow: none;
   }
-  .hito-borrar-btn:hover {
+  .hito-editar-btn:hover {
     background: rgba(255, 215, 94, 0.2);
+  }
+  .hito-marcador-row--arrastrable {
+    cursor: grab;
+  }
+  .hito-marcador-row--arrastrable:active {
+    cursor: grabbing;
+  }
+  .registro-row--drop-target {
+    box-shadow: inset 0 2px 0 #ffd75e, inset 0 -2px 0 #ffd75e;
   }
   .registro-detalle td {
     background: rgba(0, 0, 0, 0.25);
