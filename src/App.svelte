@@ -651,25 +651,36 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     const hitosOrdenados = [...hitos].sort((a, b) =>
       desc ? b.fecha.localeCompare(a.fecha) : a.fecha.localeCompare(b.fecha)
     );
-    const entreDosFechas = (fecha, antes, despues) => {
-      const [lo, hi] = desc ? [despues, antes] : [antes, despues];
-      return fecha >= lo && fecha <= hi;
-    };
+    // ¿El hito cae más allá de un extremo visible (más nuevo que la fila más
+    // reciente, o más viejo que la más antigua)? Necesario para que un hito
+    // arrastrado hasta la orilla de la tabla no quede fuera de todo hueco y
+    // por lo tanto invisible.
+    const masAlla = (fecha, extremo, direccion) => (direccion === 'mayor' ? fecha > extremo : fecha < extremo);
     const resultado = [];
-    let hitoIdx = 0;
-    let fechaAnterior = null;
-    for (let indice = 0; indice < items.length; indice++) {
-      const item = items[indice];
-      while (
-        hitoIdx < hitosOrdenados.length &&
-        fechaAnterior !== null &&
-        entreDosFechas(hitosOrdenados[hitoIdx].fecha, fechaAnterior, item.timestamp)
-      ) {
-        resultado.push({ tipo: 'hito', item: hitosOrdenados[hitoIdx] });
-        hitoIdx++;
+    const usados = new Set();
+    for (let indice = 0; indice <= items.length; indice++) {
+      const anterior = items[indice - 1] ?? null;
+      const actual = items[indice] ?? null;
+      for (const h of hitosOrdenados) {
+        if (usados.has(h.id)) continue;
+        let cabe;
+        if (anterior && actual) {
+          const lo = anterior.timestamp < actual.timestamp ? anterior.timestamp : actual.timestamp;
+          const hi = anterior.timestamp < actual.timestamp ? actual.timestamp : anterior.timestamp;
+          cabe = h.fecha >= lo && h.fecha <= hi;
+        } else if (!anterior && actual) {
+          cabe = masAlla(h.fecha, actual.timestamp, desc ? 'mayor' : 'menor');
+        } else if (anterior && !actual) {
+          cabe = masAlla(h.fecha, anterior.timestamp, desc ? 'menor' : 'mayor');
+        } else {
+          cabe = false;
+        }
+        if (cabe) {
+          resultado.push({ tipo: 'hito', item: h });
+          usados.add(h.id);
+        }
       }
-      resultado.push({ tipo: 'registro', item, indice });
-      fechaAnterior = item.timestamp;
+      if (actual) resultado.push({ tipo: 'registro', item: actual, indice });
     }
     return resultado;
   });
@@ -697,6 +708,18 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   function onDragEndHito() {
     hitoArrastrando = null;
+  }
+
+  // dragleave no siempre llega a tiempo al pasar entre filas contiguas (el
+  // navegador puede disparar el dragenter de la nueva antes que el dragleave
+  // de la anterior), lo que dejaba el resaltado dorado pegado en varias filas
+  // a la vez. Limpiamos todas antes de marcar la actual.
+  function marcarFilaDropTarget(e) {
+    if (!hitoArrastrando) return;
+    document
+      .querySelectorAll('.registro-row--drop-target')
+      .forEach((el) => el.classList.remove('registro-row--drop-target'));
+    e.currentTarget.classList.add('registro-row--drop-target');
   }
 
   async function moverHitoEntreFilas(indiceFilaSoltada, e) {
@@ -6115,10 +6138,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     role="button"
                     tabindex="0"
                     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); registroExpandidoId = expandido ? null : r.id; } }}
-                    ondragover={(e) => { if (hitoArrastrando) e.preventDefault(); }}
-                    ondragenter={(e) => { if (hitoArrastrando) e.currentTarget.classList.add('registro-row--drop-target'); }}
+                    ondragover={(e) => { if (hitoArrastrando) { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'; } }}
+                    ondragenter={marcarFilaDropTarget}
                     ondragleave={(e) => e.currentTarget.classList.remove('registro-row--drop-target')}
-                    ondrop={(e) => moverHitoEntreFilas(entry.indice, e)}
+                    ondrop={(e) => { document.querySelectorAll('.registro-row--drop-target').forEach((el) => el.classList.remove('registro-row--drop-target')); moverHitoEntreFilas(entry.indice, e); }}
                   >
                     <td>{expandido ? '▾' : '▸'}</td>
                     <td><code style="font-size: 0.78rem;">{formatTimestamp(r.timestamp)}</code></td>
