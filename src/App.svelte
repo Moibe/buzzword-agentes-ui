@@ -5670,8 +5670,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   <th class="registro-th-ordenable" onclick={() => ordenarRegistrosPor('pregunta')}>
                     Pregunta{#if registrosOrdenPor === 'pregunta'}<span class="registro-th-arrow">{registrosOrdenDir === 'asc' ? ' ▲' : ' ▼'}</span>{/if}
                   </th>
-                  <th class="registro-th-ordenable" style="text-align: right;" onclick={() => ordenarRegistrosPor('latencia')}>
-                    Latencia{#if registrosOrdenPor === 'latencia'}<span class="registro-th-arrow">{registrosOrdenDir === 'asc' ? ' ▲' : ' ▼'}</span>{/if}
+                  <th class="registro-th-ordenable" style="text-align: right;" onclick={() => ordenarRegistrosPor('latencia_rag')} title="Tiempo en la búsqueda de Chroma (— si el asistente no tiene Base de Conocimiento)">
+                    RAG{#if registrosOrdenPor === 'latencia_rag'}<span class="registro-th-arrow">{registrosOrdenDir === 'asc' ? ' ▲' : ' ▼'}</span>{/if}
+                  </th>
+                  <th class="registro-th-ordenable" style="text-align: right;" onclick={() => ordenarRegistrosPor('latencia_llm')} title="Tiempo en la llamada al modelo de lenguaje">
+                    LLM{#if registrosOrdenPor === 'latencia_llm'}<span class="registro-th-arrow">{registrosOrdenDir === 'asc' ? ' ▲' : ' ▼'}</span>{/if}
+                  </th>
+                  <th class="registro-th-ordenable" style="text-align: right;" onclick={() => ordenarRegistrosPor('latencia')} title="Tiempo total de la consulta (RAG + LLM + overhead de armar el request)">
+                    Total{#if registrosOrdenPor === 'latencia'}<span class="registro-th-arrow">{registrosOrdenDir === 'asc' ? ' ▲' : ' ▼'}</span>{/if}
                   </th>
                   <th class="registro-th-ordenable" style="text-align: right;" onclick={() => ordenarRegistrosPor('tokens')}>
                     Tokens{#if registrosOrdenPor === 'tokens'}<span class="registro-th-arrow">{registrosOrdenDir === 'asc' ? ' ▲' : ' ▼'}</span>{/if}
@@ -5716,12 +5722,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                       {/if}
                       {truncar(r.pregunta, 70)}
                     </td>
+                    <td style="text-align: right;">{formatMs(r.latencia_rag_ms)}</td>
+                    <td style="text-align: right;">{formatMs(r.latencia_llm_ms)}</td>
                     <td style="text-align: right;">{formatMs(r.latencia_ms)}</td>
                     <td style="text-align: right;">{formatNumero((r.tokens_in ?? 0) + (r.tokens_out ?? 0))}</td>
                   </tr>
                   {#if expandido}
                     <tr class="registro-detalle">
-                      <td colspan="8">
+                      <td colspan="10">
                         <div style="display: flex; flex-direction: column; gap: 0.85rem; padding: 0.5rem 0.25rem;">
                           <div>
                             <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(255,255,255,0.5); margin-bottom: 0.3rem;">Pregunta</div>
@@ -5735,7 +5743,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                             <div><strong>Modelo:</strong> <code>{r.modelo ?? '—'}</code></div>
                             <div><strong>Tokens in:</strong> {formatNumero(r.tokens_in)}</div>
                             <div><strong>Tokens out:</strong> {formatNumero(r.tokens_out)}</div>
-                            <div><strong>Latencia:</strong> {formatMs(r.latencia_ms)}</div>
+                            <div><strong>Latencia total:</strong> {formatMs(r.latencia_ms)}</div>
+                            <div><strong>· RAG:</strong> {formatMs(r.latencia_rag_ms)}</div>
+                            <div><strong>· LLM:</strong> {formatMs(r.latencia_llm_ms)}</div>
                             {#if r.usuario_slug}
                               <div><strong>Usuario:</strong> {r.usuario_nombre} <code>{r.usuario_slug}</code></div>
                             {/if}
