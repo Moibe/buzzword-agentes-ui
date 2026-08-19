@@ -402,6 +402,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let registrosAsistenteFiltro = $state('');
   let registrosUsuarioFiltro = $state('');
   let registrosSoloErrores = $state(false);
+  let registrosPreguntaFiltro = $state('');
+  let registrosLatenciaRagMinFiltro = $state('');
+  let registrosLatenciaLlmMinFiltro = $state('');
+  let registrosLatenciaMinFiltro = $state('');
+  let registrosTokensMinFiltro = $state('');
   let registrosOrdenPor = $state('timestamp');
   let registrosOrdenDir = $state('desc');
   let registrosLimit = $state(50);
@@ -454,6 +459,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       if (registrosAsistenteFiltro) params.set('asistente', registrosAsistenteFiltro);
       if (registrosUsuarioFiltro) params.set('usuario', registrosUsuarioFiltro);
       if (registrosSoloErrores) params.set('solo_errores', 'true');
+      if (registrosPreguntaFiltro) params.set('pregunta_contiene', registrosPreguntaFiltro);
+      if (registrosLatenciaRagMinFiltro !== '') params.set('latencia_rag_min', registrosLatenciaRagMinFiltro);
+      if (registrosLatenciaLlmMinFiltro !== '') params.set('latencia_llm_min', registrosLatenciaLlmMinFiltro);
+      if (registrosLatenciaMinFiltro !== '') params.set('latencia_min', registrosLatenciaMinFiltro);
+      if (registrosTokensMinFiltro !== '') params.set('tokens_min', registrosTokensMinFiltro);
       const res = await fetch(`${apiUrl.base}/registros?${params.toString()}`, {
         headers: adminHeaders(),
       });
@@ -5616,6 +5626,75 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 disabled={cargandoRegistros}
                 placeholder="(todos)"
                 style="padding: 0.55rem 0.75rem; min-width: 180px; font-size: 0.95rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.3); color: #fff;"
+              />
+            </div>
+            <div class="lightbot-field" style="margin: 0;">
+              <label for="registros-pregunta" style="display: block;">Pregunta contiene</label>
+              <input
+                id="registros-pregunta"
+                type="text"
+                bind:value={registrosPreguntaFiltro}
+                onkeydown={(e) => { if (e.key === 'Enter') aplicarFiltrosRegistros(); }}
+                onblur={aplicarFiltrosRegistros}
+                disabled={cargandoRegistros}
+                placeholder="ej: seguro"
+                style="padding: 0.55rem 0.75rem; min-width: 160px; font-size: 0.95rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.3); color: #fff;"
+              />
+            </div>
+            <div class="lightbot-field" style="margin: 0;">
+              <label for="registros-rag-min" style="display: block;">RAG mín (ms)</label>
+              <input
+                id="registros-rag-min"
+                type="number"
+                min="0"
+                bind:value={registrosLatenciaRagMinFiltro}
+                onkeydown={(e) => { if (e.key === 'Enter') aplicarFiltrosRegistros(); }}
+                onblur={aplicarFiltrosRegistros}
+                disabled={cargandoRegistros}
+                placeholder="(todos)"
+                style="padding: 0.55rem 0.75rem; width: 110px; font-size: 0.95rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.3); color: #fff;"
+              />
+            </div>
+            <div class="lightbot-field" style="margin: 0;">
+              <label for="registros-llm-min" style="display: block;">LLM mín (ms)</label>
+              <input
+                id="registros-llm-min"
+                type="number"
+                min="0"
+                bind:value={registrosLatenciaLlmMinFiltro}
+                onkeydown={(e) => { if (e.key === 'Enter') aplicarFiltrosRegistros(); }}
+                onblur={aplicarFiltrosRegistros}
+                disabled={cargandoRegistros}
+                placeholder="(todos)"
+                style="padding: 0.55rem 0.75rem; width: 110px; font-size: 0.95rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.3); color: #fff;"
+              />
+            </div>
+            <div class="lightbot-field" style="margin: 0;">
+              <label for="registros-total-min" style="display: block;">Total mín (ms)</label>
+              <input
+                id="registros-total-min"
+                type="number"
+                min="0"
+                bind:value={registrosLatenciaMinFiltro}
+                onkeydown={(e) => { if (e.key === 'Enter') aplicarFiltrosRegistros(); }}
+                onblur={aplicarFiltrosRegistros}
+                disabled={cargandoRegistros}
+                placeholder="(todos)"
+                style="padding: 0.55rem 0.75rem; width: 110px; font-size: 0.95rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.3); color: #fff;"
+              />
+            </div>
+            <div class="lightbot-field" style="margin: 0;">
+              <label for="registros-tokens-min" style="display: block;">Tokens mín</label>
+              <input
+                id="registros-tokens-min"
+                type="number"
+                min="0"
+                bind:value={registrosTokensMinFiltro}
+                onkeydown={(e) => { if (e.key === 'Enter') aplicarFiltrosRegistros(); }}
+                onblur={aplicarFiltrosRegistros}
+                disabled={cargandoRegistros}
+                placeholder="(todos)"
+                style="padding: 0.55rem 0.75rem; width: 110px; font-size: 0.95rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.3); color: #fff;"
               />
             </div>
             <label style="display: flex; align-items: center; gap: 0.4rem; color: rgba(255,255,255,0.85); font-size: 0.88rem; cursor: pointer; padding: 0.55rem 0;">
