@@ -503,6 +503,170 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     cargarRegistros();
   }
 
+  // === Hitos ===
+  // Marcadores de línea de tiempo para Registros — anotaciones manuales tipo
+  // "aquí entró el cacheo de LLMs". Globales (no por proyecto): un cambio de
+  // código aplica a todo el sistema. Solo tienen sentido visual cuando la
+  // tabla está ordenada por timestamp (ver itemsRegistrosConHitos abajo).
+  let hitos = $state([]);
+  let cargandoHitos = $state(false);
+  let errorHitos = $state('');
+  let hitoFormAbierto = $state(false);
+  let hitoEditandoId = $state(null);
+  let hitoFormNombre = $state('');
+  let hitoFormFecha = $state(''); // datetime-local string, se convierte a ISO al guardar
+  let hitoFormNotas = $state('');
+  let guardandoHito = $state(false);
+  let mensajeHito = $state('');
+  let hitoABorrar = $state(null);
+  let cargandoBorrarHito = $state(false);
+
+  async function cargarHitos() {
+    cargandoHitos = true;
+    errorHitos = '';
+    try {
+      const res = await fetch(`${apiUrl.base}/hitos`, { headers: adminHeaders() });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      hitos = data.hitos ?? [];
+    } catch (err) {
+      errorHitos = `No se pudieron cargar los hitos: ${err.message}`;
+      hitos = [];
+    } finally {
+      cargandoHitos = false;
+    }
+  }
+
+  // datetime-local (ej. "2026-08-19T02:14") no trae zona horaria — se asume
+  // hora local del navegador y se manda como ISO con offset real, para que
+  // quede comparable con `fecha` en chat_logs (siempre UTC).
+  function datetimeLocalAIso(valor) {
+    if (!valor) return null;
+    const d = new Date(valor);
+    return isNaN(d.getTime()) ? null : d.toISOString();
+  }
+  function isoADatetimeLocal(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  function abrirFormCrearHito() {
+    hitoEditandoId = null;
+    hitoFormNombre = '';
+    hitoFormFecha = isoADatetimeLocal(new Date().toISOString());
+    hitoFormNotas = '';
+    mensajeHito = '';
+    hitoFormAbierto = true;
+  }
+  function abrirFormEditarHito(h) {
+    hitoEditandoId = h.id;
+    hitoFormNombre = h.nombre;
+    hitoFormFecha = isoADatetimeLocal(h.fecha);
+    hitoFormNotas = h.notas ?? '';
+    mensajeHito = '';
+    hitoFormAbierto = true;
+  }
+  function cerrarFormHito() {
+    hitoFormAbierto = false;
+  }
+
+  async function guardarHito() {
+    const nombre = hitoFormNombre.trim();
+    if (!nombre) {
+      mensajeHito = '❌ El nombre no puede estar vacío.';
+      return;
+    }
+    const fechaIso = datetimeLocalAIso(hitoFormFecha);
+    if (!fechaIso) {
+      mensajeHito = '❌ Fecha inválida.';
+      return;
+    }
+    guardandoHito = true;
+    mensajeHito = '';
+    try {
+      const editando = !!hitoEditandoId;
+      const url = editando ? `${apiUrl.base}/hitos/${encodeURIComponent(hitoEditandoId)}` : `${apiUrl.base}/hitos`;
+      const res = await fetch(url, {
+        method: editando ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json', ...adminHeaders() },
+        body: JSON.stringify({ nombre, fecha: fechaIso, notas: hitoFormNotas || null }),
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status}${txt ? ': ' + txt : ''}`);
+      }
+      mensajeHito = editando ? '✅ Hito actualizado' : '✅ Hito creado';
+      await cargarHitos();
+      setTimeout(() => cerrarFormHito(), 800);
+    } catch (err) {
+      mensajeHito = `❌ ${err.message}`;
+    } finally {
+      guardandoHito = false;
+    }
+  }
+
+  function pedirConfirmacionBorrarHito(h) {
+    hitoABorrar = h;
+  }
+
+  async function borrarHitoConfirmado() {
+    if (!hitoABorrar) return;
+    cargandoBorrarHito = true;
+    try {
+      const res = await fetch(`${apiUrl.base}/hitos/${encodeURIComponent(hitoABorrar.id)}`, {
+        method: 'DELETE',
+        headers: adminHeaders(),
+      });
+      if (!res.ok && res.status !== 204) throw new Error(`HTTP ${res.status}`);
+      hitoABorrar = null;
+      await cargarHitos();
+    } catch (err) {
+      errorHitos = `No se pudo borrar el hito: ${err.message}`;
+    } finally {
+      cargandoBorrarHito = false;
+    }
+  }
+
+  // Intercala marcadores de hito entre las filas de Registros, en el punto
+  // cronológico correcto — solo tiene sentido si la tabla está ordenada por
+  // timestamp (en cualquier otro orden, "una línea que cruza en el tiempo"
+  // no significa nada). Comparación por string ISO: funciona porque los
+  // timestamps siempre vienen en UTC con el mismo formato (orden lexicográfico
+  // == orden cronológico).
+  const itemsRegistrosConHitos = $derived.by(() => {
+    const items = registrosData?.items ?? [];
+    if (registrosOrdenPor !== 'timestamp' || hitos.length === 0 || items.length === 0) {
+      return items.map((item) => ({ tipo: 'registro', item }));
+    }
+    const desc = registrosOrdenDir === 'desc';
+    const hitosOrdenados = [...hitos].sort((a, b) =>
+      desc ? b.fecha.localeCompare(a.fecha) : a.fecha.localeCompare(b.fecha)
+    );
+    const entreDosFechas = (fecha, antes, despues) => {
+      const [lo, hi] = desc ? [despues, antes] : [antes, despues];
+      return fecha >= lo && fecha <= hi;
+    };
+    const resultado = [];
+    let hitoIdx = 0;
+    let fechaAnterior = null;
+    for (const item of items) {
+      while (
+        hitoIdx < hitosOrdenados.length &&
+        fechaAnterior !== null &&
+        entreDosFechas(hitosOrdenados[hitoIdx].fecha, fechaAnterior, item.timestamp)
+      ) {
+        resultado.push({ tipo: 'hito', item: hitosOrdenados[hitoIdx] });
+        hitoIdx++;
+      }
+      resultado.push({ tipo: 'registro', item });
+      fechaAnterior = item.timestamp;
+    }
+    return resultado;
+  });
+
   function formatTimestamp(ts) {
     if (!ts) return '—';
     try {
@@ -5000,7 +5164,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           <button
             class="vectorizacion-subtab-btn"
             class:active={adminTab === 'registros'}
-            onclick={() => { adminTab = 'registros'; if (!registrosData) cargarRegistros(); if (proyectos.length === 0) cargarProyectos(); }}
+            onclick={() => { adminTab = 'registros'; if (!registrosData) cargarRegistros(); if (proyectos.length === 0) cargarProyectos(); if (hitos.length === 0) cargarHitos(); }}
           >
             📝 Registros
           </button>
@@ -5553,14 +5717,94 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         <div class="modelos-wrap">
           <div class="seccion-header">
             <h3>📝 Registros</h3>
-            <button onclick={cargarRegistros} class="vectorizacion-action-btn" disabled={cargandoRegistros}>
-              ↻ Recargar
-            </button>
+            <div style="display: flex; gap: 0.4rem;">
+              {#if isAdmin}
+                <button onclick={() => hitoFormAbierto ? cerrarFormHito() : abrirFormCrearHito()} class="vectorizacion-action-btn">
+                  🏁 Marcar hito
+                </button>
+              {/if}
+              <button onclick={cargarRegistros} class="vectorizacion-action-btn" disabled={cargandoRegistros}>
+                ↻ Recargar
+              </button>
+            </div>
           </div>
 
           <p style="color: rgba(255,255,255,0.7); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
             Bitácora de interacciones con los asistentes. El proyecto identifica quién opera el asistente (quien tiene su password); la columna Usuario, cuando existe, identifica a la persona final que escribió — ver subtab Usuarios de cada proyecto.
+            Los hitos (🏁) marcan cuándo entró en vigor un cambio que buscaba ahorrar tiempo o tokens — solo se ven cuando la tabla está ordenada por Timestamp.
           </p>
+
+          {#if hitoFormAbierto}
+            <div class="crear-contexto-form" style="flex-direction: column; align-items: stretch; max-width: 600px; margin-bottom: 1.25rem;">
+              <h4 style="margin: 0 0 0.25rem 0; color: #fff;">{hitoEditandoId ? 'Editar Hito' : 'Nuevo Hito'}</h4>
+              <div class="form-field">
+                <label for="hito-nombre">Nombre</label>
+                <input
+                  id="hito-nombre"
+                  type="text"
+                  placeholder="ej: Cacheo de LLMs"
+                  bind:value={hitoFormNombre}
+                  disabled={guardandoHito}
+                  maxlength="120"
+                  class="contexto-input"
+                />
+              </div>
+              <div class="form-field">
+                <label for="hito-fecha">Fecha y hora (tu hora local)</label>
+                <input
+                  id="hito-fecha"
+                  type="datetime-local"
+                  bind:value={hitoFormFecha}
+                  disabled={guardandoHito}
+                  class="contexto-input"
+                />
+                <small style="font-size: 0.75rem; color: rgba(0,0,0,0.6); line-height: 1.3; display: block; margin-top: 0.25rem;">
+                  Conviene poner la fecha real en que el cambio entró en vigor (ej. la del commit/deploy), no necesariamente ahora.
+                </small>
+              </div>
+              <div class="form-field">
+                <label for="hito-notas">Notas (opcional)</label>
+                <textarea
+                  id="hito-notas"
+                  bind:value={hitoFormNotas}
+                  disabled={guardandoHito}
+                  rows="2"
+                  maxlength="300"
+                  class="contexto-input"
+                  style="font-family: inherit; resize: vertical;"
+                  placeholder="Qué cambió y por qué, para acordarte después..."
+                ></textarea>
+              </div>
+              {#if mensajeHito}
+                <p class="mensaje-contexto">{mensajeHito}</p>
+              {/if}
+              <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                <button onclick={cerrarFormHito} disabled={guardandoHito} class="crear-contexto-btn" style="background: rgba(0,0,0,0.45); color: rgba(255,255,255,0.95);">
+                  Cancelar
+                </button>
+                <button onclick={guardarHito} disabled={guardandoHito} class="crear-contexto-btn">
+                  {guardandoHito ? '⟳ Guardando...' : '✓ Guardar'}
+                </button>
+              </div>
+            </div>
+          {/if}
+
+          {#if hitoABorrar}
+            <div class="confirmacion-borrar" style="max-width: 500px; margin-bottom: 1.25rem;">
+              <h3><Icon name="warning" size={18} /> Confirmar Borrado de Hito</h3>
+              <p style="color: rgba(255,255,255,0.85);">
+                ¿Borrar el hito <strong>{hitoABorrar.nombre}</strong>? Los registros no cambian, solo deja de verse la línea.
+              </p>
+              <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                <button onclick={borrarHitoConfirmado} disabled={cargandoBorrarHito} class="crear-contexto-btn" style="background: #c8102e;">
+                  {cargandoBorrarHito ? '⟳ Borrando...' : '🗑️ Sí, borrar'}
+                </button>
+                <button onclick={() => { hitoABorrar = null; }} disabled={cargandoBorrarHito} class="crear-contexto-btn" style="background: rgba(0,0,0,0.45); color: rgba(255,255,255,0.95);">
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          {/if}
 
           <!-- Filtros -->
           <div style="display: flex; gap: 0.75rem; align-items: end; margin-bottom: 1.25rem; flex-wrap: wrap;">
@@ -5764,7 +6008,25 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 </tr>
               </thead>
               <tbody>
-                {#each items as r (r.id ?? `${r.timestamp}-${r.asistente_slug}`)}
+                {#each itemsRegistrosConHitos as entry (entry.tipo === 'hito' ? `hito-${entry.item.id}` : (entry.item.id ?? `${entry.item.timestamp}-${entry.item.asistente_slug}`))}
+                {#if entry.tipo === 'hito'}
+                  {@const h = entry.item}
+                  <tr class="hito-marcador-row">
+                    <td colspan="10">
+                      <div class="hito-linea">
+                        <span class="hito-linea-segmento"></span>
+                        <span class="hito-linea-label">
+                          🏁 {h.nombre} — {formatTimestamp(h.fecha)}
+                          {#if isAdmin}
+                            <button class="hito-borrar-btn" title="Borrar hito" onclick={() => pedirConfirmacionBorrarHito(h)}>×</button>
+                          {/if}
+                        </span>
+                        <span class="hito-linea-segmento"></span>
+                      </div>
+                    </td>
+                  </tr>
+                {:else}
+                  {@const r = entry.item}
                   {@const expandido = registroExpandidoId === r.id}
                   {@const tieneError = r.error != null && r.error !== ''}
                   <tr
@@ -5842,6 +6104,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                       </td>
                     </tr>
                   {/if}
+                {/if}
                 {/each}
               </tbody>
             </table>
@@ -8172,6 +8435,53 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   .registro-celda-filtrable:hover {
     color: #93c5fd;
     text-decoration-color: #93c5fd;
+  }
+  .hito-marcador-row td {
+    padding: 0.6rem 0.6rem;
+    border: none;
+  }
+  .hito-linea {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+  .hito-linea-segmento {
+    flex: 1;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #ffd75e 15%, #fff2c2 50%, #ffd75e 85%, transparent);
+    box-shadow: 0 0 8px rgba(255, 215, 94, 0.85), 0 0 18px rgba(255, 215, 94, 0.45);
+    animation: hito-linea-brillo 2.4s ease-in-out infinite;
+  }
+  @keyframes hito-linea-brillo {
+    0%, 100% { opacity: 0.75; }
+    50% { opacity: 1; }
+  }
+  .hito-linea-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: #ffd75e;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-shadow: 0 0 8px rgba(255, 215, 94, 0.65);
+    white-space: nowrap;
+    letter-spacing: 0.02em;
+  }
+  .hito-borrar-btn {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 215, 94, 0.4);
+    color: #ffd75e;
+    border-radius: 4px;
+    width: 16px;
+    height: 16px;
+    line-height: 1;
+    font-size: 0.75rem;
+    cursor: pointer;
+    padding: 0;
+    text-shadow: none;
+  }
+  .hito-borrar-btn:hover {
+    background: rgba(255, 215, 94, 0.2);
   }
   .registro-detalle td {
     background: rgba(0, 0, 0, 0.25);
