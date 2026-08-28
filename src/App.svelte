@@ -396,8 +396,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   // === Registros ===
   // Bitácora de interacciones /chatbot. Consume GET /registros con filtros y
   // paginación. El "user" del sistema es el proyecto (quien tiene su password).
-  let registrosDesde = $state(fechaHaceDias(7));
-  let registrosHasta = $state(fechaHoy());
+  let registrosDesde = $state('');
+  let registrosHasta = $state('');
   let registrosProyectoFiltro = $state('');
   let registrosAsistenteFiltro = $state('');
   let registrosUsuarioFiltro = $state('');
@@ -448,13 +448,13 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     errorRegistros = '';
     try {
       const params = new URLSearchParams({
-        desde: registrosDesde,
-        hasta: registrosHasta,
         orden_por: registrosOrdenPor,
         orden_dir: registrosOrdenDir,
         limit: String(registrosLimit),
         offset: String(registrosOffset),
       });
+      if (registrosDesde) params.set('desde', registrosDesde);
+      if (registrosHasta) params.set('hasta', registrosHasta);
       if (registrosProyectoFiltro) params.set('proyecto', registrosProyectoFiltro);
       if (registrosAsistenteFiltro) params.set('asistente', registrosAsistenteFiltro);
       if (registrosUsuarioFiltro) params.set('usuario', registrosUsuarioFiltro);
@@ -6238,7 +6238,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             </div>
 
             <p style="color: rgba(255,255,255,0.4); font-size: 0.75rem; margin-top: 1rem;">
-              Rango: {registrosData.rango?.desde ?? registrosDesde} → {registrosData.rango?.hasta ?? registrosHasta}
+              Rango: {registrosData.rango?.desde ?? 'sin límite'} → {registrosData.rango?.hasta ?? 'sin límite'}
             </p>
           {/if}
         </div>
