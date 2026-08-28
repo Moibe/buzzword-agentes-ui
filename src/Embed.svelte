@@ -574,7 +574,9 @@
     border: none;
     outline: none;
     font-family: inherit;
-    font-size: 0.875rem;
+    /* 16px mínimo: por debajo de eso, Safari/Chrome en mobile hacen zoom
+       automático al enfocar el input. */
+    font-size: 16px;
     color: #1a1a2e;
     resize: none;
     line-height: 1.5;
