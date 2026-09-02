@@ -1630,8 +1630,114 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     mensajeTema = '';
   }
 
+  // ── Look and Feel masivo (todos los asistentes del proyecto) ──────────
+  // Reusa el mismo modal. Es una operación destructiva: pisa los colores
+  // individuales de cada asistente, así que pasa por confirmación explícita.
+  let lookAndFeelMasivo = $state(false);
+  let iconoArchivoMasivo = $state(null);
+  let iconoPreviewMasivo = $state(null);
+  let mostrarConfirmacionMasivo = $state(false);
+  let progresoMasivo = $state('');
+
+  // Qué ícono muestra el modal: en masivo, el recién elegido (preview local)
+  // gana sobre el que traía el asistente base.
+  const iconoMostradoEnModal = $derived(
+    lookAndFeelMasivo ? (iconoPreviewMasivo ?? iconoUrlActual) : iconoUrlActual
+  );
+
+  function abrirLookAndFeelMasivo() {
+    if (asistentes.length === 0) return;
+    // Arranca desde el primer asistente en vez de los defaults genéricos: así
+    // se ve un punto de partida real y no se pierde la paleta ya trabajada.
+    const base = asistentes[0];
+    lookAndFeelForm = {
+      color_primario: base.color_primario ?? TEMA_DEFAULT.color_primario,
+      color_burbuja_bot: base.color_burbuja_bot ?? TEMA_DEFAULT.color_burbuja_bot,
+      color_fondo_chat: base.color_fondo_chat ?? TEMA_DEFAULT.color_fondo_chat,
+      color_header: base.color_header ?? TEMA_DEFAULT.color_header,
+      color_avatar: base.color_avatar ?? base.color_primario ?? TEMA_DEFAULT.color_avatar,
+      color_boton_enviar: base.color_boton_enviar ?? base.color_primario ?? TEMA_DEFAULT.color_boton_enviar,
+      color_texto_header: base.color_texto_header ?? TEMA_DEFAULT.color_texto_header,
+      color_icono: base.color_icono ?? TEMA_DEFAULT.color_icono,
+      color_icono_boton: base.color_icono_boton ?? TEMA_DEFAULT.color_icono_boton,
+    };
+    iconoUrlActual = base.icono_url ?? null;
+    iconoArchivoMasivo = null;
+    iconoPreviewMasivo = null;
+    progresoMasivo = '';
+    mensajeTema = '';
+    lookAndFeelMasivo = true;
+  }
+
+  // En masivo el ícono no se sube al vuelo (no hay un asistente destino):
+  // se guarda en memoria y recién se estampa al confirmar.
+  function elegirIconoMasivo(archivo) {
+    if (!archivo) return;
+    iconoArchivoMasivo = archivo;
+    if (iconoPreviewMasivo) URL.revokeObjectURL(iconoPreviewMasivo);
+    iconoPreviewMasivo = URL.createObjectURL(archivo);
+    mensajeTema = '';
+  }
+
+  async function aplicarTemaATodos() {
+    mostrarConfirmacionMasivo = false;
+    cargandoGuardarTema = true;
+    mensajeTema = '';
+    const fallos = [];
+    try {
+      for (let i = 0; i < asistentes.length; i++) {
+        const a = asistentes[i];
+        progresoMasivo = `Aplicando a ${a.nombre} (${i + 1}/${asistentes.length})...`;
+        try {
+          const res = await fetch(`${apiUrl.base}/agentes/${encodeURIComponent(a.id)}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', ...adminHeaders() },
+            body: JSON.stringify(lookAndFeelForm),
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+          // El ícono solo se toca si se eligió uno nuevo: no mandarlo deja
+          // intacto el que cada asistente ya tenía.
+          if (iconoArchivoMasivo) {
+            const fd = new FormData();
+            fd.append('icono', iconoArchivoMasivo);
+            const resIcono = await fetch(`${apiUrl.base}/agentes/${encodeURIComponent(a.id)}/icono`, {
+              method: 'POST',
+              headers: adminHeaders(),
+              body: fd,
+            });
+            if (!resIcono.ok) {
+              const txt = await resIcono.text().catch(() => '');
+              let detalle = txt;
+              try { detalle = JSON.parse(txt).detail ?? txt; } catch (_) { /* texto plano */ }
+              throw new Error(detalle || `HTTP ${resIcono.status}`);
+            }
+          }
+        } catch (err) {
+          fallos.push(`${a.nombre}: ${err.message}`);
+        }
+      }
+      await cargarAsistentes();
+      if (fallos.length === 0) {
+        mensajeTema = `✓ Aplicado a ${asistentes.length} asistente(s).`;
+        cerrarLookAndFeel();
+      } else {
+        // No cerramos: que se vea qué falló en vez de asumir que todo salió bien.
+        mensajeTema = `⚠️ Falló en ${fallos.length} de ${asistentes.length}: ${fallos.join(' · ')}`;
+      }
+    } finally {
+      progresoMasivo = '';
+      cargandoGuardarTema = false;
+    }
+  }
+
   function cerrarLookAndFeel() {
     lookAndFeelAsistente = null;
+    lookAndFeelMasivo = false;
+    mostrarConfirmacionMasivo = false;
+    if (iconoPreviewMasivo) URL.revokeObjectURL(iconoPreviewMasivo);
+    iconoArchivoMasivo = null;
+    iconoPreviewMasivo = null;
     mensajeTema = '';
   }
 
@@ -4024,6 +4130,15 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               <button onclick={cargarAsistentes} class="vectorizacion-action-btn contextos-recargar-btn" disabled={cargandoAsistentes} aria-label="Recargar asistentes" title="Recargar asistentes">
                 <Icon name="recargar" size={16} />
               </button>
+              <button
+                onclick={abrirLookAndFeelMasivo}
+                class="vectorizacion-action-btn contextos-recargar-btn"
+                disabled={cargandoAsistentes || asistentes.length === 0}
+                aria-label="Look and Feel de todos los asistentes"
+                title="Look and Feel de todos los asistentes del proyecto"
+              >
+                <Icon name="look-and-feel" size={16} />
+              </button>
             </div>
             {#if errorCargarAsistentes}
               <p class="mensaje-contexto" style="margin-top: 0.5rem;">❌ {errorCargarAsistentes}</p>
@@ -4100,13 +4215,22 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             </div>
           {/if}
 
-          {#if lookAndFeelAsistente}
+          {#if lookAndFeelAsistente || lookAndFeelMasivo}
             <div class="modal-overlay" onclick={cerrarLookAndFeel} role="presentation">
               <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 720px; width: 92%;">
-                <h3 style="margin: 0 0 0.25rem;"><Icon name="look-and-feel" size={18} /> Look and Feel — {lookAndFeelAsistente.nombre}</h3>
-                <p style="color: rgba(255,255,255,0.7); font-size: 0.85rem; margin: 0 0 1rem;">
-                  Personaliza los colores del widget para <code>{lookAndFeelAsistente.slug}</code>. Aplica al chatbot y al MiniAdmin.
-                </p>
+                {#if lookAndFeelMasivo}
+                  <h3 style="margin: 0 0 0.25rem;"><Icon name="look-and-feel" size={18} /> Look and Feel — todos los asistentes</h3>
+                  <p style="color: rgba(255,255,255,0.7); font-size: 0.85rem; margin: 0 0 1rem;">
+                    Se aplicará a los <strong>{asistentes.length}</strong> asistentes de
+                    <strong>{proyectoActivo?.nombre ?? 'este proyecto'}</strong>, sobrescribiendo los colores que cada uno tenga.
+                    Arranca con la paleta de <code>{asistentes[0]?.slug}</code>.
+                  </p>
+                {:else}
+                  <h3 style="margin: 0 0 0.25rem;"><Icon name="look-and-feel" size={18} /> Look and Feel — {lookAndFeelAsistente.nombre}</h3>
+                  <p style="color: rgba(255,255,255,0.7); font-size: 0.85rem; margin: 0 0 1rem;">
+                    Personaliza los colores del widget para <code>{lookAndFeelAsistente.slug}</code>. Aplica al chatbot y al MiniAdmin.
+                  </p>
+                {/if}
 
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.85rem; margin-bottom: 1rem;">
                   <label style="display: flex; flex-direction: column; gap: 0.35rem; color: rgba(255,255,255,0.9); font-size: 0.85rem;">
@@ -4185,8 +4309,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 <!-- Ícono custom del avatar -->
                 <div style="display: flex; align-items: center; gap: 0.85rem; padding: 0.75rem; border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; margin-bottom: 1rem; background: rgba(0,0,0,0.18);">
                   <span style="display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 50%; background: {lookAndFeelForm.color_avatar}; flex-shrink: 0; overflow: hidden;">
-                    {#if iconoUrlActual}
-                      <img src={iconoUrlActual} alt="Ícono del asistente" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block;" />
+                    {#if iconoMostradoEnModal}
+                      <img src={iconoMostradoEnModal} alt="Ícono del asistente" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block;" />
                     {:else}
                       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="22" height="22">
                         <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM8 17.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5zM9.5 8c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5S9.5 9.38 9.5 8zm6.5 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill={lookAndFeelForm.color_icono}/>
@@ -4198,7 +4322,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                       Ícono del asistente
                     </div>
                     <div style="color: rgba(255,255,255,0.55); font-size: 0.72rem;">
-                      {iconoUrlActual ? 'Usando un ícono propio.' : 'Usando el ícono por defecto.'} PNG, JPG, WEBP, GIF o SVG · máx. 64KB · cuadrado se ve mejor.
+                      {#if lookAndFeelMasivo}
+                        {iconoArchivoMasivo
+                          ? 'Se aplicará este ícono a todos los asistentes.'
+                          : 'Si no eliges uno, cada asistente conserva el ícono que ya tenga.'}
+                      {:else}
+                        {iconoUrlActual ? 'Usando un ícono propio.' : 'Usando el ícono por defecto.'}
+                      {/if}
+                      PNG, JPG, WEBP, GIF o SVG · máx. 64KB · cuadrado se ve mejor.
                     </div>
                   </div>
                   <input
@@ -4206,7 +4337,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     type="file"
                     accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
                     style="display: none;"
-                    onchange={(e) => { const f = e.currentTarget.files?.[0]; e.currentTarget.value = ''; subirIcono(f); }}
+                    onchange={(e) => {
+                      const f = e.currentTarget.files?.[0];
+                      e.currentTarget.value = '';
+                      if (lookAndFeelMasivo) elegirIconoMasivo(f); else subirIcono(f);
+                    }}
                   />
                   <button
                     onclick={() => document.getElementById('icono-file')?.click()}
@@ -4214,9 +4349,18 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     class="crear-contexto-btn"
                     style="flex-shrink: 0;"
                   >
-                    {subiendoIcono ? '⟳ Subiendo...' : (iconoUrlActual ? 'Cambiar' : 'Subir ícono')}
+                    {subiendoIcono ? '⟳ Subiendo...' : (iconoMostradoEnModal ? 'Cambiar' : 'Subir ícono')}
                   </button>
-                  {#if iconoUrlActual}
+                  {#if lookAndFeelMasivo && iconoArchivoMasivo}
+                    <button
+                      onclick={() => { if (iconoPreviewMasivo) URL.revokeObjectURL(iconoPreviewMasivo); iconoArchivoMasivo = null; iconoPreviewMasivo = null; }}
+                      disabled={cargandoGuardarTema}
+                      class="crear-contexto-btn"
+                      style="flex-shrink: 0; background: rgba(0,0,0,0.45); color: rgba(255,255,255,0.95);"
+                    >
+                      No aplicar
+                    </button>
+                  {:else if !lookAndFeelMasivo && iconoUrlActual}
                     <button
                       onclick={quitarIcono}
                       disabled={subiendoIcono || cargandoGuardarTema}
@@ -4232,15 +4376,17 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 <div style="border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; overflow: hidden; margin-bottom: 1rem; background: {lookAndFeelForm.color_fondo_chat};">
                   <div style="background: {lookAndFeelForm.color_header}; padding: 0.6rem 0.85rem; display: flex; align-items: center; gap: 0.6rem; border-bottom: 1px solid rgba(0,0,0,0.08);">
                     <span style="display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; background: {lookAndFeelForm.color_avatar}; flex-shrink: 0; overflow: hidden;">
-                      {#if iconoUrlActual}
-                        <img src={iconoUrlActual} alt="" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block;" />
+                      {#if iconoMostradoEnModal}
+                        <img src={iconoMostradoEnModal} alt="" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block;" />
                       {:else}
                         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="16" height="16">
                           <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM8 17.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5zM9.5 8c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5S9.5 9.38 9.5 8zm6.5 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill={lookAndFeelForm.color_icono}/>
                         </svg>
                       {/if}
                     </span>
-                    <strong style="color: {lookAndFeelForm.color_texto_header}; font-size: 0.85rem;">{lookAndFeelAsistente.nombre}</strong>
+                    <strong style="color: {lookAndFeelForm.color_texto_header}; font-size: 0.85rem;">
+                      {lookAndFeelMasivo ? (asistentes[0]?.nombre ?? 'Asistente') : lookAndFeelAsistente.nombre}
+                    </strong>
                   </div>
                   <div style="padding: 0.85rem; display: flex; align-items: flex-end; justify-content: space-between; gap: 0.6rem;">
                     <div style="display: inline-block; background: {lookAndFeelForm.color_burbuja_bot}; color: #1a1a2e; padding: 0.5rem 0.75rem; border-radius: 14px; font-size: 0.8rem;">
@@ -4252,6 +4398,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   </div>
                 </div>
 
+                {#if progresoMasivo}
+                  <p style="font-size: 0.85rem; color: rgba(255,255,255,0.85); margin-bottom: 0.75rem;">⟳ {progresoMasivo}</p>
+                {/if}
                 {#if mensajeTema}
                   <p style="font-size: 0.85rem; color: rgba(255,255,255,0.85); margin-bottom: 0.75rem;">{mensajeTema}</p>
                 {/if}
@@ -4263,10 +4412,35 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   <button onclick={cerrarLookAndFeel} disabled={cargandoGuardarTema} class="crear-contexto-btn" style="background: rgba(0,0,0,0.45); color: rgba(255,255,255,0.95);">
                     Cancelar
                   </button>
-                  <button onclick={guardarTema} disabled={cargandoGuardarTema} class="crear-contexto-btn">
-                    {cargandoGuardarTema ? '⟳ Guardando...' : '✓ Guardar'}
-                  </button>
+                  {#if lookAndFeelMasivo}
+                    <button onclick={() => { mostrarConfirmacionMasivo = true; }} disabled={cargandoGuardarTema || asistentes.length === 0} class="crear-contexto-btn">
+                      {cargandoGuardarTema ? '⟳ Aplicando...' : `✓ Aplicar a ${asistentes.length}`}
+                    </button>
+                  {:else}
+                    <button onclick={guardarTema} disabled={cargandoGuardarTema} class="crear-contexto-btn">
+                      {cargandoGuardarTema ? '⟳ Guardando...' : '✓ Guardar'}
+                    </button>
+                  {/if}
                 </div>
+
+                {#if mostrarConfirmacionMasivo}
+                  <div class="confirmacion-borrar" style="margin-top: 1rem;">
+                    <h3><Icon name="warning" size={18} /> Confirmar cambio masivo</h3>
+                    <p style="color: rgba(255,255,255,0.85);">
+                      Se sobrescribirán los colores de los <strong>{asistentes.length}</strong> asistentes de
+                      <strong>{proyectoActivo?.nombre ?? 'este proyecto'}</strong>{#if iconoArchivoMasivo}, y se les pondrá el ícono que elegiste{/if}.
+                      Los colores que cada uno tenga por su cuenta se pierden y esto no se puede deshacer.
+                    </p>
+                    <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                      <button onclick={aplicarTemaATodos} disabled={cargandoGuardarTema} class="crear-contexto-btn">
+                        ✓ Sí, aplicar a todos
+                      </button>
+                      <button onclick={() => { mostrarConfirmacionMasivo = false; }} disabled={cargandoGuardarTema} class="crear-contexto-btn" style="background: rgba(0,0,0,0.45); color: rgba(255,255,255,0.95);">
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                {/if}
               </div>
             </div>
           {/if}
