@@ -5584,7 +5584,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 bind:value={consumoDesde}
                 onchange={cargarConsumo}
                 disabled={cargandoConsumo}
-                style="font-size: 1rem; padding: 0.6rem 0.85rem; min-width: 180px;"
+                style="font-size: 1rem; padding: 0.6rem 0.85rem; min-width: 150px;"
               />
             </div>
             <div class="lightbot-field" style="margin: 0;">
@@ -5595,7 +5595,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 bind:value={consumoHasta}
                 onchange={cargarConsumo}
                 disabled={cargandoConsumo}
-                style="font-size: 1rem; padding: 0.6rem 0.85rem; min-width: 180px;"
+                style="font-size: 1rem; padding: 0.6rem 0.85rem; min-width: 150px;"
               />
             </div>
             <div style="display: flex; gap: 0.4rem;">
@@ -5611,7 +5611,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 onchange={cargarConsumo}
                 disabled={cargandoConsumo}
                 class="contexto-select"
-                style="padding: 0.55rem 0.75rem; min-width: 200px;"
+                style="padding: 0.55rem 0.75rem; min-width: 160px;"
               >
                 <option value="">(todos)</option>
                 {#each asistentesGlobal as a (a.id)}
@@ -5627,7 +5627,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 onchange={cargarConsumo}
                 disabled={cargandoConsumo}
                 class="contexto-select"
-                style="padding: 0.55rem 0.75rem; min-width: 200px;"
+                style="padding: 0.55rem 0.75rem; min-width: 160px;"
               >
                 <option value="">(todos)</option>
                 {#each usuariosGlobal as u (u.id)}
