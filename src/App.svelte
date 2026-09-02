@@ -5584,7 +5584,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 bind:value={consumoDesde}
                 onchange={cargarConsumo}
                 disabled={cargandoConsumo}
-                style="font-size: 1rem; padding: 0.6rem 0.85rem; min-width: 150px;"
+                style="font-size: 1rem; padding: 0.6rem 0.6rem; min-width: 130px;"
               />
             </div>
             <div class="lightbot-field" style="margin: 0;">
@@ -5595,7 +5595,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 bind:value={consumoHasta}
                 onchange={cargarConsumo}
                 disabled={cargandoConsumo}
-                style="font-size: 1rem; padding: 0.6rem 0.85rem; min-width: 150px;"
+                style="font-size: 1rem; padding: 0.6rem 0.6rem; min-width: 130px;"
               />
             </div>
             <div style="display: flex; gap: 0.4rem;">
@@ -5603,7 +5603,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               <button class="vectorizacion-action-btn" onclick={() => { consumoDesde = fechaHaceDias(30); consumoHasta = fechaHoy(); cargarConsumo(); }} disabled={cargandoConsumo}>30 días</button>
               <button class="vectorizacion-action-btn" onclick={() => { consumoDesde = fechaHaceDias(90); consumoHasta = fechaHoy(); cargarConsumo(); }} disabled={cargandoConsumo}>90 días</button>
             </div>
-            <div class="lightbot-field" style="margin: 0;">
+            <div class="lightbot-field" style="margin: 0; flex: 1 1 130px;">
               <label for="consumo-asistente" style="display: block;">Asistente</label>
               <select
                 id="consumo-asistente"
@@ -5611,7 +5611,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 onchange={cargarConsumo}
                 disabled={cargandoConsumo}
                 class="contexto-select"
-                style="padding: 0.55rem 0.75rem; min-width: 160px;"
+                style="padding: 0.55rem 0.6rem; min-width: 130px; width: 100%;"
               >
                 <option value="">(todos)</option>
                 {#each asistentesGlobal as a (a.id)}
@@ -5619,7 +5619,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 {/each}
               </select>
             </div>
-            <div class="lightbot-field" style="margin: 0;">
+            <div class="lightbot-field" style="margin: 0; flex: 1 1 130px;">
               <label for="consumo-usuario" style="display: block;">Usuario</label>
               <select
                 id="consumo-usuario"
@@ -5627,7 +5627,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 onchange={cargarConsumo}
                 disabled={cargandoConsumo}
                 class="contexto-select"
-                style="padding: 0.55rem 0.75rem; min-width: 160px;"
+                style="padding: 0.55rem 0.6rem; min-width: 130px; width: 100%;"
               >
                 <option value="">(todos)</option>
                 {#each usuariosGlobal as u (u.id)}
