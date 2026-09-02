@@ -1573,6 +1573,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     color_boton_enviar: '#5b6abf',
     color_texto_header: '#1a1a2e',
     color_icono: '#ffffff',
+    color_icono_boton: '#ffffff',
   };
   let lookAndFeelForm = $state({ ...TEMA_DEFAULT });
   let cargandoGuardarTema = $state(false);
@@ -1623,6 +1624,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       color_boton_enviar: asistente.color_boton_enviar ?? asistente.color_primario ?? TEMA_DEFAULT.color_boton_enviar,
       color_texto_header: asistente.color_texto_header ?? TEMA_DEFAULT.color_texto_header,
       color_icono: asistente.color_icono ?? TEMA_DEFAULT.color_icono,
+      color_icono_boton: asistente.color_icono_boton ?? TEMA_DEFAULT.color_icono_boton,
     };
     mensajeTema = '';
   }
@@ -4080,6 +4082,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   </label>
 
                   <label style="display: flex; flex-direction: column; gap: 0.35rem; color: rgba(255,255,255,0.9); font-size: 0.85rem;">
+                    Ícono del botón de enviar
+                    <span style="display: flex; align-items: center; gap: 0.5rem;">
+                      <input type="color" bind:value={lookAndFeelForm.color_icono_boton} style="width: 44px; height: 36px; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; background: transparent; cursor: pointer;" />
+                      <input type="text" bind:value={lookAndFeelForm.color_icono_boton} placeholder="#ffffff" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
+                    </span>
+                  </label>
+
+                  <label style="display: flex; flex-direction: column; gap: 0.35rem; color: rgba(255,255,255,0.9); font-size: 0.85rem;">
                     Burbuja del bot
                     <span style="display: flex; align-items: center; gap: 0.5rem;">
                       <input type="color" bind:value={lookAndFeelForm.color_burbuja_bot} style="width: 44px; height: 36px; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; background: transparent; cursor: pointer;" />
@@ -4127,7 +4137,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                       Vista previa de mensaje del bot
                     </div>
                     <span style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 32px; height: 32px; border-radius: 50%; background: {lookAndFeelForm.color_boton_enviar};" title="Botón de enviar">
-                      <Icon name="enviar" size={14} />
+                      <Icon name="enviar" size={14} color={lookAndFeelForm.color_icono_boton} />
                     </span>
                   </div>
                 </div>
