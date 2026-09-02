@@ -370,6 +370,21 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     }
   }
 
+  // Igual que usuariosGlobal, pero de asistentes — para el dropdown de
+  // Asistente en Registros. A diferencia del usuario, el slug de asistente sí
+  // es único globalmente, pero igual mostramos el proyecto para orientar.
+  let asistentesGlobal = $state([]);
+
+  async function cargarAsistentesGlobal() {
+    try {
+      const res = await fetch(`${apiUrl.base}/agentes`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      asistentesGlobal = await res.json();
+    } catch {
+      asistentesGlobal = [];
+    }
+  }
+
   // El slug de usuario es único por proyecto, no globalmente — mostrar el
   // proyecto junto al nombre evita elegir el "cristian-qa" equivocado cuando
   // dos proyectos tienen cada uno el suyo.
@@ -5272,7 +5287,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           <button
             class="vectorizacion-subtab-btn"
             class:active={adminTab === 'registros'}
-            onclick={() => { adminTab = 'registros'; if (!registrosData) cargarRegistros(); if (proyectos.length === 0) cargarProyectos(); if (hitos.length === 0) cargarHitos(); if (usuariosGlobal.length === 0) cargarUsuariosGlobal(); }}
+            onclick={() => { adminTab = 'registros'; if (!registrosData) cargarRegistros(); if (proyectos.length === 0) cargarProyectos(); if (hitos.length === 0) cargarHitos(); if (usuariosGlobal.length === 0) cargarUsuariosGlobal(); if (asistentesGlobal.length === 0) cargarAsistentesGlobal(); }}
           >
             📝 Registros
           </button>
@@ -5968,17 +5983,20 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               </select>
             </div>
             <div class="lightbot-field" style="margin: 0;">
-              <label for="registros-asistente" style="display: block;">Asistente (slug)</label>
-              <input
+              <label for="registros-asistente" style="display: block;">Asistente</label>
+              <select
                 id="registros-asistente"
-                type="text"
                 bind:value={registrosAsistenteFiltro}
-                onkeydown={(e) => { if (e.key === 'Enter') aplicarFiltrosRegistros(); }}
-                onblur={aplicarFiltrosRegistros}
+                onchange={aplicarFiltrosRegistros}
                 disabled={cargandoRegistros}
-                placeholder="(todos)"
-                style="padding: 0.55rem 0.75rem; min-width: 180px; font-size: 0.95rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.3); color: #fff;"
-              />
+                class="contexto-select"
+                style="padding: 0.55rem 0.75rem; min-width: 200px;"
+              >
+                <option value="">(todos)</option>
+                {#each asistentesGlobal as a (a.id)}
+                  <option value={a.slug}>{a.nombre} · {nombreProyectoPorId(a.proyecto_id)}</option>
+                {/each}
+              </select>
             </div>
             <div class="lightbot-field" style="margin: 0;">
               <label for="registros-usuario" style="display: block;">Usuario</label>
