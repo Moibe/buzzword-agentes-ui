@@ -1626,6 +1626,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       color_icono: asistente.color_icono ?? TEMA_DEFAULT.color_icono,
       color_icono_boton: asistente.color_icono_boton ?? TEMA_DEFAULT.color_icono_boton,
     };
+    iconoUrlActual = asistente.icono_url ?? null;
     mensajeTema = '';
   }
 
@@ -1635,7 +1636,66 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   function resetearTema() {
+    // Solo colores. El ícono subido NO se borra acá: eso es destructivo y tiene
+    // su propio botón "Quitar".
     lookAndFeelForm = { ...TEMA_DEFAULT };
+  }
+
+  // El ícono no vive en `lookAndFeelForm` (que se manda entero en cada PATCH):
+  // se sube y se quita con sus propios endpoints para no pisarlo sin querer.
+  let iconoUrlActual = $state(null);
+  let subiendoIcono = $state(false);
+
+  async function subirIcono(archivo) {
+    if (!archivo || !lookAndFeelAsistente) return;
+    subiendoIcono = true;
+    mensajeTema = '';
+    try {
+      const fd = new FormData();
+      fd.append('icono', archivo);
+      const res = await fetch(`${apiUrl.base}/agentes/${encodeURIComponent(lookAndFeelAsistente.id)}/icono`, {
+        method: 'POST',
+        headers: adminHeaders(),
+        body: fd,
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        let detalle = txt;
+        try { detalle = JSON.parse(txt).detail ?? txt; } catch (_) { /* texto plano */ }
+        throw new Error(detalle || `HTTP ${res.status}`);
+      }
+      const actualizado = await res.json();
+      iconoUrlActual = actualizado.icono_url;
+      lookAndFeelAsistente = actualizado;
+      mensajeTema = '✓ Ícono actualizado.';
+      await cargarAsistentes();
+    } catch (err) {
+      mensajeTema = `❌ ${err.message}`;
+    } finally {
+      subiendoIcono = false;
+    }
+  }
+
+  async function quitarIcono() {
+    if (!lookAndFeelAsistente) return;
+    subiendoIcono = true;
+    mensajeTema = '';
+    try {
+      const res = await fetch(`${apiUrl.base}/agentes/${encodeURIComponent(lookAndFeelAsistente.id)}/icono`, {
+        method: 'DELETE',
+        headers: adminHeaders(),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const actualizado = await res.json();
+      iconoUrlActual = actualizado.icono_url;
+      lookAndFeelAsistente = actualizado;
+      mensajeTema = '✓ Se quitó el ícono; vuelve al default.';
+      await cargarAsistentes();
+    } catch (err) {
+      mensajeTema = `❌ ${err.message}`;
+    } finally {
+      subiendoIcono = false;
+    }
   }
 
   async function guardarTema() {
@@ -4122,13 +4182,63 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   </label>
                 </div>
 
+                <!-- Ícono custom del avatar -->
+                <div style="display: flex; align-items: center; gap: 0.85rem; padding: 0.75rem; border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; margin-bottom: 1rem; background: rgba(0,0,0,0.18);">
+                  <span style="display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 50%; background: {lookAndFeelForm.color_avatar}; flex-shrink: 0; overflow: hidden;">
+                    {#if iconoUrlActual}
+                      <img src={iconoUrlActual} alt="Ícono del asistente" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block;" />
+                    {:else}
+                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="22" height="22">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM8 17.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5zM9.5 8c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5S9.5 9.38 9.5 8zm6.5 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill={lookAndFeelForm.color_icono}/>
+                      </svg>
+                    {/if}
+                  </span>
+                  <div style="flex: 1; min-width: 0;">
+                    <div style="color: rgba(255,255,255,0.9); font-size: 0.85rem; margin-bottom: 0.15rem;">
+                      Ícono del asistente
+                    </div>
+                    <div style="color: rgba(255,255,255,0.55); font-size: 0.72rem;">
+                      {iconoUrlActual ? 'Usando un ícono propio.' : 'Usando el ícono por defecto.'} PNG, JPG, WEBP, GIF o SVG · máx. 64KB · cuadrado se ve mejor.
+                    </div>
+                  </div>
+                  <input
+                    id="icono-file"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+                    style="display: none;"
+                    onchange={(e) => { const f = e.currentTarget.files?.[0]; e.currentTarget.value = ''; subirIcono(f); }}
+                  />
+                  <button
+                    onclick={() => document.getElementById('icono-file')?.click()}
+                    disabled={subiendoIcono || cargandoGuardarTema}
+                    class="crear-contexto-btn"
+                    style="flex-shrink: 0;"
+                  >
+                    {subiendoIcono ? '⟳ Subiendo...' : (iconoUrlActual ? 'Cambiar' : 'Subir ícono')}
+                  </button>
+                  {#if iconoUrlActual}
+                    <button
+                      onclick={quitarIcono}
+                      disabled={subiendoIcono || cargandoGuardarTema}
+                      class="crear-contexto-btn"
+                      style="flex-shrink: 0; background: rgba(0,0,0,0.45); color: rgba(255,255,255,0.95);"
+                    >
+                      Quitar
+                    </button>
+                  {/if}
+                </div>
+
                 <!-- Vista previa rápida -->
                 <div style="border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; overflow: hidden; margin-bottom: 1rem; background: {lookAndFeelForm.color_fondo_chat};">
                   <div style="background: {lookAndFeelForm.color_header}; padding: 0.6rem 0.85rem; display: flex; align-items: center; gap: 0.6rem; border-bottom: 1px solid rgba(0,0,0,0.08);">
-                    <span style="display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; background: {lookAndFeelForm.color_avatar}; flex-shrink: 0;">
-                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="16" height="16">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM8 17.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5zM9.5 8c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5S9.5 9.38 9.5 8zm6.5 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill={lookAndFeelForm.color_icono}/>
-                      </svg>
+                    <span style="display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; background: {lookAndFeelForm.color_avatar}; flex-shrink: 0; overflow: hidden;">
+                      {#if iconoUrlActual}
+                        <img src={iconoUrlActual} alt="" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block;" />
+                      {:else}
+                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="16" height="16">
+                          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM8 17.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5zM9.5 8c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5S9.5 9.38 9.5 8zm6.5 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill={lookAndFeelForm.color_icono}/>
+                        </svg>
+                      {/if}
                     </span>
                     <strong style="color: {lookAndFeelForm.color_texto_header}; font-size: 0.85rem;">{lookAndFeelAsistente.nombre}</strong>
                   </div>
