@@ -5623,7 +5623,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                       <tr><th>Modelo</th><th>Input</th><th>Output</th><th>Costo</th></tr>
                     </thead>
                     <tbody>
-                      {#each consumoData.tokens_openai.por_modelo as m (m.modelo)}
+                      {#each consumoData.tokens_openai.por_modelo as m (`${m.proveedor}-${m.modelo}`)}
                         <tr>
                           <td><code>{m.modelo}</code></td>
                           <td>{formatNumero(m.input)}</td>
@@ -5643,7 +5643,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               <div class="consumo-seccion">
                 <h4>🎧 Llamadas por asistente</h4>
                 <div style="display: flex; flex-direction: column; gap: 0.5rem;">
-                  {#each consumoData.llamadas_por_asistente as a (a.slug)}
+                  {#each consumoData.llamadas_por_asistente as a (a.agente_id)}
                     <div class="consumo-bar-row">
                       <div class="consumo-bar-label">
                         <strong>{a.nombre || a.slug}</strong>
