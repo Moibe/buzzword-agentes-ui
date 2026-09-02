@@ -1571,6 +1571,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     color_header: '#ffffff',
     color_avatar: '#5b6abf',
     color_boton_enviar: '#5b6abf',
+    color_texto_header: '#1a1a2e',
+    color_icono: '#ffffff',
   };
   let lookAndFeelForm = $state({ ...TEMA_DEFAULT });
   let cargandoGuardarTema = $state(false);
@@ -1619,6 +1621,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       // que tenían antes de existir estos dos campos separados).
       color_avatar: asistente.color_avatar ?? asistente.color_primario ?? TEMA_DEFAULT.color_avatar,
       color_boton_enviar: asistente.color_boton_enviar ?? asistente.color_primario ?? TEMA_DEFAULT.color_boton_enviar,
+      color_texto_header: asistente.color_texto_header ?? TEMA_DEFAULT.color_texto_header,
+      color_icono: asistente.color_icono ?? TEMA_DEFAULT.color_icono,
     };
     mensajeTema = '';
   }
@@ -4060,6 +4064,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   </label>
 
                   <label style="display: flex; flex-direction: column; gap: 0.35rem; color: rgba(255,255,255,0.9); font-size: 0.85rem;">
+                    Ícono del avatar
+                    <span style="display: flex; align-items: center; gap: 0.5rem;">
+                      <input type="color" bind:value={lookAndFeelForm.color_icono} style="width: 44px; height: 36px; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; background: transparent; cursor: pointer;" />
+                      <input type="text" bind:value={lookAndFeelForm.color_icono} placeholder="#ffffff" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
+                    </span>
+                  </label>
+
+                  <label style="display: flex; flex-direction: column; gap: 0.35rem; color: rgba(255,255,255,0.9); font-size: 0.85rem;">
                     Botón de enviar
                     <span style="display: flex; align-items: center; gap: 0.5rem;">
                       <input type="color" bind:value={lookAndFeelForm.color_boton_enviar} style="width: 44px; height: 36px; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; background: transparent; cursor: pointer;" />
@@ -4090,13 +4102,25 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                       <input type="text" bind:value={lookAndFeelForm.color_header} placeholder="#ffffff" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
                     </span>
                   </label>
+
+                  <label style="display: flex; flex-direction: column; gap: 0.35rem; color: rgba(255,255,255,0.9); font-size: 0.85rem;">
+                    Texto del header
+                    <span style="display: flex; align-items: center; gap: 0.5rem;">
+                      <input type="color" bind:value={lookAndFeelForm.color_texto_header} style="width: 44px; height: 36px; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; background: transparent; cursor: pointer;" />
+                      <input type="text" bind:value={lookAndFeelForm.color_texto_header} placeholder="#1a1a2e" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
+                    </span>
+                  </label>
                 </div>
 
                 <!-- Vista previa rápida -->
                 <div style="border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; overflow: hidden; margin-bottom: 1rem; background: {lookAndFeelForm.color_fondo_chat};">
                   <div style="background: {lookAndFeelForm.color_header}; padding: 0.6rem 0.85rem; display: flex; align-items: center; gap: 0.6rem; border-bottom: 1px solid rgba(0,0,0,0.08);">
-                    <span style="display: inline-block; width: 28px; height: 28px; border-radius: 50%; background: {lookAndFeelForm.color_avatar};"></span>
-                    <strong style="color: #1a1a2e; font-size: 0.85rem;">{lookAndFeelAsistente.nombre}</strong>
+                    <span style="display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; background: {lookAndFeelForm.color_avatar}; flex-shrink: 0;">
+                      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="16" height="16">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM8 17.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5zM9.5 8c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5S9.5 9.38 9.5 8zm6.5 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill={lookAndFeelForm.color_icono}/>
+                      </svg>
+                    </span>
+                    <strong style="color: {lookAndFeelForm.color_texto_header}; font-size: 0.85rem;">{lookAndFeelAsistente.nombre}</strong>
                   </div>
                   <div style="padding: 0.85rem; display: flex; align-items: flex-end; justify-content: space-between; gap: 0.6rem;">
                     <div style="display: inline-block; background: {lookAndFeelForm.color_burbuja_bot}; color: #1a1a2e; padding: 0.5rem 0.75rem; border-radius: 14px; font-size: 0.8rem;">
