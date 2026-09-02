@@ -1569,6 +1569,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     color_burbuja_bot: '#d4e4f7',
     color_fondo_chat: '#f0f2f5',
     color_header: '#ffffff',
+    color_avatar: '#5b6abf',
+    color_boton_enviar: '#5b6abf',
   };
   let lookAndFeelForm = $state({ ...TEMA_DEFAULT });
   let cargandoGuardarTema = $state(false);
@@ -1613,6 +1615,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       color_burbuja_bot: asistente.color_burbuja_bot ?? TEMA_DEFAULT.color_burbuja_bot,
       color_fondo_chat: asistente.color_fondo_chat ?? TEMA_DEFAULT.color_fondo_chat,
       color_header: asistente.color_header ?? TEMA_DEFAULT.color_header,
+      // Sin override propio, heredan de color_primario (mismo comportamiento
+      // que tenían antes de existir estos dos campos separados).
+      color_avatar: asistente.color_avatar ?? asistente.color_primario ?? TEMA_DEFAULT.color_avatar,
+      color_boton_enviar: asistente.color_boton_enviar ?? asistente.color_primario ?? TEMA_DEFAULT.color_boton_enviar,
     };
     mensajeTema = '';
   }
@@ -4038,10 +4044,26 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.85rem; margin-bottom: 1rem;">
                   <label style="display: flex; flex-direction: column; gap: 0.35rem; color: rgba(255,255,255,0.9); font-size: 0.85rem;">
-                    Color primario (avatar, botón enviar, dots)
+                    Color primario (dots; default de avatar/botón)
                     <span style="display: flex; align-items: center; gap: 0.5rem;">
                       <input type="color" bind:value={lookAndFeelForm.color_primario} style="width: 44px; height: 36px; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; background: transparent; cursor: pointer;" />
                       <input type="text" bind:value={lookAndFeelForm.color_primario} placeholder="#5b6abf" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
+                    </span>
+                  </label>
+
+                  <label style="display: flex; flex-direction: column; gap: 0.35rem; color: rgba(255,255,255,0.9); font-size: 0.85rem;">
+                    Avatar
+                    <span style="display: flex; align-items: center; gap: 0.5rem;">
+                      <input type="color" bind:value={lookAndFeelForm.color_avatar} style="width: 44px; height: 36px; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; background: transparent; cursor: pointer;" />
+                      <input type="text" bind:value={lookAndFeelForm.color_avatar} placeholder="#5b6abf" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
+                    </span>
+                  </label>
+
+                  <label style="display: flex; flex-direction: column; gap: 0.35rem; color: rgba(255,255,255,0.9); font-size: 0.85rem;">
+                    Botón de enviar
+                    <span style="display: flex; align-items: center; gap: 0.5rem;">
+                      <input type="color" bind:value={lookAndFeelForm.color_boton_enviar} style="width: 44px; height: 36px; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; background: transparent; cursor: pointer;" />
+                      <input type="text" bind:value={lookAndFeelForm.color_boton_enviar} placeholder="#5b6abf" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
                     </span>
                   </label>
 
@@ -4073,13 +4095,16 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 <!-- Vista previa rápida -->
                 <div style="border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; overflow: hidden; margin-bottom: 1rem; background: {lookAndFeelForm.color_fondo_chat};">
                   <div style="background: {lookAndFeelForm.color_header}; padding: 0.6rem 0.85rem; display: flex; align-items: center; gap: 0.6rem; border-bottom: 1px solid rgba(0,0,0,0.08);">
-                    <span style="display: inline-block; width: 28px; height: 28px; border-radius: 50%; background: {lookAndFeelForm.color_primario};"></span>
+                    <span style="display: inline-block; width: 28px; height: 28px; border-radius: 50%; background: {lookAndFeelForm.color_avatar};"></span>
                     <strong style="color: #1a1a2e; font-size: 0.85rem;">{lookAndFeelAsistente.nombre}</strong>
                   </div>
-                  <div style="padding: 0.85rem;">
+                  <div style="padding: 0.85rem; display: flex; align-items: flex-end; justify-content: space-between; gap: 0.6rem;">
                     <div style="display: inline-block; background: {lookAndFeelForm.color_burbuja_bot}; color: #1a1a2e; padding: 0.5rem 0.75rem; border-radius: 14px; font-size: 0.8rem;">
                       Vista previa de mensaje del bot
                     </div>
+                    <span style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 32px; height: 32px; border-radius: 50%; background: {lookAndFeelForm.color_boton_enviar};" title="Botón de enviar">
+                      <Icon name="enviar" size={14} />
+                    </span>
                   </div>
                 </div>
 
