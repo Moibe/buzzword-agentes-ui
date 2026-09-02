@@ -3794,6 +3794,19 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                         {/if}
                         <strong style="color: #fff; font-size: 1rem;">{p.nombre}</strong>
                         <code style="background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; color: rgba(255,255,255,0.75);">{p.slug}</code>
+                        {#if isAdmin}
+                          <!-- Pegado al nombre (y no en el grupo de la derecha) para que
+                               se lea como "editar los datos de ESTE proyecto". -->
+                          <button
+                            onclick={() => abrirFormEditarProyecto(p)}
+                            class="vectorizacion-action-btn"
+                            style="align-self: center; padding: 0.25rem 0.4rem;"
+                            title="Editar datos del proyecto {p.nombre}"
+                            aria-label="Editar proyecto {p.nombre}"
+                          >
+                            <Icon name="editar" size={14} label="Editar" />
+                          </button>
+                        {/if}
                       </div>
                       {#if p.descripcion}
                         <p style="color: rgba(255,255,255,0.7); font-size: 0.85rem; margin: 0.5rem 0 0 0; line-height: 1.4;">
@@ -3802,9 +3815,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                       {/if}
                     </div>
                     <div style="display: flex; gap: 0.4rem; flex-shrink: 0; align-items: center;">
-                      {#if isAdmin}
-                        <button onclick={() => abrirFormEditarProyecto(p)} class="vectorizacion-action-btn" title="Editar proyecto"><Icon name="editar" size={16} label="Editar" /></button>
-                      {/if}
                       <button
                         onclick={() => { proyectoActivoId = p.id; vinoDeCambiarProyecto = false; vectorizacionTab = 'contextos'; }}
                         class="vectorizacion-action-btn"
