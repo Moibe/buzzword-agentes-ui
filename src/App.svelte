@@ -354,6 +354,29 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let cargandoConsumo = $state(false);
   let errorConsumo = $state('');
 
+  // Usuarios finales de TODOS los proyectos, solo para poblar los dropdowns de
+  // filtro en Consumo/Registros — separado del `usuarios` del tab Usuarios
+  // (ese sí está scopeado a `proyectoActivoId` para el CRUD).
+  let usuariosGlobal = $state([]);
+
+  async function cargarUsuariosGlobal() {
+    try {
+      const res = await fetch(`${apiUrl.base}/usuarios`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      usuariosGlobal = data.usuarios ?? [];
+    } catch {
+      usuariosGlobal = [];
+    }
+  }
+
+  // El slug de usuario es único por proyecto, no globalmente — mostrar el
+  // proyecto junto al nombre evita elegir el "cristian-qa" equivocado cuando
+  // dos proyectos tienen cada uno el suyo.
+  function nombreProyectoPorId(id) {
+    return proyectos.find((p) => p.id === id)?.nombre ?? id;
+  }
+
   async function cargarConsumo() {
     cargandoConsumo = true;
     errorConsumo = '';
@@ -5235,7 +5258,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           <button
             class="vectorizacion-subtab-btn"
             class:active={adminTab === 'consumo'}
-            onclick={() => { adminTab = 'consumo'; if (!consumoData) cargarConsumo(); }}
+            onclick={() => { adminTab = 'consumo'; if (!consumoData) cargarConsumo(); if (proyectos.length === 0) cargarProyectos(); if (usuariosGlobal.length === 0) cargarUsuariosGlobal(); }}
           >
             📊 Consumo
           </button>
@@ -5249,7 +5272,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           <button
             class="vectorizacion-subtab-btn"
             class:active={adminTab === 'registros'}
-            onclick={() => { adminTab = 'registros'; if (!registrosData) cargarRegistros(); if (proyectos.length === 0) cargarProyectos(); if (hitos.length === 0) cargarHitos(); }}
+            onclick={() => { adminTab = 'registros'; if (!registrosData) cargarRegistros(); if (proyectos.length === 0) cargarProyectos(); if (hitos.length === 0) cargarHitos(); if (usuariosGlobal.length === 0) cargarUsuariosGlobal(); }}
           >
             📝 Registros
           </button>
@@ -5564,17 +5587,20 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               <button class="vectorizacion-action-btn" onclick={() => { consumoDesde = fechaHaceDias(90); consumoHasta = fechaHoy(); cargarConsumo(); }} disabled={cargandoConsumo}>90 días</button>
             </div>
             <div class="lightbot-field" style="margin: 0;">
-              <label for="consumo-usuario" style="display: block;">Usuario (slug)</label>
-              <input
+              <label for="consumo-usuario" style="display: block;">Usuario</label>
+              <select
                 id="consumo-usuario"
-                type="text"
                 bind:value={consumoUsuarioFiltro}
-                onkeydown={(e) => { if (e.key === 'Enter') cargarConsumo(); }}
-                onblur={cargarConsumo}
+                onchange={cargarConsumo}
                 disabled={cargandoConsumo}
-                placeholder="(todos)"
-                style="padding: 0.55rem 0.75rem; min-width: 160px; font-size: 0.95rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.3); color: #fff;"
-              />
+                class="contexto-select"
+                style="padding: 0.55rem 0.75rem; min-width: 200px;"
+              >
+                <option value="">(todos)</option>
+                {#each usuariosGlobal as u (u.id)}
+                  <option value={u.slug}>{u.nombre} · {nombreProyectoPorId(u.proyecto_id)}{u.activo ? '' : ' (inactivo)'}</option>
+                {/each}
+              </select>
             </div>
           </div>
 
@@ -5955,17 +5981,20 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               />
             </div>
             <div class="lightbot-field" style="margin: 0;">
-              <label for="registros-usuario" style="display: block;">Usuario (slug)</label>
-              <input
+              <label for="registros-usuario" style="display: block;">Usuario</label>
+              <select
                 id="registros-usuario"
-                type="text"
                 bind:value={registrosUsuarioFiltro}
-                onkeydown={(e) => { if (e.key === 'Enter') aplicarFiltrosRegistros(); }}
-                onblur={aplicarFiltrosRegistros}
+                onchange={aplicarFiltrosRegistros}
                 disabled={cargandoRegistros}
-                placeholder="(todos)"
-                style="padding: 0.55rem 0.75rem; min-width: 180px; font-size: 0.95rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.3); color: #fff;"
-              />
+                class="contexto-select"
+                style="padding: 0.55rem 0.75rem; min-width: 200px;"
+              >
+                <option value="">(todos)</option>
+                {#each usuariosGlobal as u (u.id)}
+                  <option value={u.slug}>{u.nombre} · {nombreProyectoPorId(u.proyecto_id)}{u.activo ? '' : ' (inactivo)'}</option>
+                {/each}
+              </select>
             </div>
             <div class="lightbot-field" style="margin: 0;">
               <label for="registros-pregunta" style="display: block;">Pregunta contiene</label>
