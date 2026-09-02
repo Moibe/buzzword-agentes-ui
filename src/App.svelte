@@ -350,6 +350,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let consumoDesde = $state(fechaHaceDias(30));
   let consumoHasta = $state(fechaHoy());
   let consumoUsuarioFiltro = $state('');
+  let consumoAsistenteFiltro = $state('');
   let consumoData = $state(null);
   let cargandoConsumo = $state(false);
   let errorConsumo = $state('');
@@ -398,6 +399,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     try {
       let url = `${apiUrl.base}/consumo/resumen?desde=${encodeURIComponent(consumoDesde)}&hasta=${encodeURIComponent(consumoHasta)}`;
       if (consumoUsuarioFiltro) url += `&usuario=${encodeURIComponent(consumoUsuarioFiltro)}`;
+      if (consumoAsistenteFiltro) url += `&asistente=${encodeURIComponent(consumoAsistenteFiltro)}`;
       const res = await fetch(url);
       if (!res.ok) {
         const txt = await res.text().catch(() => '');
@@ -5273,7 +5275,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           <button
             class="vectorizacion-subtab-btn"
             class:active={adminTab === 'consumo'}
-            onclick={() => { adminTab = 'consumo'; if (!consumoData) cargarConsumo(); if (proyectos.length === 0) cargarProyectos(); if (usuariosGlobal.length === 0) cargarUsuariosGlobal(); }}
+            onclick={() => { adminTab = 'consumo'; if (!consumoData) cargarConsumo(); if (proyectos.length === 0) cargarProyectos(); if (usuariosGlobal.length === 0) cargarUsuariosGlobal(); if (asistentesGlobal.length === 0) cargarAsistentesGlobal(); }}
           >
             📊 Consumo
           </button>
@@ -5600,6 +5602,22 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               <button class="vectorizacion-action-btn" onclick={() => { consumoDesde = fechaHaceDias(7); consumoHasta = fechaHoy(); cargarConsumo(); }} disabled={cargandoConsumo}>7 días</button>
               <button class="vectorizacion-action-btn" onclick={() => { consumoDesde = fechaHaceDias(30); consumoHasta = fechaHoy(); cargarConsumo(); }} disabled={cargandoConsumo}>30 días</button>
               <button class="vectorizacion-action-btn" onclick={() => { consumoDesde = fechaHaceDias(90); consumoHasta = fechaHoy(); cargarConsumo(); }} disabled={cargandoConsumo}>90 días</button>
+            </div>
+            <div class="lightbot-field" style="margin: 0;">
+              <label for="consumo-asistente" style="display: block;">Asistente</label>
+              <select
+                id="consumo-asistente"
+                bind:value={consumoAsistenteFiltro}
+                onchange={cargarConsumo}
+                disabled={cargandoConsumo}
+                class="contexto-select"
+                style="padding: 0.55rem 0.75rem; min-width: 200px;"
+              >
+                <option value="">(todos)</option>
+                {#each asistentesGlobal as a (a.id)}
+                  <option value={a.slug}>{a.nombre} · {nombreProyectoPorId(a.proyecto_id)}</option>
+                {/each}
+              </select>
             </div>
             <div class="lightbot-field" style="margin: 0;">
               <label for="consumo-usuario" style="display: block;">Usuario</label>
