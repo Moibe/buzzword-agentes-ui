@@ -226,12 +226,95 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     return adminToken ? { 'Authorization': `Bearer ${adminToken}` } : {};
   }
 
-  function cerrarSesionAdmin() {
+  // ─── Login de operadores ────────────────────────────────────
+  // El token de sesión se guarda en la MISMA llave de localStorage que el token
+  // legacy de `?admin=`, porque el backend acepta las dos credenciales en el
+  // mismo header (ver identidad_actual en app.py). Así todas las llamadas del
+  // panel siguen funcionando sin tocarlas.
+  //
+  // `identidad` = lo que responde GET /auth/yo: `tipo` es 'operador' (cuenta
+  // propia) o 'legacy' (el token compartido, que no identifica a nadie).
+  let identidad = $state(null);
+  let loginAbierto = $state(false);
+  let loginEmail = $state('');
+  let loginPassword = $state('');
+  let loginCargando = $state(false);
+  let loginError = $state('');
+
+  const nombreOperador = $derived(
+    identidad?.tipo === 'operador' ? (identidad.operador?.nombre || identidad.operador?.email) : null
+  );
+
+  async function cargarIdentidad() {
+    if (!adminToken) { identidad = null; return; }
+    try {
+      const res = await fetch(`${apiUrl.base}/auth/yo`, { headers: adminHeaders() });
+      identidad = res.ok ? await res.json() : null;
+    } catch {
+      identidad = null;
+    }
+  }
+
+  function abrirLogin() {
+    loginEmail = '';
+    loginPassword = '';
+    loginError = '';
+    loginAbierto = true;
+  }
+
+  function cerrarLogin() {
+    loginAbierto = false;
+    loginPassword = '';
+  }
+
+  async function iniciarSesion() {
+    const email = loginEmail.trim();
+    if (!email || !loginPassword) {
+      loginError = 'Escribe tu email y tu contraseña.';
+      return;
+    }
+    loginCargando = true;
+    loginError = '';
+    try {
+      const res = await fetch(`${apiUrl.base}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password: loginPassword }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.detail || `HTTP ${res.status}`);
+
+      adminToken = data.token;
+      if (typeof localStorage !== 'undefined') localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, data.token);
+      vistaUsuario = false;
+      await cargarIdentidad();
+      cerrarLogin();
+      adminMensaje = `👋 Hola, ${data.operador?.nombre || data.operador?.email}`;
+      setTimeout(() => { adminMensaje = ''; }, 3000);
+    } catch (err) {
+      loginError = err.message;
+      loginPassword = '';
+    } finally {
+      loginCargando = false;
+    }
+  }
+
+  async function cerrarSesionAdmin() {
+    // Avisarle al backend para que la sesión muera de verdad y no solo deje de
+    // usarse en este navegador. Con el token legacy no hay nada que cerrar, y
+    // el endpoint responde ok igual, así que no hace falta distinguir.
+    try {
+      await fetch(`${apiUrl.base}/auth/logout`, { method: 'POST', headers: adminHeaders() });
+    } catch {
+      // Si la API no responde igual limpiamos local: quedarse "dentro" de un
+      // panel que no puede hablar con el backend no le sirve a nadie.
+    }
     adminToken = '';
+    identidad = null;
     vistaUsuario = false;
     if (typeof localStorage !== 'undefined') localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
     if (activeTab === 'admin') activeTab = 'vectorizacion';
-    adminMensaje = '🔒 Sesión admin cerrada';
+    adminMensaje = '🔒 Sesión cerrada';
     setTimeout(() => { adminMensaje = ''; }, 2500);
   }
 
@@ -323,6 +406,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       if (res.ok) {
         adminToken = tokenParam;
         if (typeof localStorage !== 'undefined') localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, tokenParam);
+        await cargarIdentidad();
         adminMensaje = '🔓 Modo admin activado';
         setTimeout(() => { adminMensaje = ''; }, 2500);
       } else {
@@ -2314,6 +2398,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   onMount(() => {
     verificarSalud(); // incluye reprogramarTimer() al terminar
     procesarParamAdmin();
+    // Con un token ya guardado de una sesión anterior, saber de quién es (y si
+    // sigue vivo) sin esperar a que el usuario haga algo.
+    if (adminToken) cargarIdentidad();
     return () => clearInterval(timerVerificacion);
   });
 
@@ -3485,8 +3572,70 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           aria-label="Activar vista usuario"
         >👁</button>
       {/if}
+      {#if !tieneTokenAdmin}
+        <button
+          class="tab-btn login-btn"
+          onclick={abrirLogin}
+          title="Entrar con tu cuenta de operador"
+        ><Icon name="admin" size={16} /> Entrar</button>
+      {/if}
     </div>
   </header>
+
+  <!-- Login de operador -->
+  {#if loginAbierto}
+    <div class="modal-overlay" onclick={() => { if (!loginCargando) cerrarLogin(); }} role="presentation">
+      <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 420px;">
+        <h3>🔐 Entrar</h3>
+        <form
+          onsubmit={(e) => { e.preventDefault(); iniciarSesion(); }}
+          style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.75rem;"
+        >
+          <label class="login-label" for="login-email">Email</label>
+          <!-- svelte-ignore a11y_autofocus -->
+          <input
+            id="login-email"
+            type="email"
+            class="contexto-input"
+            autocomplete="username"
+            bind:value={loginEmail}
+            disabled={loginCargando}
+            placeholder="tu@correo.com"
+            autofocus
+          />
+
+          <label class="login-label" for="login-password">Contraseña</label>
+          <input
+            id="login-password"
+            type="password"
+            class="contexto-input"
+            autocomplete="current-password"
+            bind:value={loginPassword}
+            disabled={loginCargando}
+            placeholder="••••••••"
+          />
+
+          {#if loginError}
+            <p class="login-error">❌ {loginError}</p>
+          {/if}
+
+          <div class="modal-buttons" style="margin-top: 0.25rem;">
+            <button type="button" class="modal-btn cancel" onclick={cerrarLogin} disabled={loginCargando}>
+              Cancelar
+            </button>
+            <button type="submit" class="modal-btn confirm" disabled={loginCargando}>
+              {loginCargando ? '⟳ Entrando...' : 'Entrar'}
+            </button>
+          </div>
+        </form>
+
+        <p class="login-nota">
+          ¿No tienes cuenta todavía? Se sigue pudiendo entrar con el enlace de siempre,
+          <code>?admin=&lt;token&gt;</code>.
+        </p>
+      </div>
+    </div>
+  {/if}
 
   <!-- Sub-nav de chatbot -->
   {#if activeTab === 'chat'}
@@ -5659,14 +5808,25 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       <div class="vectorizacion-container">
         <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
           <h2 style="color: white; margin: 0;">👤 Administración</h2>
-          <button
-            onclick={cerrarSesionAdmin}
-            class="vectorizacion-action-btn"
-            title="Borra el token del navegador. Para volver a entrar usa la URL ?admin=<token>"
-            style="background: rgba(220, 80, 80, 0.2); border-color: rgba(255, 150, 150, 0.4); color: #fff;"
-          >
-            🔒 Cerrar sesión admin
-          </button>
+          <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+            {#if identidad?.tipo === 'operador'}
+              <span class="operador-chip" title="Entraste con tu cuenta — rol {identidad.rol}">
+                👤 {nombreOperador} · {identidad.rol}
+              </span>
+            {:else if identidad?.tipo === 'legacy'}
+              <span class="operador-chip operador-chip--legacy" title="Entraste con el token compartido del .env: no identifica a nadie. Entra con tu cuenta para que quede registro de quién hace qué.">
+                ⚠ token compartido
+              </span>
+            {/if}
+            <button
+              onclick={cerrarSesionAdmin}
+              class="vectorizacion-action-btn"
+              title="Cierra la sesión en el servidor y borra el token de este navegador"
+              style="background: rgba(220, 80, 80, 0.2); border-color: rgba(255, 150, 150, 0.4); color: #fff;"
+            >
+              🔒 Cerrar sesión
+            </button>
+          </div>
         </div>
 
         <!-- Sub-tab bar -->
@@ -8508,9 +8668,72 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     background: rgba(255, 50, 50, 1);
   }
 
+  .modal-btn.confirm {
+    background: rgba(0, 119, 255, 0.85);
+    color: #fff;
+    border: 1px solid rgba(0, 119, 255, 1);
+  }
+
+  .modal-btn.confirm:hover:not(:disabled) {
+    background: rgba(0, 119, 255, 1);
+  }
+
   .modal-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  /* ── Login de operadores ─────────────────────────── */
+  .login-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: rgba(255, 255, 255, 0.6);
+    margin-bottom: -0.4rem;
+  }
+
+  .login-error {
+    margin: 0.75rem 0 0;
+    padding: 0.55rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    color: #fecaca;
+    background: rgba(200, 40, 40, 0.25);
+    border: 1px solid rgba(200, 40, 40, 0.5);
+    word-break: break-word;
+  }
+
+  .login-nota {
+    margin: 1rem 0 0;
+    font-size: 0.75rem;
+    line-height: 1.45;
+    color: rgba(255, 255, 255, 0.5);
+  }
+
+  .login-nota code {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+
+  .operador-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #fff;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+  }
+
+  .operador-chip--legacy {
+    color: #fde68a;
+    background: rgba(253, 230, 138, 0.12);
+    border-color: rgba(253, 230, 138, 0.4);
   }
 
   /* ── Documentos Section ──────────────────────────── */
