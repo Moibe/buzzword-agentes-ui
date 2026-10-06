@@ -433,6 +433,73 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     return `${Math.round(kb)} KB`;
   }
 
+  // ─── API keys de OpenAI ─────────────────────────────────────
+  // Principal (OPENAI_API_KEY) y respaldo (OPENAI_API_KEY_RESPALDO), ambas en
+  // el .env del backend: desde aquí solo se ve si están configuradas, nunca su
+  // valor. El modo decide cuándo entra la de respaldo — ver keys_openai.py en
+  // constructor-agente-rag.
+  const MODOS_KEYS_OPENAI = [
+    { valor: 'auto', titulo: 'Automático', descripcion: 'Usa la principal y, si OpenAI la rechaza (inválida, sin saldo, sin acceso al modelo o con el límite de uso agotado), repite la misma consulta con la de respaldo.' },
+    { valor: 'principal', titulo: 'Solo principal', descripcion: 'A la de respaldo nunca se le cobra nada. Si la principal falla, la consulta falla.' },
+    { valor: 'respaldo', titulo: 'Solo respaldo', descripcion: 'Fuerza la de respaldo, por ejemplo durante una caída conocida de la principal.' },
+  ];
+  let keysOpenai = $state(null);
+  let cargandoKeysOpenai = $state(false);
+  let errorKeysOpenai = $state('');
+  let guardandoModoKeys = $state(false);
+  let mensajeKeysOpenai = $state('');
+
+  async function cargarKeysOpenai() {
+    cargandoKeysOpenai = true;
+    errorKeysOpenai = '';
+    try {
+      const res = await fetch(`${apiUrl.base}/openai/keys`, { headers: adminHeaders() });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status}${txt ? ': ' + txt : ''}`);
+      }
+      keysOpenai = await res.json();
+    } catch (err) {
+      errorKeysOpenai = `No se pudo cargar el estado de las keys: ${err.message}`;
+      keysOpenai = null;
+    } finally {
+      cargandoKeysOpenai = false;
+    }
+  }
+
+  async function cambiarModoKeysOpenai(modo) {
+    if (!keysOpenai || modo === keysOpenai.modo || guardandoModoKeys) return;
+    guardandoModoKeys = true;
+    mensajeKeysOpenai = '';
+    try {
+      const res = await fetch(`${apiUrl.base}/openai/keys`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...adminHeaders() },
+        body: JSON.stringify({ modo }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.detail || `HTTP ${res.status}`);
+      keysOpenai = data;
+      mensajeKeysOpenai = '✅ Modo guardado: aplica desde la siguiente consulta.';
+      setTimeout(() => { mensajeKeysOpenai = ''; }, 3000);
+    } catch (err) {
+      mensajeKeysOpenai = `❌ ${err.message}`;
+    } finally {
+      guardandoModoKeys = false;
+    }
+  }
+
+  function keyOpenaiPorEtiqueta(etiqueta) {
+    return keysOpenai?.keys?.find((k) => k.key === etiqueta) ?? null;
+  }
+
+  function formatHora(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false });
+  }
+
   // === Registros ===
   // Bitácora de interacciones /chatbot. Consume GET /registros con filtros y
   // paginación. El "user" del sistema es el proyecto (quien tiene su password).
@@ -5613,6 +5680,13 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           </button>
           <button
             class="vectorizacion-subtab-btn"
+            class:active={adminTab === 'keys'}
+            onclick={() => { adminTab = 'keys'; cargarKeysOpenai(); }}
+          >
+            🔐 API keys
+          </button>
+          <button
+            class="vectorizacion-subtab-btn"
             class:active={adminTab === 'alias'}
             onclick={() => { adminTab = 'alias'; cargarModelosEmbedding(); }}
           >
@@ -5775,6 +5849,90 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 </div>
               </div>
             </div>
+          {/if}
+        </div>
+        {/if}
+
+        <!-- API keys de OpenAI -->
+        {#if adminTab === 'keys'}
+        <div class="modelos-wrap">
+          <div class="seccion-header">
+            <h3>🔐 API keys de OpenAI</h3>
+            <button onclick={cargarKeysOpenai} class="vectorizacion-action-btn" disabled={cargandoKeysOpenai}>
+              ↻ Recargar
+            </button>
+          </div>
+
+          <p style="color: rgba(255,255,255,0.7); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
+            La <strong>principal</strong> es <code>OPENAI_API_KEY</code> y la de <strong>respaldo</strong>, <code>OPENAI_API_KEY_RESPALDO</code>.
+            Las dos viven en el <code>.env</code> del backend: desde aquí solo se ve si están configuradas, nunca su valor.
+            Cubren el chat y los embeddings (búsqueda en las bases de conocimiento y vectorización de documentos).
+          </p>
+
+          {#if cargandoKeysOpenai && !keysOpenai}
+            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando estado de las keys...</p>
+          {:else if errorKeysOpenai}
+            <p style="color: #fff; font-size: 0.9rem; padding: 1rem; background: rgba(200,40,40,0.85); border-radius: 8px; line-height: 1.5;">
+              ❌ {errorKeysOpenai}
+            </p>
+          {:else if keysOpenai}
+            <div class="keys-grid">
+              {#each keysOpenai.keys as k (k.key)}
+                <div class="keys-card" class:keys-card--sin-configurar={!k.configurada}>
+                  <div class="keys-card-header">
+                    <strong>{k.key === 'principal' ? 'Principal' : 'Respaldo'}</strong>
+                    <code>{k.variable}</code>
+                  </div>
+                  {#if k.configurada}
+                    <span class="keys-estado keys-estado--ok">● Configurada</span>
+                  {:else}
+                    <span class="keys-estado">○ No configurada</span>
+                    <span class="keys-detalle">Agrega <code>{k.variable}=sk-...</code> al <code>.env</code> del backend y reinícialo.</span>
+                  {/if}
+                  {#if k.configurada}
+                    <span class="keys-detalle"><strong>Última respuesta:</strong> {k.ultimo_exito ? formatTimestamp(k.ultimo_exito) : '— (desde que arrancó el backend)'}</span>
+                  {/if}
+                  {#each k.pausas as pz (pz.modelo ?? '*')}
+                    <span class="keys-pausa">⏸ En pausa {pz.modelo ? `para ${pz.modelo}` : 'para todos los modelos'} hasta las {formatHora(pz.hasta)}</span>
+                  {/each}
+                  {#if k.ultimo_error}
+                    <div class="keys-error">
+                      <strong>Último error</strong> · {formatTimestamp(k.ultimo_error.cuando)} · <code>{k.ultimo_error.modelo}</code>
+                      <div style="margin-top: 0.25rem; word-break: break-word;">{k.ultimo_error.detalle}</div>
+                    </div>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+
+            <h4 style="color: #fff; margin: 1.5rem 0 0.75rem; font-size: 0.95rem;">¿Cuándo usar cada key?</h4>
+            <div class="keys-modos">
+              {#each MODOS_KEYS_OPENAI as m (m.valor)}
+                {@const requerida = m.valor === 'auto' ? null : keyOpenaiPorEtiqueta(m.valor)}
+                {@const sinKey = !!requerida && !requerida.configurada}
+                <button
+                  class="keys-modo"
+                  class:active={keysOpenai.modo === m.valor}
+                  disabled={guardandoModoKeys || sinKey}
+                  title={sinKey ? `${requerida.variable} no está configurada en el .env del backend` : ''}
+                  onclick={() => cambiarModoKeysOpenai(m.valor)}
+                >
+                  <span class="keys-modo-titulo">{keysOpenai.modo === m.valor ? '●' : '○'} {m.titulo}</span>
+                  <span class="keys-modo-desc">{m.descripcion}</span>
+                </button>
+              {/each}
+            </div>
+            {#if mensajeKeysOpenai}
+              <p style="margin: 0.75rem 0 0; font-size: 0.85rem; color: {mensajeKeysOpenai.startsWith('❌') ? '#fca5a5' : '#4ade80'};">
+                {mensajeKeysOpenai}
+              </p>
+            {/if}
+
+            <p style="color: rgba(255,255,255,0.45); font-size: 0.75rem; margin-top: 1rem; line-height: 1.4;">
+              💡 En Automático, una key que acaba de fallar se pausa {Math.round((keysOpenai.enfriamiento_s ?? 300) / 60)} min para no cobrar el intento fallido en cada consulta:
+              si el problema es de la cuenta (key inválida o sin saldo) la pausa aplica a todos los modelos; si es de un modelo, solo a ese.
+              Cambiar el modo borra las pausas, y el backend las olvida al reiniciarse. En Registros y Consumo se ve qué key respondió cada consulta.
+            </p>
           {/if}
         </div>
         {/if}
@@ -6046,6 +6204,31 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     </tbody>
                   </table>
                 {/if}
+                {#if consumoData.tokens_openai.por_key?.length > 0}
+                  <table class="consumo-tabla">
+                    <thead>
+                      <tr><th>Key de OpenAI</th><th>Consultas</th><th>Costo</th></tr>
+                    </thead>
+                    <tbody>
+                      {#each consumoData.tokens_openai.por_key as k (k.key)}
+                        <tr>
+                          <td>
+                            {#if k.key === 'respaldo'}
+                              <span class="registro-badge-respaldo">respaldo</span>
+                            {:else}
+                              principal
+                            {/if}
+                          </td>
+                          <td>{formatNumero(k.consultas)}</td>
+                          <td>{formatUsd(k.costo_usd_estimado)}</td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                  </table>
+                  <p style="color: rgba(255,255,255,0.45); font-size: 0.75rem; margin: 0.5rem 0 0;">
+                    A qué cuenta se le cobró cada consulta. Solo incluye consultas registradas desde que se guarda qué key respondió.
+                  </p>
+                {/if}
               </div>
             {/if}
 
@@ -6229,6 +6412,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           <p style="color: rgba(255,255,255,0.7); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
             Bitácora de interacciones con los asistentes. El proyecto identifica quién opera el asistente (quien tiene su password); la columna Usuario, cuando existe, identifica a la persona final que escribió — ver subtab Usuarios de cada proyecto.
             Los hitos (🏁) marcan cuándo entró en vigor un cambio que buscaba ahorrar tiempo o tokens — solo se ven cuando la tabla está ordenada por Timestamp.
+            La etiqueta <span class="registro-badge-respaldo">respaldo</span> junto a los tokens marca las consultas que respondió la key de respaldo de OpenAI (ver subtab API keys).
           </p>
 
           {#if hitoFormAbierto}
@@ -6589,7 +6773,12 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     <td style="text-align: right;">{formatMs(r.latencia_rag_ms)}</td>
                     <td style="text-align: right;">{formatMs(r.latencia_llm_ms)}</td>
                     <td style="text-align: right;">{formatMs(r.latencia_ms)}</td>
-                    <td style="text-align: right;">{formatNumero((r.tokens_in ?? 0) + (r.tokens_out ?? 0))}</td>
+                    <td style="text-align: right; white-space: nowrap;">
+                      {#if r.key_openai === 'respaldo'}
+                        <span class="registro-badge-respaldo" title="La respondió la key de respaldo de OpenAI: se le cobró a esa cuenta">respaldo</span>
+                      {/if}
+                      {formatNumero((r.tokens_in ?? 0) + (r.tokens_out ?? 0))}
+                    </td>
                   </tr>
                   {#if expandido}
                     <tr class="registro-detalle">
@@ -6605,6 +6794,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                           </div>
                           <div style="display: flex; gap: 1.25rem; flex-wrap: wrap; font-size: 0.8rem; color: rgba(255,255,255,0.7);">
                             <div><strong>Modelo:</strong> <code>{r.modelo ?? '—'}</code></div>
+                            {#if r.key_openai}
+                              <div><strong>Key OpenAI:</strong> {r.key_openai}</div>
+                            {/if}
                             <div><strong>Tokens in:</strong> {formatNumero(r.tokens_in)}</div>
                             <div><strong>Tokens out:</strong> {formatNumero(r.tokens_out)}</div>
                             <div><strong>Latencia total:</strong> {formatMs(r.latencia_ms)}</div>
@@ -8958,6 +9150,126 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   .registro-celda-filtrable:hover {
     color: #93c5fd;
     text-decoration-color: #93c5fd;
+  }
+  .registro-badge-respaldo {
+    display: inline-block;
+    padding: 1px 6px;
+    margin-right: 0.35rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    color: #fde68a;
+    background: rgba(253, 230, 138, 0.15);
+    border: 1px solid rgba(253, 230, 138, 0.4);
+    vertical-align: middle;
+  }
+
+  /* ── API keys de OpenAI ────────────────────────── */
+  .keys-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 0.85rem;
+  }
+  .keys-card {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    padding: 1rem 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    min-width: 0;
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 0.85rem;
+  }
+  .keys-card--sin-configurar {
+    border-style: dashed;
+    background: rgba(255, 255, 255, 0.03);
+  }
+  .keys-card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .keys-card-header strong {
+    color: #fff;
+    font-size: 1rem;
+  }
+  .keys-card code {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.78rem;
+    color: rgba(255, 255, 255, 0.75);
+  }
+  .keys-estado {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.55);
+  }
+  .keys-estado--ok {
+    color: #4ade80;
+  }
+  .keys-detalle {
+    color: rgba(255, 255, 255, 0.7);
+    line-height: 1.45;
+  }
+  .keys-pausa {
+    color: #fde68a;
+    font-weight: 600;
+  }
+  .keys-error {
+    font-size: 0.8rem;
+    color: #fecaca;
+    background: rgba(200, 40, 40, 0.2);
+    border: 1px solid rgba(200, 40, 40, 0.45);
+    border-radius: 6px;
+    padding: 0.5rem 0.65rem;
+    line-height: 1.45;
+  }
+  .keys-modos {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.75rem;
+  }
+  .keys-modo {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    text-align: left;
+    padding: 0.85rem 1rem;
+    background: rgba(0, 119, 255, 0.12);
+    border: 2px solid rgba(0, 119, 255, 0.3);
+    border-radius: 8px;
+    color: rgba(255, 255, 255, 0.85);
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .keys-modo:hover:not(:disabled):not(.active) {
+    background: rgba(0, 119, 255, 0.22);
+    border-color: rgba(0, 119, 255, 0.6);
+  }
+  .keys-modo.active {
+    background: rgba(0, 119, 255, 0.4);
+    border-color: rgba(0, 119, 255, 0.8);
+    color: #fff;
+    cursor: default;
+  }
+  .keys-modo:disabled:not(.active) {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .keys-modo-titulo {
+    font-size: 0.95rem;
+    font-weight: 700;
+  }
+  .keys-modo-desc {
+    font-size: 0.8rem;
+    line-height: 1.4;
+    color: rgba(255, 255, 255, 0.75);
   }
   .hito-marcador-row td {
     padding: 0.6rem 0.6rem;
