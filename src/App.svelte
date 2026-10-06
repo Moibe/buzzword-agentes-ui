@@ -573,6 +573,186 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     }
   }
 
+  // ─── CRUD de operadores (solo superadmin) ──────────────────
+  const esSuperadmin = $derived(identidad?.rol === 'superadmin');
+
+  let operadores = $state([]);
+  let rolesAsignables = $state(['superadmin', 'admin']);
+  let cargandoOperadores = $state(false);
+  let errorOperadores = $state('');
+  let mensajeOperadores = $state('');
+
+  // Form de alta/edición. `operadorEditandoId` null = estoy creando uno nuevo.
+  let operadorFormAbierto = $state(false);
+  let operadorEditandoId = $state(null);
+  let operadorFormEmail = $state('');
+  let operadorFormNombre = $state('');
+  let operadorFormPassword = $state('');
+  let operadorFormRol = $state('admin');
+  let guardandoOperador = $state(false);
+  let errorFormOperador = $state('');
+
+  let operadorABorrar = $state(null);
+  let borrandoOperador = $state(false);
+  let operadorParaPassword = $state(null);
+  let passwordNueva = $state('');
+  let guardandoPasswordOperador = $state(false);
+  let errorPasswordOperador = $state('');
+
+  function avisoOperadores(texto) {
+    mensajeOperadores = texto;
+    setTimeout(() => { mensajeOperadores = ''; }, 3500);
+  }
+
+  async function cargarOperadores() {
+    cargandoOperadores = true;
+    errorOperadores = '';
+    try {
+      const res = await fetch(`${apiUrl.base}/operadores`, { headers: adminHeaders() });
+      if (!res.ok) {
+        const txt = await res.json().catch(() => null);
+        throw new Error(txt?.detail || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      operadores = data.operadores ?? [];
+      // La lista de roles la manda el backend para no duplicarla aquí: hoy
+      // 'cliente' no se puede asignar hasta que exista el filtrado por proyecto.
+      if (data.roles_asignables?.length) rolesAsignables = data.roles_asignables;
+    } catch (err) {
+      errorOperadores = err.message;
+      operadores = [];
+    } finally {
+      cargandoOperadores = false;
+    }
+  }
+
+  function abrirCrearOperador() {
+    operadorEditandoId = null;
+    operadorFormEmail = '';
+    operadorFormNombre = '';
+    operadorFormPassword = '';
+    operadorFormRol = 'admin';
+    errorFormOperador = '';
+    operadorFormAbierto = true;
+  }
+
+  function abrirEditarOperador(o) {
+    operadorEditandoId = o.id;
+    operadorFormEmail = o.email;   // se muestra, pero es inmutable
+    operadorFormNombre = o.nombre;
+    operadorFormPassword = '';
+    operadorFormRol = o.rol;
+    errorFormOperador = '';
+    operadorFormAbierto = true;
+  }
+
+  function cerrarFormOperador() {
+    operadorFormAbierto = false;
+    operadorFormPassword = '';
+  }
+
+  async function guardarOperador() {
+    const editando = !!operadorEditandoId;
+    guardandoOperador = true;
+    errorFormOperador = '';
+    try {
+      const url = editando
+        ? `${apiUrl.base}/operadores/${encodeURIComponent(operadorEditandoId)}`
+        : `${apiUrl.base}/operadores`;
+      const body = editando
+        ? { nombre: operadorFormNombre, rol: operadorFormRol }
+        : {
+            email: operadorFormEmail.trim(),
+            nombre: operadorFormNombre.trim(),
+            password: operadorFormPassword,
+            rol: operadorFormRol,
+          };
+      const res = await fetch(url, {
+        method: editando ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json', ...adminHeaders() },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.detail || `HTTP ${res.status}`);
+      await cargarOperadores();
+      cerrarFormOperador();
+      avisoOperadores(editando ? '✅ Operador actualizado' : '✅ Operador creado');
+    } catch (err) {
+      errorFormOperador = err.message;
+    } finally {
+      guardandoOperador = false;
+    }
+  }
+
+  async function alternarActivoOperador(o) {
+    try {
+      const res = await fetch(`${apiUrl.base}/operadores/${encodeURIComponent(o.id)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...adminHeaders() },
+        body: JSON.stringify({ activo: !o.activo }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.detail || `HTTP ${res.status}`);
+      await cargarOperadores();
+      avisoOperadores(o.activo ? `🔒 ${o.nombre} desactivado — sus sesiones se cerraron` : `✅ ${o.nombre} reactivado`);
+    } catch (err) {
+      avisoOperadores(`❌ ${err.message}`);
+    }
+  }
+
+  async function borrarOperadorConfirmado() {
+    if (!operadorABorrar) return;
+    borrandoOperador = true;
+    try {
+      const res = await fetch(`${apiUrl.base}/operadores/${encodeURIComponent(operadorABorrar.id)}`, {
+        method: 'DELETE',
+        headers: adminHeaders(),
+      });
+      if (!res.ok && res.status !== 204) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.detail || `HTTP ${res.status}`);
+      }
+      const nombre = operadorABorrar.nombre;
+      operadorABorrar = null;
+      await cargarOperadores();
+      avisoOperadores(`🗑️ ${nombre} eliminado`);
+    } catch (err) {
+      avisoOperadores(`❌ ${err.message}`);
+      operadorABorrar = null;
+    } finally {
+      borrandoOperador = false;
+    }
+  }
+
+  function abrirPasswordOperador(o) {
+    operadorParaPassword = o;
+    passwordNueva = '';
+    errorPasswordOperador = '';
+  }
+
+  async function guardarPasswordOperador() {
+    if (!operadorParaPassword) return;
+    guardandoPasswordOperador = true;
+    errorPasswordOperador = '';
+    try {
+      const res = await fetch(`${apiUrl.base}/operadores/${encodeURIComponent(operadorParaPassword.id)}/password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...adminHeaders() },
+        body: JSON.stringify({ password_nueva: passwordNueva }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.detail || `HTTP ${res.status}`);
+      const nombre = operadorParaPassword.nombre;
+      operadorParaPassword = null;
+      passwordNueva = '';
+      avisoOperadores(`🔑 Contraseña de ${nombre} restablecida — sus sesiones se cerraron`);
+    } catch (err) {
+      errorPasswordOperador = err.message;
+    } finally {
+      guardandoPasswordOperador = false;
+    }
+  }
+
   function keyOpenaiPorEtiqueta(etiqueta) {
     return keysOpenai?.keys?.find((k) => k.key === etiqueta) ?? null;
   }
@@ -5635,6 +5815,72 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       </main>
   {/if}
 
+  <!-- Modal: confirmar borrado de un operador -->
+  {#if operadorABorrar}
+    <div class="modal-overlay" onclick={() => { if (!borrandoOperador) operadorABorrar = null; }} role="presentation">
+      <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 480px;">
+        <h3>⚠️ Borrar operador</h3>
+        <p>
+          Vas a eliminar la cuenta de <strong>{operadorABorrar.nombre}</strong>
+          (<code>{operadorABorrar.email}</code>). Dejará de poder entrar al panel de inmediato.
+        </p>
+        <p style="font-size: 0.8rem; color: rgba(255,255,255,0.65); margin-top: 0.5rem;">
+          Los registros históricos no se tocan. Si solo quieres quitarle el acceso un rato,
+          <strong>desactivarlo</strong> es reversible; esto no.
+        </p>
+        <div class="modal-buttons">
+          <button onclick={() => { operadorABorrar = null; }} disabled={borrandoOperador} class="modal-btn cancel">
+            Cancelar
+          </button>
+          <button onclick={borrarOperadorConfirmado} disabled={borrandoOperador} class="modal-btn danger">
+            {borrandoOperador ? '⟳ Borrando...' : 'Sí, borrar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  <!-- Modal: restablecer la contraseña de un operador -->
+  {#if operadorParaPassword}
+    <div class="modal-overlay" onclick={() => { if (!guardandoPasswordOperador) operadorParaPassword = null; }} role="presentation">
+      <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 460px;">
+        <h3>🔑 Restablecer contraseña</h3>
+        <p>
+          Le pondrás una contraseña nueva a <strong>{operadorParaPassword.nombre}</strong>
+          (<code>{operadorParaPassword.email}</code>), sin necesidad de saber la anterior.
+        </p>
+        <form
+          onsubmit={(e) => { e.preventDefault(); guardarPasswordOperador(); }}
+          style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.75rem;"
+        >
+          <input
+            type="password"
+            class="contexto-input"
+            bind:value={passwordNueva}
+            disabled={guardandoPasswordOperador}
+            placeholder="Nueva contraseña (mínimo 8 caracteres)"
+            autocomplete="new-password"
+          />
+          {#if errorPasswordOperador}
+            <p class="login-error">❌ {errorPasswordOperador}</p>
+          {/if}
+          <p style="font-size: 0.75rem; color: rgba(255,255,255,0.55); margin: 0; line-height: 1.45;">
+            Se cerrarán todas sus sesiones abiertas. Pásasela por un canal seguro;
+            esta pantalla no la vuelve a mostrar.
+          </p>
+          <div class="modal-buttons" style="margin-top: 0.25rem;">
+            <button type="button" onclick={() => { operadorParaPassword = null; }} disabled={guardandoPasswordOperador} class="modal-btn cancel">
+              Cancelar
+            </button>
+            <button type="submit" disabled={guardandoPasswordOperador} class="modal-btn confirm">
+              {guardandoPasswordOperador ? '⟳ Guardando...' : 'Restablecer'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  {/if}
+
   <!-- Modal: pedir password para activar proyecto -->
   {#if proyectoParaDesbloquear}
     <div class="modal-overlay" onclick={cerrarPromptPassword} role="presentation">
@@ -5845,6 +6091,15 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           >
             🔐 API keys
           </button>
+          {#if esSuperadmin}
+            <button
+              class="vectorizacion-subtab-btn"
+              class:active={adminTab === 'operadores'}
+              onclick={() => { adminTab = 'operadores'; cargarOperadores(); }}
+            >
+              👥 Operadores
+            </button>
+          {/if}
           <button
             class="vectorizacion-subtab-btn"
             class:active={adminTab === 'alias'}
@@ -6092,6 +6347,171 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               💡 En Automático, una key que acaba de fallar se pausa {Math.round((keysOpenai.enfriamiento_s ?? 300) / 60)} min para no cobrar el intento fallido en cada consulta:
               si el problema es de la cuenta (key inválida o sin saldo) la pausa aplica a todos los modelos; si es de un modelo, solo a ese.
               Cambiar el modo borra las pausas, y el backend las olvida al reiniciarse. En Registros y Consumo se ve qué key respondió cada consulta.
+            </p>
+          {/if}
+        </div>
+        {/if}
+
+        <!-- Operadores -->
+        {#if adminTab === 'operadores' && esSuperadmin}
+        <div class="modelos-wrap">
+          <div class="seccion-header">
+            <h3>👥 Operadores</h3>
+            <div style="display: flex; gap: 0.4rem;">
+              <button onclick={abrirCrearOperador} class="vectorizacion-action-btn">➕ Nuevo operador</button>
+              <button onclick={cargarOperadores} class="vectorizacion-action-btn" disabled={cargandoOperadores}>↻ Recargar</button>
+            </div>
+          </div>
+
+          <p style="color: rgba(255,255,255,0.7); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
+            Quienes entran a este panel con su propia cuenta. No confundir con el subtab <strong>Usuarios</strong> de cada proyecto:
+            esos son los usuarios finales de los widgets, que no tienen login y solo sirven para atribuir consultas.
+            El <strong>email es la credencial</strong> y no se puede cambiar; si alguien necesita otro, se crea una cuenta nueva.
+          </p>
+
+          {#if mensajeOperadores}
+            <p style="margin: 0 0 1rem; font-size: 0.88rem; color: {mensajeOperadores.startsWith('❌') ? '#fca5a5' : '#4ade80'};">
+              {mensajeOperadores}
+            </p>
+          {/if}
+
+          {#if operadorFormAbierto}
+            <div class="crear-contexto-form" style="flex-direction: column; align-items: stretch; max-width: 560px; margin-bottom: 1.25rem;">
+              <h4 style="margin: 0 0 0.25rem 0; color: #fff;">
+                {operadorEditandoId ? 'Editar operador' : 'Nuevo operador'}
+              </h4>
+              <div class="form-field">
+                <label for="op-email">Email</label>
+                <input
+                  id="op-email"
+                  type="email"
+                  class="contexto-input"
+                  bind:value={operadorFormEmail}
+                  disabled={guardandoOperador || !!operadorEditandoId}
+                  placeholder="persona@buzzword.mx"
+                  autocomplete="off"
+                />
+                {#if operadorEditandoId}
+                  <small style="font-size: 0.75rem; color: rgba(0,0,0,0.6); display: block; margin-top: 0.25rem;">
+                    El email no se puede cambiar: es la credencial con la que entra.
+                  </small>
+                {/if}
+              </div>
+              <div class="form-field">
+                <label for="op-nombre">Nombre</label>
+                <input
+                  id="op-nombre"
+                  type="text"
+                  class="contexto-input"
+                  bind:value={operadorFormNombre}
+                  disabled={guardandoOperador}
+                  maxlength="120"
+                  placeholder="Nombre y apellido"
+                />
+              </div>
+              {#if !operadorEditandoId}
+                <div class="form-field">
+                  <label for="op-password">Contraseña inicial</label>
+                  <input
+                    id="op-password"
+                    type="password"
+                    class="contexto-input"
+                    bind:value={operadorFormPassword}
+                    disabled={guardandoOperador}
+                    autocomplete="new-password"
+                    placeholder="Mínimo 8 caracteres"
+                  />
+                  <small style="font-size: 0.75rem; color: rgba(0,0,0,0.6); display: block; margin-top: 0.25rem;">
+                    Se la pasas tú por un canal seguro. Quien entre puede cambiarla después.
+                  </small>
+                </div>
+              {/if}
+              <div class="form-field">
+                <label for="op-rol">Rol</label>
+                <select id="op-rol" class="contexto-select" bind:value={operadorFormRol} disabled={guardandoOperador}>
+                  {#each rolesAsignables as r (r)}
+                    <option value={r}>{r}</option>
+                  {/each}
+                </select>
+                <small style="font-size: 0.75rem; color: rgba(0,0,0,0.6); display: block; margin-top: 0.25rem;">
+                  <strong>admin</strong> opera el panel. <strong>superadmin</strong> además administra operadores.
+                </small>
+              </div>
+
+              {#if errorFormOperador}
+                <p class="mensaje-contexto">❌ {errorFormOperador}</p>
+              {/if}
+
+              <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                <button onclick={cerrarFormOperador} disabled={guardandoOperador} class="crear-contexto-btn" style="background: rgba(0,0,0,0.45); color: rgba(255,255,255,0.95);">
+                  Cancelar
+                </button>
+                <button onclick={guardarOperador} disabled={guardandoOperador} class="crear-contexto-btn">
+                  {guardandoOperador ? '⟳ Guardando...' : '✓ Guardar'}
+                </button>
+              </div>
+            </div>
+          {/if}
+
+          {#if cargandoOperadores && operadores.length === 0}
+            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando operadores...</p>
+          {:else if errorOperadores}
+            <p style="color: #fff; font-size: 0.9rem; padding: 1rem; background: rgba(200,40,40,0.85); border-radius: 8px; line-height: 1.5;">
+              ❌ {errorOperadores}
+            </p>
+          {:else if operadores.length === 0}
+            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">No hay operadores todavía.</p>
+          {:else}
+            <table class="consumo-tabla">
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Email</th>
+                  <th>Rol</th>
+                  <th>Estado</th>
+                  <th style="text-align: right;">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each operadores as o (o.id)}
+                  {@const soyYo = identidad?.operador?.id === o.id}
+                  <tr style="opacity: {o.activo ? 1 : 0.55};">
+                    <td>
+                      <strong>{o.nombre}</strong>
+                      {#if soyYo}<span class="operador-yo">tú</span>{/if}
+                    </td>
+                    <td><code style="font-size: 0.78rem;">{o.email}</code></td>
+                    <td>
+                      <span class="rol-badge" class:rol-badge--super={o.rol === 'superadmin'}>{o.rol}</span>
+                    </td>
+                    <td>
+                      {#if o.activo}
+                        <span style="color: #4ade80;">● activo</span>
+                      {:else}
+                        <span style="color: rgba(255,255,255,0.5);">○ inactivo</span>
+                      {/if}
+                    </td>
+                    <td style="text-align: right; white-space: nowrap;">
+                      <button class="op-btn" title="Editar nombre y rol" onclick={() => abrirEditarOperador(o)}>✏️</button>
+                      <button class="op-btn" title="Restablecer su contraseña" onclick={() => abrirPasswordOperador(o)}>🔑</button>
+                      {#if !soyYo}
+                        <button
+                          class="op-btn"
+                          title={o.activo ? 'Desactivar (cierra sus sesiones)' : 'Reactivar'}
+                          onclick={() => alternarActivoOperador(o)}
+                        >{o.activo ? '🚫' : '✅'}</button>
+                        <button class="op-btn op-btn--danger" title="Borrar" onclick={() => { operadorABorrar = o; }}>🗑️</button>
+                      {/if}
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+
+            <p style="color: rgba(255,255,255,0.45); font-size: 0.75rem; margin-top: 1rem; line-height: 1.45;">
+              💡 Sobre tu propia fila solo puedes editar nombre y contraseña: desactivarte o borrarte te dejaría fuera.
+              Tampoco se puede quitar al último superadmin activo.
+              Desactivar o restablecer una contraseña cierra las sesiones de esa persona al instante.
             </p>
           {/if}
         </div>
@@ -8728,6 +9148,57 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     color: #fff;
     background: rgba(255, 255, 255, 0.12);
     border: 1px solid rgba(255, 255, 255, 0.22);
+  }
+
+  .operador-yo {
+    display: inline-block;
+    margin-left: 0.4rem;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: rgba(255, 255, 255, 0.75);
+    background: rgba(255, 255, 255, 0.15);
+  }
+
+  .rol-badge {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.85);
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+
+  .rol-badge--super {
+    color: #93c5fd;
+    background: rgba(96, 165, 250, 0.18);
+    border-color: rgba(96, 165, 250, 0.45);
+  }
+
+  .op-btn {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 6px;
+    padding: 0.25rem 0.45rem;
+    margin-left: 0.25rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  .op-btn:hover {
+    background: rgba(255, 255, 255, 0.18);
+    border-color: rgba(255, 255, 255, 0.35);
+  }
+
+  .op-btn--danger:hover {
+    background: rgba(220, 50, 50, 0.5);
+    border-color: rgba(255, 150, 150, 0.6);
   }
 
   .operador-chip--legacy {
