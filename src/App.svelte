@@ -753,6 +753,69 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     }
   }
 
+  // ─── Bitácora de administración (solo superadmin) ──────────
+  let auditoria = $state(null);
+  let cargandoAuditoria = $state(false);
+  let errorAuditoria = $state('');
+  let auditDesde = $state('');
+  let auditHasta = $state('');
+  let auditOperador = $state('');
+  let auditEntidad = $state('');
+  let auditAccion = $state('');
+  let auditOffset = $state(0);
+  const AUDIT_LIMIT = 25;
+
+  // Las listas de filtros las manda el backend (qué entidades y acciones
+  // existen, y quiénes aparecen de verdad en la bitácora), para no duplicarlas.
+  const auditOperadores = $derived(auditoria?.operadores ?? []);
+  const auditEntidades = $derived(auditoria?.entidades ?? []);
+  const auditAcciones = $derived(auditoria?.acciones ?? []);
+
+  async function cargarAuditoria() {
+    cargandoAuditoria = true;
+    errorAuditoria = '';
+    try {
+      const params = new URLSearchParams({ limit: String(AUDIT_LIMIT), offset: String(auditOffset) });
+      if (auditDesde) params.set('desde', auditDesde);
+      if (auditHasta) params.set('hasta', auditHasta);
+      if (auditOperador) params.set('operador', auditOperador);
+      if (auditEntidad) params.set('entidad', auditEntidad);
+      if (auditAccion) params.set('accion', auditAccion);
+      const res = await fetch(`${apiUrl.base}/auditoria?${params}`, { headers: adminHeaders() });
+      if (!res.ok) {
+        const d = await res.json().catch(() => null);
+        throw new Error(d?.detail || `HTTP ${res.status}`);
+      }
+      auditoria = await res.json();
+    } catch (err) {
+      errorAuditoria = err.message;
+      auditoria = null;
+    } finally {
+      cargandoAuditoria = false;
+    }
+  }
+
+  function filtrarAuditoria() {
+    auditOffset = 0;  // un filtro nuevo siempre arranca en la primera página
+    cargarAuditoria();
+  }
+
+  function limpiarFiltrosAuditoria() {
+    auditDesde = ''; auditHasta = ''; auditOperador = ''; auditEntidad = ''; auditAccion = '';
+    filtrarAuditoria();
+  }
+
+  const ICONO_ACCION = {
+    crear: '➕', actualizar: '✏️', borrar: '🗑️', password: '🔑', sincronizar: '🔄',
+  };
+
+  function detalleLegible(detalle) {
+    if (!detalle) return '';
+    if (detalle.campos?.length) return `campos: ${detalle.campos.join(', ')}`;
+    if (detalle.agregados?.length) return `agregados: ${detalle.agregados.join(', ')}`;
+    return Object.entries(detalle).map(([k, v]) => `${k}: ${v}`).join(' · ');
+  }
+
   function keyOpenaiPorEtiqueta(etiqueta) {
     return keysOpenai?.keys?.find((k) => k.key === etiqueta) ?? null;
   }
@@ -6099,6 +6162,13 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             >
               👥 Operadores
             </button>
+            <button
+              class="vectorizacion-subtab-btn"
+              class:active={adminTab === 'auditoria'}
+              onclick={() => { adminTab = 'auditoria'; cargarAuditoria(); }}
+            >
+              📜 Bitácora
+            </button>
           {/if}
           <button
             class="vectorizacion-subtab-btn"
@@ -6514,6 +6584,136 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               Desactivar o restablecer una contraseña cierra las sesiones de esa persona al instante.
             </p>
           {/if}
+        </div>
+        {/if}
+
+        <!-- Bitácora de administración -->
+        {#if adminTab === 'auditoria' && esSuperadmin}
+        <div class="modelos-wrap">
+          <div class="seccion-header">
+            <h3>📜 Bitácora</h3>
+            <button onclick={cargarAuditoria} class="vectorizacion-action-btn" disabled={cargandoAuditoria}>↻ Recargar</button>
+          </div>
+
+          <p style="color: rgba(255,255,255,0.7); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
+            Quién hizo qué y cuándo. Se escribe sola con cada cambio hecho desde el panel y <strong>no se puede editar ni borrar</strong>.
+            Esto no son las consultas al chatbot — esas viven en <strong>Registros</strong>.
+          </p>
+
+          <!-- Filtros -->
+          <div style="display: flex; gap: 0.75rem; align-items: end; margin-bottom: 1.25rem; flex-wrap: wrap;">
+            <div class="lightbot-field" style="margin: 0;">
+              <label for="audit-desde" style="display: block;">Desde</label>
+              <input id="audit-desde" type="date" bind:value={auditDesde} onchange={filtrarAuditoria} disabled={cargandoAuditoria} style="font-size: 1rem; padding: 0.6rem; min-width: 150px;" />
+            </div>
+            <div class="lightbot-field" style="margin: 0;">
+              <label for="audit-hasta" style="display: block;">Hasta</label>
+              <input id="audit-hasta" type="date" bind:value={auditHasta} onchange={filtrarAuditoria} disabled={cargandoAuditoria} style="font-size: 1rem; padding: 0.6rem; min-width: 150px;" />
+            </div>
+            <div class="lightbot-field" style="margin: 0;">
+              <label for="audit-operador" style="display: block;">Quién</label>
+              <select id="audit-operador" class="contexto-select" bind:value={auditOperador} onchange={filtrarAuditoria} disabled={cargandoAuditoria} style="padding: 0.55rem 0.75rem; min-width: 200px;">
+                <option value="">(todos)</option>
+                {#each auditOperadores as o (o)}
+                  <option value={o}>{o}</option>
+                {/each}
+              </select>
+            </div>
+            <div class="lightbot-field" style="margin: 0;">
+              <label for="audit-entidad" style="display: block;">Sobre qué</label>
+              <select id="audit-entidad" class="contexto-select" bind:value={auditEntidad} onchange={filtrarAuditoria} disabled={cargandoAuditoria} style="padding: 0.55rem 0.75rem; min-width: 150px;">
+                <option value="">(todo)</option>
+                {#each auditEntidades as e (e)}
+                  <option value={e}>{e}</option>
+                {/each}
+              </select>
+            </div>
+            <div class="lightbot-field" style="margin: 0;">
+              <label for="audit-accion" style="display: block;">Acción</label>
+              <select id="audit-accion" class="contexto-select" bind:value={auditAccion} onchange={filtrarAuditoria} disabled={cargandoAuditoria} style="padding: 0.55rem 0.75rem; min-width: 150px;">
+                <option value="">(todas)</option>
+                {#each auditAcciones as a (a)}
+                  <option value={a}>{a}</option>
+                {/each}
+              </select>
+            </div>
+            <button onclick={limpiarFiltrosAuditoria} class="vectorizacion-action-btn" disabled={cargandoAuditoria}>Limpiar</button>
+          </div>
+
+          {#if cargandoAuditoria && !auditoria}
+            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando bitácora...</p>
+          {:else if errorAuditoria}
+            <p style="color: #fff; font-size: 0.9rem; padding: 1rem; background: rgba(200,40,40,0.85); border-radius: 8px; line-height: 1.5;">
+              ❌ {errorAuditoria}
+            </p>
+          {:else if !auditoria || auditoria.items.length === 0}
+            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">
+              Sin movimientos para estos filtros.
+            </p>
+          {:else}
+            <table class="consumo-tabla">
+              <thead>
+                <tr>
+                  <th>Cuándo</th>
+                  <th>Quién</th>
+                  <th>Qué hizo</th>
+                  <th>Sobre</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each auditoria.items as a (a.id)}
+                  {@const det = detalleLegible(a.detalle)}
+                  <tr>
+                    <td><code style="font-size: 0.78rem;">{formatTimestamp(a.fecha)}</code></td>
+                    <td>
+                      {#if a.credencial === 'legacy'}
+                        <span class="registro-badge-respaldo" title="Se usó el ADMIN_PASSWORD compartido: el servidor no puede saber quién fue">token compartido</span>
+                      {:else}
+                        {a.operador_nombre || a.operador_email || '—'}
+                        {#if a.operador_nombre}
+                          <div style="font-size: 0.72rem; color: rgba(255,255,255,0.45);">{a.operador_email}</div>
+                        {/if}
+                      {/if}
+                    </td>
+                    <td>
+                      {ICONO_ACCION[a.accion] ?? '•'} {a.resumen}
+                      {#if det}
+                        <div style="font-size: 0.72rem; color: rgba(255,255,255,0.45);">{det}</div>
+                      {/if}
+                    </td>
+                    <td><span class="rol-badge">{a.entidad}</span></td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+
+            <!-- Paginación -->
+            {@const hasta = Math.min(auditOffset + auditoria.items.length, auditoria.total)}
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; flex-wrap: wrap; gap: 0.75rem;">
+              <span style="color: rgba(255,255,255,0.6); font-size: 0.85rem;">
+                Mostrando {formatNumero(auditOffset + 1)}–{formatNumero(hasta)} de {formatNumero(auditoria.total)}
+              </span>
+              <div style="display: flex; gap: 0.4rem;">
+                <button
+                  onclick={() => { auditOffset = Math.max(0, auditOffset - AUDIT_LIMIT); cargarAuditoria(); }}
+                  class="vectorizacion-action-btn"
+                  disabled={cargandoAuditoria || auditOffset === 0}
+                >← Anterior</button>
+                <button
+                  onclick={() => { auditOffset += AUDIT_LIMIT; cargarAuditoria(); }}
+                  class="vectorizacion-action-btn"
+                  disabled={cargandoAuditoria || hasta >= auditoria.total}
+                >Siguiente →</button>
+              </div>
+            </div>
+          {/if}
+
+          <p style="color: rgba(255,255,255,0.45); font-size: 0.75rem; margin-top: 1rem; line-height: 1.45;">
+            💡 Solo aparece lo que pasa por un endpoint con credencial. Crear o borrar <strong>asistentes</strong> y
+            <strong>bases de conocimiento</strong> hoy es público, así que esas acciones no se registran — no porque nadie
+            las haga, sino porque el servidor no sabe quién fue. Las contraseñas nunca se guardan aquí: en una edición solo
+            se anota <em>qué campos</em> cambiaron.
+          </p>
         </div>
         {/if}
 
