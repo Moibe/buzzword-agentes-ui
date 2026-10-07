@@ -50,7 +50,7 @@
     try {
       const res = await fetch(`${apiUrl.base}/registrarLog`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...adminHeaders() },
         body: JSON.stringify(entry),
       });
       if (res.ok) {
@@ -2205,7 +2205,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     try {
       const res = await fetch(`${apiUrl.base}/agentes/${encodeURIComponent(lookAndFeelAsistente.id)}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...adminHeaders() },
         body: JSON.stringify(lookAndFeelForm),
       });
       if (!res.ok) {
@@ -2559,6 +2559,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     try {
       const res = await fetch(`${apiUrl.base}/agentes/${encodeURIComponent(asistenteABorrar.id)}`, {
         method: 'DELETE',
+        headers: adminHeaders(),
       });
       if (!res.ok && res.status !== 204) throw new Error(`HTTP ${res.status}`);
       await cargarAsistentes();
@@ -2928,7 +2929,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       console.groupEnd();
 
       const res = await fetch(url, {
-        method: 'POST'
+        method: 'POST',
+        headers: adminHeaders(),
       });
 
       if (!res.ok) {
@@ -3003,7 +3005,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       console.log('Force       :', force);
       console.groupEnd();
 
-      const res = await fetch(url, { method: 'DELETE' });
+      const res = await fetch(url, { method: 'DELETE', headers: adminHeaders() });
 
       // 409: BC en uso por algún asistente. Capturamos el detail y mostramos el
       // segundo modal de "Borrar de todas formas" en vez de fallar duro.
@@ -3189,7 +3191,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       const url = `${apiUrl.base}/agregarSnippet?contexto=${encodeURIComponent(contextoSeleccionadoParaDocumentos)}`;
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...adminHeaders() },
         body: JSON.stringify({ filename, contenido }),
       });
       if (!res.ok) {
@@ -3326,7 +3328,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       const body = { filename: it.filename, contenido: `P: ${it.pregunta}\nR: ${it.respuesta}` };
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...adminHeaders() },
         body: JSON.stringify(body),
       });
       if (!res.ok) {
@@ -3414,7 +3416,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       const url = `${apiUrl.base}/agregarSnippet?contexto=${encodeURIComponent(contexto)}`;
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...adminHeaders() },
         body: JSON.stringify({ filename, contenido }),
       });
       if (!res.ok) {
