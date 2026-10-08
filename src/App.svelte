@@ -1662,6 +1662,71 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   let vectorizacionContextos = $state([]);
+
+  // ─── Nombre visible de una base de conocimiento ─────────────
+  // Es sólo una etiqueta para el panel: el identificador real (`nombre_chroma`,
+  // ej. `ad-seguros-1`) nunca cambia, porque lo referencian Chroma, los
+  // asistentes y la carpeta de documentos en disco. Por eso renombrar aquí no
+  // puede dejar nada colgado.
+  let renombrarBcAbierto = $state(false);
+  let renombrarBcValor = $state('');
+  let renombrarBcGuardando = $state(false);
+  let renombrarBcError = $state('');
+
+  // identificador → etiqueta. Lo llenan los dos cargadores de BCs
+  // (`cargarContextos` y `cargarVectorizacionContextos`) para que el nombre se
+  // vea igual en el listado, en los selectores y en la vista de documentos.
+  let nombresVisiblesBc = $state({});
+
+  function recordarNombresVisibles(mapa) {
+    for (const [nombre, info] of Object.entries(mapa ?? {})) {
+      const visible = (info && typeof info === 'object') ? info.nombre_visible : null;
+      if (visible) nombresVisiblesBc[nombre] = visible;
+      else delete nombresVisiblesBc[nombre];
+    }
+  }
+
+  function nombreVisibleBc(nombreChroma) {
+    if (!nombreChroma) return '';
+    return nombresVisiblesBc[nombreChroma] || nombreChroma;
+  }
+
+  // true si la BC tiene etiqueta propia, para mostrar el identificador al lado.
+  function tieneNombrePropio(nombreChroma) {
+    return !!nombresVisiblesBc[nombreChroma];
+  }
+
+  function abrirRenombrarBc(nombreChroma) {
+    renombrarBcValor = nombresVisiblesBc[nombreChroma] || '';
+    renombrarBcError = '';
+    renombrarBcAbierto = true;
+  }
+
+  async function guardarNombreBc() {
+    const objetivo = contextoSeleccionadoParaDocumentos;
+    if (!objetivo) return;
+    renombrarBcGuardando = true;
+    renombrarBcError = '';
+    try {
+      const res = await fetch(`${apiUrl.base}/renombrarContexto?contexto=${encodeURIComponent(objetivo)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...adminHeaders() },
+        body: JSON.stringify({ nombre_visible: renombrarBcValor.trim() || null }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.detail || `HTTP ${res.status}`);
+      // Actualizar en memoria para que el cambio se vea sin recargar la lista.
+      if (data.nombre_visible) nombresVisiblesBc[objetivo] = data.nombre_visible;
+      else delete nombresVisiblesBc[objetivo];
+      const bc = vectorizacionContextos.find((c) => c.nombre === objetivo);
+      if (bc) bc.info = { ...bc.info, nombre_visible: data.nombre_visible };
+      renombrarBcAbierto = false;
+    } catch (err) {
+      renombrarBcError = err.message;
+    } finally {
+      renombrarBcGuardando = false;
+    }
+  }
   let cargandoVectorizacionContextos = $state(false);
   
   // Modelos de Embedding
@@ -2741,6 +2806,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         if (firstObjKey) mapa = data[firstObjKey];
       }
 
+      if (!Array.isArray(mapa)) recordarNombresVisibles(mapa);
       contextos = Array.isArray(mapa) ? mapa : Object.keys(mapa);
       console.log('%c📂 Contextos cargados:', 'color:#c8102e;font-weight:bold', contextos);
     } catch (err) {
@@ -2874,6 +2940,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       const mapa = data['Contextos existentes para este chatbot'] ?? {};
+      recordarNombresVisibles(mapa);
       vectorizacionContextos = Object.entries(mapa).map(([nombre, info]) => ({
         nombre,
         info: typeof info === 'object' ? info : {},
@@ -4421,7 +4488,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   >
                     <option value="">— Sin base de conocimiento —</option>
                     {#each contextos as ctx (ctx)}
-                      <option value={ctx}>{ctx}</option>
+                      <option value={ctx}>{nombreVisibleBc(ctx)}</option>
                     {/each}
                   </select>
                 </div>
@@ -5240,7 +5307,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               <div class="contextos-table">
                 {#each vectorizacionContextos as contexto (contexto.nombre)}
                   <div class="contexto-row">
-                    <span class="contexto-nombre">{contexto.nombre}</span>
+                    <span class="contexto-nombre">{nombreVisibleBc(contexto.nombre)}</span>
+                    {#if tieneNombrePropio(contexto.nombre)}
+                      <code class="bc-id-real" title="Identificador real, el que usan Chroma y los asistentes">{contexto.nombre}</code>
+                    {/if}
                     <button
                       class="contexto-editar-btn"
                       title="Editar base de conocimiento (ir a Documentos)"
@@ -5293,7 +5363,18 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   title="Volver a Bases de Conocimiento"
                   aria-label="Volver a Bases de Conocimiento"
                 >← Bases de Conocimiento</button>
-                <h3 style="margin: 0;"><Icon name="base-conocimiento" size={18} /> {contextoSeleccionadoParaDocumentos || 'Documentos'}</h3>
+                <h3 style="margin: 0;"><Icon name="base-conocimiento" size={18} /> {contextoSeleccionadoParaDocumentos ? nombreVisibleBc(contextoSeleccionadoParaDocumentos) : 'Documentos'}</h3>
+                {#if contextoSeleccionadoParaDocumentos}
+                  <button
+                    class="bc-renombrar-btn"
+                    onclick={() => abrirRenombrarBc(contextoSeleccionadoParaDocumentos)}
+                    title="Ponerle un nombre a esta base de conocimiento"
+                    aria-label="Renombrar base de conocimiento"
+                  >✏️</button>
+                  {#if tieneNombrePropio(contextoSeleccionadoParaDocumentos)}
+                    <code class="bc-id-real" title="Identificador real: es lo que usan Chroma, los asistentes y la carpeta de documentos. No cambia al renombrar.">{contextoSeleccionadoParaDocumentos}</code>
+                  {/if}
+                {/if}
               </div>
               <button onclick={() => cargarDocumentosVectorizacion(contextoSeleccionadoParaDocumentos)} class="vectorizacion-action-btn contextos-recargar-btn" disabled={cargandoVectorizacionDocumentos} title="Recargar documentos" aria-label="Recargar documentos">
                 <Icon name="recargar" size={16} />
@@ -5303,7 +5384,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             <!-- Lista de documentos -->
             {#if contextoSeleccionadoParaDocumentos}
               <div class="documentos-list-wrap">
-                <h4>Documentos de la base de conocimiento: <strong>{contextoSeleccionadoParaDocumentos}</strong></h4>
+                <h4>Documentos de la base de conocimiento: <strong>{nombreVisibleBc(contextoSeleccionadoParaDocumentos)}</strong></h4>
                 {#if cargandoVectorizacionDocumentos}
                   <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando documentos...</p>
                 {:else if vectorizacionDocumentos.length === 0}
@@ -5341,7 +5422,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
           <!-- Integrar Documento -->
           <div class="integrar-documento-wrap">
-            <h3>📤 Integrar Nuevo Documento a <strong>{contextoSeleccionadoParaDocumentos}</strong></h3>
+            <h3>📤 Integrar Nuevo Documento a <strong>{nombreVisibleBc(contextoSeleccionadoParaDocumentos)}</strong></h3>
             <div class="integrar-documento-form">
               <div class="form-field">
                 <label for="doc-archivo">Selecciona archivo</label>
@@ -5388,7 +5469,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
           <!-- Agregar Snippet (Q&A sin PDF) -->
           <div class="integrar-documento-wrap" style="margin-top: 1rem;">
-            <h3>✍️ Agregar Snippet (Q&amp;A) a <strong>{contextoSeleccionadoParaDocumentos}</strong></h3>
+            <h3>✍️ Agregar Snippet (Q&amp;A) a <strong>{nombreVisibleBc(contextoSeleccionadoParaDocumentos)}</strong></h3>
             <p style="margin: 0 0 0.75rem; color: rgba(10, 26, 58, 0.7); font-size: 0.82rem; line-height: 1.45;">
               Alternativa rápida a subir un PDF cuando solo quieres meter una pregunta con su respuesta. Se guarda como archivo de texto en la BC y se vectoriza igual que cualquier documento.
             </p>
@@ -5438,7 +5519,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
           <!-- Batch de Preguntas y Respuestas -->
           <div class="integrar-documento-wrap" style="margin-top: 1rem;">
-            <h3>📚 Batch de Preguntas a <strong>{contextoSeleccionadoParaDocumentos}</strong></h3>
+            <h3>📚 Batch de Preguntas a <strong>{nombreVisibleBc(contextoSeleccionadoParaDocumentos)}</strong></h3>
             <p style="margin: 0 0 0.85rem; color: rgba(10, 26, 58, 0.7); font-size: 0.82rem; line-height: 1.45;">
               Acumula varias Q&amp;As y vectorízalas todas de un jalón. Cada pregunta se guarda como su propio archivo (filename auto-generado), lo que mejora la precisión del retrieval — cada respuesta es un chunk independiente.
             </p>
@@ -5594,7 +5675,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             <div class="modal-content">
               <h3>⚠️ Confirmar Borrado de Documento</h3>
               <p>
-                ¿Estás seguro de que deseas borrar el documento <strong>"{documentoSeleccionadoParaBorrar}"</strong> de la base de conocimiento <strong>"{contextoSeleccionadoParaDocumentos}"</strong>?
+                ¿Estás seguro de que deseas borrar el documento <strong>"{documentoSeleccionadoParaBorrar}"</strong> de la base de conocimiento <strong>"{nombreVisibleBc(contextoSeleccionadoParaDocumentos)}"</strong>?
               </p>
               <p style="font-size: 0.85rem; color: rgba(0,0,0,0.55);">
                 Esta acción es irreversible.
@@ -5878,6 +5959,50 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       </div>
       <p class="disclaimer">Constructor de Asistentes</p>
       </main>
+  {/if}
+
+  <!-- Modal: ponerle nombre a una base de conocimiento -->
+  {#if renombrarBcAbierto}
+    <div class="modal-overlay" onclick={() => { if (!renombrarBcGuardando) renombrarBcAbierto = false; }} role="presentation">
+      <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 470px;">
+        <h3>✏️ Nombre de la base de conocimiento</h3>
+        <p style="font-size: 0.88rem; line-height: 1.5;">
+          Es sólo la etiqueta que ves en el panel. Puedes usar espacios, acentos y mayúsculas.
+        </p>
+        <form
+          onsubmit={(e) => { e.preventDefault(); guardarNombreBc(); }}
+          style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.75rem;"
+        >
+          <!-- svelte-ignore a11y_autofocus -->
+          <input
+            type="text"
+            class="contexto-input"
+            bind:value={renombrarBcValor}
+            disabled={renombrarBcGuardando}
+            maxlength="120"
+            placeholder="ej. Pólizas de autos"
+            autocomplete="off"
+            autofocus
+          />
+          {#if renombrarBcError}
+            <p class="login-error">❌ {renombrarBcError}</p>
+          {/if}
+          <p style="font-size: 0.75rem; color: rgba(255,255,255,0.55); margin: 0; line-height: 1.45;">
+            El identificador <code>{contextoSeleccionadoParaDocumentos}</code> no cambia: es lo que usan Chroma,
+            los asistentes que la consultan y la carpeta de documentos. Por eso renombrar aquí no rompe nada.
+            Déjalo vacío para volver a mostrar el identificador.
+          </p>
+          <div class="modal-buttons" style="margin-top: 0.25rem;">
+            <button type="button" onclick={() => { renombrarBcAbierto = false; }} disabled={renombrarBcGuardando} class="modal-btn cancel">
+              Cancelar
+            </button>
+            <button type="submit" disabled={renombrarBcGuardando} class="modal-btn confirm">
+              {renombrarBcGuardando ? '⟳ Guardando...' : 'Guardar'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   {/if}
 
   <!-- Modal: confirmar borrado de un operador -->
@@ -6821,7 +6946,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             >
               <option value="">— Seleccionar —</option>
               {#each contextos as ctx}
-                <option value={ctx}>{ctx}</option>
+                <option value={ctx}>{nombreVisibleBc(ctx)}</option>
               {/each}
             </select>
           </div>
@@ -9350,6 +9475,31 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     color: #fff;
     background: rgba(255, 255, 255, 0.12);
     border: 1px solid rgba(255, 255, 255, 0.22);
+  }
+
+  .bc-renombrar-btn {
+    background: rgba(0, 0, 0, 0.18);
+    border: 1px solid rgba(0, 0, 0, 0.22);
+    border-radius: 6px;
+    padding: 0.2rem 0.4rem;
+    font-size: 0.85rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  .bc-renombrar-btn:hover {
+    background: rgba(0, 0, 0, 0.3);
+    border-color: rgba(0, 0, 0, 0.4);
+  }
+
+  .bc-id-real {
+    font-size: 0.72rem;
+    padding: 2px 7px;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.18);
+    color: rgba(0, 0, 0, 0.55);
+    white-space: nowrap;
   }
 
   .operador-yo {
