@@ -2586,7 +2586,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
       const res = await fetch(url, {
         method: editando ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...adminHeaders() },
         body: JSON.stringify(body),
       });
 
