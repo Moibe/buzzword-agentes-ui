@@ -806,7 +806,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   const ICONO_ACCION = {
-    crear: '➕', actualizar: '✏️', borrar: '🗑️', password: '🔑', sincronizar: '🔄',
+    crear: 'crear', actualizar: 'editar', borrar: 'borrar', password: 'accesos', sincronizar: 'reset',
   };
 
   function detalleLegible(detalle) {
@@ -3898,7 +3898,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   {#if loginAbierto}
     <div class="modal-overlay" onclick={() => { if (!loginCargando) cerrarLogin(); }} role="presentation">
       <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 420px;">
-        <h3>🔐 Entrar</h3>
+        <h3><Icon name="api-keys" size={18} /> Entrar</h3>
         <form
           onsubmit={(e) => { e.preventDefault(); iniciarSesion(); }}
           style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.75rem;"
@@ -3968,7 +3968,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       {/if}
     </div>
     {#if asistenteSeleccionado}
-      <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; font-size: 0.78rem; color: rgba(255,255,255,0.7);">
+      <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; font-size: 0.78rem; color: var(--fg-soft);">
         {#if asistenteSeleccionado.contexto}
           <span title="Base de Conocimiento"><Icon name="base-conocimiento" size={14} /> {asistenteSeleccionado.contexto}</span>
         {:else}
@@ -4084,8 +4084,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
         <!-- Mensaje de Error Global -->
         {#if errorVectorizacionContextos && estadoSalud !== 'online'}
-          <div style="margin-bottom: 1.5rem; padding: 1rem; background: rgba(200,40,40,0.9); border-radius: 8px;">
-            <p style="color: #fff; font-size: 0.95rem; line-height: 1.5; margin: 0; font-weight: 500;">❌ {errorVectorizacionContextos}</p>
+          <div style="margin-bottom: 1.5rem; padding: 1rem; background: var(--danger-bg); border: 1px solid var(--danger-border); border-radius: 8px;; color: var(--danger-fg)">
+            <p style="color: var(--fg); font-size: 0.95rem; line-height: 1.5; margin: 0; font-weight: 500;">❌ {errorVectorizacionContextos}</p>
           </div>
         {/if}
 
@@ -4155,13 +4155,13 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         <!-- Proyectos -->
         {#if vectorizacionTab === 'proyectos'}
           {#if proyectoActivo}
-            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.85rem; background: rgba(0,0,0,0.18); border-radius: 8px; margin-bottom: 1rem; font-size: 0.85rem; color: rgba(255,255,255,0.85);">
+            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.85rem; background: var(--muted); border-radius: 8px; margin-bottom: 1rem; font-size: 0.85rem; color: var(--fg);">
               <Icon name="proyecto" size={14} />
               <span>Trabajando en proyecto: <strong>{proyectoActivo.nombre}</strong></span>
-              <code style="background: rgba(0,0,0,0.3); padding: 1px 6px; border-radius: 4px; font-size: 0.75rem; color: rgba(255,255,255,0.7);">{proyectoActivo.slug}</code>
+              <code style="background: var(--muted); padding: 1px 6px; border-radius: 4px; font-size: 0.75rem; color: var(--fg-soft);">{proyectoActivo.slug}</code>
               <button
                 onclick={() => { vectorizacionTab = 'proyectos'; vinoDeCambiarProyecto = true; cargarProyectos(); }}
-                style="margin-left: auto; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.9); cursor: pointer; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 5px; transition: background 0.15s;"
+                style="margin-left: auto; background: var(--card); border: 1px solid var(--border); color: var(--fg); cursor: pointer; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 5px; transition: background 0.15s;"
                 onmouseover={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.22)'}
                 onmouseout={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.12)'}
                 title="Ir a Proyectos para cambiar el proyecto activo"
@@ -4191,7 +4191,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     disabled={cargandoGuardarProyecto || !!proyectoEditandoId}
                     class="contexto-input"
                   />
-                  <small style="font-size: 0.75rem; color: rgba(0,0,0,0.6); line-height: 1.3; display: block; margin-top: 0.25rem;">
+                  <small style="font-size: 0.75rem; color: var(--fg-muted); line-height: 1.3; display: block; margin-top: 0.25rem;">
                     Identidad estable cross-ambiente. Lowercase, dígitos y guiones, 2-64 chars.
                   </small>
                 </div>
@@ -4265,7 +4265,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     onclick={cerrarFormProyecto}
                     disabled={cargandoGuardarProyecto}
                     class="crear-contexto-btn"
-                    style="background: rgba(0,0,0,0.45); color: rgba(255,255,255,0.95);"
+                    style="background: var(--muted); color: var(--fg);"
                   >
                     Cancelar
                   </button>
@@ -4291,14 +4291,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               <p class="mensaje-contexto" style="margin-top: 0.5rem;">❌ {errorCargarProyectos}</p>
             {/if}
             {#if cargandoProyectos}
-              <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando proyectos...</p>
+              <p style="color: var(--fg-muted); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando proyectos...</p>
             {:else if proyectos.length === 0}
-              <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem; padding: 1rem 0;">No hay proyectos creados todavía.</p>
+              <p style="color: var(--fg-muted); font-size: 0.9rem; padding: 1rem 0;">No hay proyectos creados todavía.</p>
             {:else}
               <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.5rem;">
                 {#each proyectos as p (p.id)}
                   {@const esActivo = p.id === proyectoActivoId}
-                  <div style="background: {esActivo ? 'rgba(34,197,94,0.18)' : 'rgba(0,0,0,0.2)'}; border: {esActivo ? '1px solid rgba(34,197,94,0.5)' : '1px solid transparent'}; border-radius: 8px; padding: 1rem; display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;">
+                  <div style="background: {esActivo ? 'var(--ok-bg)' : 'var(--muted)'}; border: {esActivo ? '1px solid var(--ok-border)' : '1px solid transparent'}; border-radius: 8px; padding: 1rem; display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;">
                     <button
                       onclick={() => activarProyectoPorClick(p)}
                       disabled={esActivo}
@@ -4316,12 +4316,12 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     <div style="flex: 1; min-width: 0;">
                       <div style="display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap;">
                         {#if esActivo}
-                          <span style="color: #4ade80; font-size: 0.75rem; font-weight: 600; display: inline-flex; align-items: center; gap: 0.25rem;">
+                          <span style="color: var(--ok); font-size: 0.75rem; font-weight: 600; display: inline-flex; align-items: center; gap: 0.25rem;">
                             <Icon name="check" size={14} /> ACTIVO
                           </span>
                         {/if}
-                        <strong style="color: #fff; font-size: 1rem;">{p.nombre}</strong>
-                        <code style="background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; color: rgba(255,255,255,0.75);">{p.slug}</code>
+                        <strong style="color: var(--fg); font-size: 1rem;">{p.nombre}</strong>
+                        <code style="background: var(--muted); padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; color: var(--fg-soft);">{p.slug}</code>
                         {#if isAdmin}
                           <!-- Pegado al nombre (y no en el grupo de la derecha) para que
                                se lea como "editar los datos de ESTE proyecto". -->
@@ -4337,7 +4337,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                         {/if}
                       </div>
                       {#if p.descripcion}
-                        <p style="color: rgba(255,255,255,0.7); font-size: 0.85rem; margin: 0.5rem 0 0 0; line-height: 1.4;">
+                        <p style="color: var(--fg-soft); font-size: 0.85rem; margin: 0.5rem 0 0 0; line-height: 1.4;">
                           {p.descripcion}
                         </p>
                       {/if}
@@ -4363,17 +4363,17 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           {#if mostrarConfirmacionBorrarProyecto && proyectoABorrar}
             <div class="confirmacion-borrar">
               <h3><Icon name="warning" size={18} /> Confirmar Borrado de Proyecto</h3>
-              <p style="color: rgba(255,255,255,0.85);">
+              <p style="color: var(--fg);">
                 ¿Estás seguro de borrar el proyecto <strong>{proyectoABorrar.nombre}</strong> (<code>{proyectoABorrar.slug}</code>)?
               </p>
-              <p style="color: rgba(0,0,0,0.55); font-size: 0.85rem;">
+              <p style="color: var(--fg-muted); font-size: 0.85rem;">
                 Cuando esté el backend, esto fallará si el proyecto tiene bases de conocimiento o asistentes asociados.
               </p>
               <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
-                <button onclick={borrarProyectoConfirmado} disabled={cargandoBorrarProyecto} class="crear-contexto-btn" style="background: #c8102e;">
+                <button onclick={borrarProyectoConfirmado} disabled={cargandoBorrarProyecto} class="crear-contexto-btn" style="background: var(--danger);">
                   {cargandoBorrarProyecto ? '⟳ Borrando...' : '🗑️ Sí, borrar'}
                 </button>
-                <button onclick={() => { mostrarConfirmacionBorrarProyecto = false; proyectoABorrar = null; }} disabled={cargandoBorrarProyecto} class="crear-contexto-btn" style="background: rgba(0,0,0,0.45); color: rgba(255,255,255,0.95);">
+                <button onclick={() => { mostrarConfirmacionBorrarProyecto = false; proyectoABorrar = null; }} disabled={cargandoBorrarProyecto} class="crear-contexto-btn" style="background: var(--muted); color: var(--fg);">
                   Cancelar
                 </button>
               </div>
@@ -4384,20 +4384,20 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         <!-- Asistente -->
         {#if vectorizacionTab === 'asistente'}
           {#if proyectoActivo}
-            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.85rem; background: rgba(0,0,0,0.18); border-radius: 8px; margin-bottom: 1rem; font-size: 0.85rem; color: rgba(255,255,255,0.85);">
+            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.85rem; background: var(--muted); border-radius: 8px; margin-bottom: 1rem; font-size: 0.85rem; color: var(--fg);">
               <Icon name="proyecto" size={14} />
               <span>Trabajando en proyecto: <strong>{proyectoActivo.nombre}</strong></span>
-              <code style="background: rgba(0,0,0,0.3); padding: 1px 6px; border-radius: 4px; font-size: 0.75rem; color: rgba(255,255,255,0.7);">{proyectoActivo.slug}</code>
+              <code style="background: var(--muted); padding: 1px 6px; border-radius: 4px; font-size: 0.75rem; color: var(--fg-soft);">{proyectoActivo.slug}</code>
               <button
                 onclick={() => { vectorizacionTab = 'proyectos'; vinoDeCambiarProyecto = true; cargarProyectos(); }}
-                style="margin-left: auto; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.9); cursor: pointer; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 5px; transition: background 0.15s;"
+                style="margin-left: auto; background: var(--card); border: 1px solid var(--border); color: var(--fg); cursor: pointer; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 5px; transition: background 0.15s;"
                 onmouseover={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.22)'}
                 onmouseout={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.12)'}
                 title="Ir a Proyectos para cambiar el proyecto activo"
               >Cambiar de proyecto</button>
             </div>
           {:else}
-            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1rem; background: rgba(200,40,40,0.85); border-radius: 8px; margin-bottom: 1rem; color: #fff; font-size: 0.9rem;">
+            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1rem; background: var(--danger-bg); border: 1px solid var(--danger-border); border-radius: 8px; margin-bottom: 1rem; color: var(--danger-fg); font-size: 0.9rem;">
               <Icon name="warning" size={16} />
               <span>No hay proyecto activo. Crea o selecciona uno en <strong>📁 Proyectos</strong> antes de crear asistentes.</span>
             </div>
@@ -4464,7 +4464,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     rows="3"
                     maxlength="500"
                     class="contexto-input"
-                    style="font-family: inherit; resize: vertical; padding: 0.75rem 1rem; background: rgba(0,0,0,0.4); border: 1px dashed rgba(255,255,255,0.25); border-radius: 8px; color: rgba(255,255,255,0.9); font-size: 0.85rem; line-height: 1.5;"
+                    style="font-family: inherit; resize: vertical; padding: 0.75rem 1rem; background: var(--card); border: 1px solid var(--border); border-radius: 8px; color: var(--fg); font-size: 0.85rem; line-height: 1.5;"
                     placeholder="¡Hola! ¿En qué puedo ayudarte hoy?"
                   ></textarea>
                 </div>
@@ -4536,8 +4536,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                       {#each placeholderVariables as varName (varName)}
                         {@const meta = PLACEHOLDER_VARIABLES_META[varName]}
                         <div>
-                          <div style="font-size: 0.7rem; color: rgba(0,0,0,0.7); margin-bottom: 0.25rem; font-weight: 600; display: inline-flex; align-items: center; gap: 0.35rem;">
-                            <code style="background: rgba(0,0,0,0.08); padding: 1px 5px; border-radius: 3px;">[{varName}]</code>
+                          <div style="font-size: 0.7rem; color: var(--fg); margin-bottom: 0.25rem; font-weight: 600; display: inline-flex; align-items: center; gap: 0.35rem;">
+                            <code style="background: var(--muted); padding: 1px 5px; border-radius: 3px;">[{varName}]</code>
                             {#if meta?.optional}
                               <span
                                 title={`Opcional, déjalo vacío para omitir${meta.wrap ? `; los ${meta.wrap} se añaden automáticamente` : ''}`}
@@ -4581,7 +4581,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     disabled={cargandoGuardarAsistente}
                     rows="8"
                     class="contexto-input"
-                    style="font-family: inherit; resize: vertical; padding: 0.75rem 1rem; background: rgba(0,0,0,0.4); border: 1px dashed rgba(255,255,255,0.25); border-radius: 8px; color: rgba(255,255,255,0.9); font-size: 0.85rem; line-height: 1.5;"
+                    style="font-family: inherit; resize: vertical; padding: 0.75rem 1rem; background: var(--card); border: 1px solid var(--border); border-radius: 8px; color: var(--fg); font-size: 0.85rem; line-height: 1.5;"
                     placeholder={placeholderInstrucciones}
                   ></textarea>
                 </div>
@@ -4632,7 +4632,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     class="contexto-input"
                     style="display: block; width: 100%;"
                   />
-                  <p style="margin: 0.35rem 0 0; color: rgba(10, 26, 58, 0.7); font-size: 0.78rem; line-height: 1.45;">
+                  <p style="margin: 0.35rem 0 0; color: var(--fg-soft); font-size: 0.78rem; line-height: 1.45;">
                     <strong>1</strong> = FAQs autocontenidos · <strong>3-5</strong> = PDFs informativos · <strong>6+</strong> = casos avanzados. A más alto, más tokens y respuestas levemente más largas.
                   </p>
                 </div>
@@ -4648,7 +4648,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     onclick={cerrarFormAsistente}
                     disabled={cargandoGuardarAsistente}
                     class="crear-contexto-btn"
-                    style="background: rgba(0,0,0,0.45); color: rgba(255,255,255,0.95);"
+                    style="background: var(--muted); color: var(--fg);"
                   >
                     Cancelar
                   </button>
@@ -4682,28 +4682,28 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               <p class="mensaje-contexto" style="margin-top: 0.5rem;">❌ {errorCargarAsistentes}</p>
             {/if}
             {#if cargandoAsistentes}
-              <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando asistentes...</p>
+              <p style="color: var(--fg-muted); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando asistentes...</p>
             {:else if asistentes.length === 0}
-              <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem; padding: 1rem 0;">No hay asistentes creados todavía.</p>
+              <p style="color: var(--fg-muted); font-size: 0.9rem; padding: 1rem 0;">No hay asistentes creados todavía.</p>
             {:else}
               <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.5rem;">
                 {#each asistentes as asistente (asistente.id)}
                   {@const asistenteEmbedUrl = `${hostAsistentesBase}/embed/chat/${encodeURIComponent(asistente.slug)}`}
-                  <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 1rem; display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;">
+                  <div style="background: var(--muted); border-radius: 8px; padding: 1rem; display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;">
                     <div style="flex: 1; min-width: 0;">
                       <div style="display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap;">
                         {#if asistente.slug === lightbotAsistenteSlug}
-                          <span title="Default del Lightbot" style="color: #fbbf24; display: inline-flex; align-items: center;">
+                          <span title="Default del Lightbot" style="color: var(--warn); display: inline-flex; align-items: center;">
                             <Icon name="estrella" size={16} label="Default" />
                           </span>
                         {/if}
-                        <strong style="color: #fff; font-size: 1rem;">{asistente.nombre}</strong>
-                        <code style="background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; color: rgba(255,255,255,0.75);">{asistente.slug}</code>
+                        <strong style="color: var(--fg); font-size: 1rem;">{asistente.nombre}</strong>
+                        <code style="background: var(--muted); padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; color: var(--fg-soft);">{asistente.slug}</code>
                       </div>
-                      <p style="color: rgba(255,255,255,0.7); font-size: 0.85rem; margin: 0.5rem 0 0 0; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
+                      <p style="color: var(--fg-soft); font-size: 0.85rem; margin: 0.5rem 0 0 0; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
                         {asistente.instrucciones}
                       </p>
-                      <div style="display: flex; gap: 1.1rem; margin-top: 0.6rem; font-size: 0.9rem; color: rgba(255,255,255,0.7); align-items: center; flex-wrap: wrap;">
+                      <div style="display: flex; gap: 1.1rem; margin-top: 0.6rem; font-size: 0.9rem; color: var(--fg-soft); align-items: center; flex-wrap: wrap;">
                         {#if asistente.contexto}
                           <span style="display: inline-flex; align-items: center; gap: 0.3rem;"><Icon name="base-conocimiento" size={16} /> {asistente.contexto}</span>
                         {:else}
@@ -4739,14 +4739,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           {#if mostrarConfirmacionBorrarAsistente && asistenteABorrar}
             <div class="confirmacion-borrar">
               <h3><Icon name="warning" size={18} /> Confirmar Borrado de Asistente</h3>
-              <p style="color: rgba(255,255,255,0.85);">
+              <p style="color: var(--fg);">
                 ¿Estás seguro de borrar el asistente <strong>{asistenteABorrar.nombre}</strong> (<code>{asistenteABorrar.slug}</code>)? Esta acción no se puede deshacer.
               </p>
               <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
-                <button onclick={borrarAsistenteConfirmado} disabled={cargandoBorrarAsistente} class="crear-contexto-btn" style="background: #c8102e;">
+                <button onclick={borrarAsistenteConfirmado} disabled={cargandoBorrarAsistente} class="crear-contexto-btn" style="background: var(--danger);">
                   {cargandoBorrarAsistente ? '⟳ Borrando...' : '🗑️ Sí, borrar'}
                 </button>
-                <button onclick={() => { mostrarConfirmacionBorrarAsistente = false; asistenteABorrar = null; }} disabled={cargandoBorrarAsistente} class="crear-contexto-btn" style="background: rgba(0,0,0,0.45); color: rgba(255,255,255,0.95);">
+                <button onclick={() => { mostrarConfirmacionBorrarAsistente = false; asistenteABorrar = null; }} disabled={cargandoBorrarAsistente} class="crear-contexto-btn" style="background: var(--muted); color: var(--fg);">
                   Cancelar
                 </button>
               </div>
@@ -4758,94 +4758,94 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 720px; width: 92%;">
                 {#if lookAndFeelMasivo}
                   <h3 style="margin: 0 0 0.25rem;"><Icon name="look-and-feel" size={18} /> Look and Feel — todos los asistentes</h3>
-                  <p style="color: rgba(255,255,255,0.7); font-size: 0.85rem; margin: 0 0 1rem;">
+                  <p style="color: var(--fg-soft); font-size: 0.85rem; margin: 0 0 1rem;">
                     Se aplicará a los <strong>{asistentes.length}</strong> asistentes de
                     <strong>{proyectoActivo?.nombre ?? 'este proyecto'}</strong>, sobrescribiendo los colores que cada uno tenga.
                     Arranca con la paleta de <code>{asistentes[0]?.slug}</code>.
                   </p>
                 {:else}
                   <h3 style="margin: 0 0 0.25rem;"><Icon name="look-and-feel" size={18} /> Look and Feel — {lookAndFeelAsistente.nombre}</h3>
-                  <p style="color: rgba(255,255,255,0.7); font-size: 0.85rem; margin: 0 0 1rem;">
+                  <p style="color: var(--fg-soft); font-size: 0.85rem; margin: 0 0 1rem;">
                     Personaliza los colores del widget para <code>{lookAndFeelAsistente.slug}</code>. Aplica al chatbot y al MiniAdmin.
                   </p>
                 {/if}
 
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.85rem; margin-bottom: 1rem;">
-                  <label style="display: flex; flex-direction: column; gap: 0.35rem; color: rgba(255,255,255,0.9); font-size: 0.85rem;">
+                  <label style="display: flex; flex-direction: column; gap: 0.35rem; color: var(--fg); font-size: 0.85rem;">
                     Color primario (dots; default de avatar/botón)
                     <span style="display: flex; align-items: center; gap: 0.5rem;">
-                      <input type="color" bind:value={lookAndFeelForm.color_primario} style="width: 44px; height: 36px; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; background: transparent; cursor: pointer;" />
+                      <input type="color" bind:value={lookAndFeelForm.color_primario} style="width: 44px; height: 36px; border: 1px solid var(--border); border-radius: 6px; background: transparent; cursor: pointer;" />
                       <input type="text" bind:value={lookAndFeelForm.color_primario} placeholder="#5b6abf" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
                     </span>
                   </label>
 
-                  <label style="display: flex; flex-direction: column; gap: 0.35rem; color: rgba(255,255,255,0.9); font-size: 0.85rem;">
+                  <label style="display: flex; flex-direction: column; gap: 0.35rem; color: var(--fg); font-size: 0.85rem;">
                     Avatar
                     <span style="display: flex; align-items: center; gap: 0.5rem;">
-                      <input type="color" bind:value={lookAndFeelForm.color_avatar} style="width: 44px; height: 36px; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; background: transparent; cursor: pointer;" />
+                      <input type="color" bind:value={lookAndFeelForm.color_avatar} style="width: 44px; height: 36px; border: 1px solid var(--border); border-radius: 6px; background: transparent; cursor: pointer;" />
                       <input type="text" bind:value={lookAndFeelForm.color_avatar} placeholder="#5b6abf" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
                     </span>
                   </label>
 
-                  <label style="display: flex; flex-direction: column; gap: 0.35rem; color: rgba(255,255,255,0.9); font-size: 0.85rem;">
+                  <label style="display: flex; flex-direction: column; gap: 0.35rem; color: var(--fg); font-size: 0.85rem;">
                     Ícono del avatar
                     <span style="display: flex; align-items: center; gap: 0.5rem;">
-                      <input type="color" bind:value={lookAndFeelForm.color_icono} style="width: 44px; height: 36px; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; background: transparent; cursor: pointer;" />
+                      <input type="color" bind:value={lookAndFeelForm.color_icono} style="width: 44px; height: 36px; border: 1px solid var(--border); border-radius: 6px; background: transparent; cursor: pointer;" />
                       <input type="text" bind:value={lookAndFeelForm.color_icono} placeholder="#ffffff" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
                     </span>
                   </label>
 
-                  <label style="display: flex; flex-direction: column; gap: 0.35rem; color: rgba(255,255,255,0.9); font-size: 0.85rem;">
+                  <label style="display: flex; flex-direction: column; gap: 0.35rem; color: var(--fg); font-size: 0.85rem;">
                     Botón de enviar
                     <span style="display: flex; align-items: center; gap: 0.5rem;">
-                      <input type="color" bind:value={lookAndFeelForm.color_boton_enviar} style="width: 44px; height: 36px; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; background: transparent; cursor: pointer;" />
+                      <input type="color" bind:value={lookAndFeelForm.color_boton_enviar} style="width: 44px; height: 36px; border: 1px solid var(--border); border-radius: 6px; background: transparent; cursor: pointer;" />
                       <input type="text" bind:value={lookAndFeelForm.color_boton_enviar} placeholder="#5b6abf" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
                     </span>
                   </label>
 
-                  <label style="display: flex; flex-direction: column; gap: 0.35rem; color: rgba(255,255,255,0.9); font-size: 0.85rem;">
+                  <label style="display: flex; flex-direction: column; gap: 0.35rem; color: var(--fg); font-size: 0.85rem;">
                     Ícono del botón de enviar
                     <span style="display: flex; align-items: center; gap: 0.5rem;">
-                      <input type="color" bind:value={lookAndFeelForm.color_icono_boton} style="width: 44px; height: 36px; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; background: transparent; cursor: pointer;" />
+                      <input type="color" bind:value={lookAndFeelForm.color_icono_boton} style="width: 44px; height: 36px; border: 1px solid var(--border); border-radius: 6px; background: transparent; cursor: pointer;" />
                       <input type="text" bind:value={lookAndFeelForm.color_icono_boton} placeholder="#ffffff" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
                     </span>
                   </label>
 
-                  <label style="display: flex; flex-direction: column; gap: 0.35rem; color: rgba(255,255,255,0.9); font-size: 0.85rem;">
+                  <label style="display: flex; flex-direction: column; gap: 0.35rem; color: var(--fg); font-size: 0.85rem;">
                     Burbuja del bot
                     <span style="display: flex; align-items: center; gap: 0.5rem;">
-                      <input type="color" bind:value={lookAndFeelForm.color_burbuja_bot} style="width: 44px; height: 36px; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; background: transparent; cursor: pointer;" />
+                      <input type="color" bind:value={lookAndFeelForm.color_burbuja_bot} style="width: 44px; height: 36px; border: 1px solid var(--border); border-radius: 6px; background: transparent; cursor: pointer;" />
                       <input type="text" bind:value={lookAndFeelForm.color_burbuja_bot} placeholder="#d4e4f7" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
                     </span>
                   </label>
 
-                  <label style="display: flex; flex-direction: column; gap: 0.35rem; color: rgba(255,255,255,0.9); font-size: 0.85rem;">
+                  <label style="display: flex; flex-direction: column; gap: 0.35rem; color: var(--fg); font-size: 0.85rem;">
                     Fondo del chat
                     <span style="display: flex; align-items: center; gap: 0.5rem;">
-                      <input type="color" bind:value={lookAndFeelForm.color_fondo_chat} style="width: 44px; height: 36px; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; background: transparent; cursor: pointer;" />
+                      <input type="color" bind:value={lookAndFeelForm.color_fondo_chat} style="width: 44px; height: 36px; border: 1px solid var(--border); border-radius: 6px; background: transparent; cursor: pointer;" />
                       <input type="text" bind:value={lookAndFeelForm.color_fondo_chat} placeholder="#f0f2f5" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
                     </span>
                   </label>
 
-                  <label style="display: flex; flex-direction: column; gap: 0.35rem; color: rgba(255,255,255,0.9); font-size: 0.85rem;">
+                  <label style="display: flex; flex-direction: column; gap: 0.35rem; color: var(--fg); font-size: 0.85rem;">
                     Header
                     <span style="display: flex; align-items: center; gap: 0.5rem;">
-                      <input type="color" bind:value={lookAndFeelForm.color_header} style="width: 44px; height: 36px; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; background: transparent; cursor: pointer;" />
+                      <input type="color" bind:value={lookAndFeelForm.color_header} style="width: 44px; height: 36px; border: 1px solid var(--border); border-radius: 6px; background: transparent; cursor: pointer;" />
                       <input type="text" bind:value={lookAndFeelForm.color_header} placeholder="#ffffff" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
                     </span>
                   </label>
 
-                  <label style="display: flex; flex-direction: column; gap: 0.35rem; color: rgba(255,255,255,0.9); font-size: 0.85rem;">
+                  <label style="display: flex; flex-direction: column; gap: 0.35rem; color: var(--fg); font-size: 0.85rem;">
                     Texto del header
                     <span style="display: flex; align-items: center; gap: 0.5rem;">
-                      <input type="color" bind:value={lookAndFeelForm.color_texto_header} style="width: 44px; height: 36px; border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; background: transparent; cursor: pointer;" />
+                      <input type="color" bind:value={lookAndFeelForm.color_texto_header} style="width: 44px; height: 36px; border: 1px solid var(--border); border-radius: 6px; background: transparent; cursor: pointer;" />
                       <input type="text" bind:value={lookAndFeelForm.color_texto_header} placeholder="#1a1a2e" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
                     </span>
                   </label>
                 </div>
 
                 <!-- Ícono custom del avatar -->
-                <div style="display: flex; align-items: center; gap: 0.85rem; padding: 0.75rem; border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; margin-bottom: 1rem; background: rgba(0,0,0,0.18);">
+                <div style="display: flex; align-items: center; gap: 0.85rem; padding: 0.75rem; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 1rem; background: var(--muted);">
                   <span style="display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 50%; background: {lookAndFeelForm.color_avatar}; flex-shrink: 0; overflow: hidden;">
                     {#if iconoMostradoEnModal}
                       <img src={iconoMostradoEnModal} alt="Ícono del asistente" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block;" />
@@ -4856,10 +4856,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     {/if}
                   </span>
                   <div style="flex: 1; min-width: 0;">
-                    <div style="color: rgba(255,255,255,0.9); font-size: 0.85rem; margin-bottom: 0.15rem;">
+                    <div style="color: var(--fg); font-size: 0.85rem; margin-bottom: 0.15rem;">
                       Ícono del asistente
                     </div>
-                    <div style="color: rgba(255,255,255,0.55); font-size: 0.72rem;">
+                    <div style="color: var(--fg-muted); font-size: 0.72rem;">
                       {#if lookAndFeelMasivo}
                         {iconoArchivoMasivo
                           ? 'Se aplicará este ícono a todos los asistentes.'
@@ -4894,7 +4894,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                       onclick={() => { if (iconoPreviewMasivo) URL.revokeObjectURL(iconoPreviewMasivo); iconoArchivoMasivo = null; iconoPreviewMasivo = null; }}
                       disabled={cargandoGuardarTema}
                       class="crear-contexto-btn"
-                      style="flex-shrink: 0; background: rgba(0,0,0,0.45); color: rgba(255,255,255,0.95);"
+                      style="flex-shrink: 0; background: var(--muted); color: var(--fg);"
                     >
                       No aplicar
                     </button>
@@ -4903,7 +4903,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                       onclick={quitarIcono}
                       disabled={subiendoIcono || cargandoGuardarTema}
                       class="crear-contexto-btn"
-                      style="flex-shrink: 0; background: rgba(0,0,0,0.45); color: rgba(255,255,255,0.95);"
+                      style="flex-shrink: 0; background: var(--muted); color: var(--fg);"
                     >
                       Quitar
                     </button>
@@ -4911,8 +4911,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 </div>
 
                 <!-- Vista previa rápida -->
-                <div style="border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; overflow: hidden; margin-bottom: 1rem; background: {lookAndFeelForm.color_fondo_chat};">
-                  <div style="background: {lookAndFeelForm.color_header}; padding: 0.6rem 0.85rem; display: flex; align-items: center; gap: 0.6rem; border-bottom: 1px solid rgba(0,0,0,0.08);">
+                <div style="border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 1rem; background: {lookAndFeelForm.color_fondo_chat};">
+                  <div style="background: {lookAndFeelForm.color_header}; padding: 0.6rem 0.85rem; display: flex; align-items: center; gap: 0.6rem; border-bottom: 1px solid var(--border);">
                     <span style="display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; background: {lookAndFeelForm.color_avatar}; flex-shrink: 0; overflow: hidden;">
                       {#if iconoMostradoEnModal}
                         <img src={iconoMostradoEnModal} alt="" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block;" />
@@ -4927,7 +4927,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     </strong>
                   </div>
                   <div style="padding: 0.85rem; display: flex; align-items: flex-end; justify-content: space-between; gap: 0.6rem;">
-                    <div style="display: inline-block; background: {lookAndFeelForm.color_burbuja_bot}; color: #1a1a2e; padding: 0.5rem 0.75rem; border-radius: 14px; font-size: 0.8rem;">
+                    <div style="display: inline-block; background: {lookAndFeelForm.color_burbuja_bot}; color: var(--fg); padding: 0.5rem 0.75rem; border-radius: 14px; font-size: 0.8rem;">
                       Vista previa de mensaje del bot
                     </div>
                     <span style="display: flex; align-items: center; justify-content: center; flex-shrink: 0; width: 32px; height: 32px; border-radius: 50%; background: {lookAndFeelForm.color_boton_enviar};" title="Botón de enviar">
@@ -4937,17 +4937,17 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 </div>
 
                 {#if progresoMasivo}
-                  <p style="font-size: 0.85rem; color: rgba(255,255,255,0.85); margin-bottom: 0.75rem;">⟳ {progresoMasivo}</p>
+                  <p style="font-size: 0.85rem; color: var(--fg); margin-bottom: 0.75rem;">⟳ {progresoMasivo}</p>
                 {/if}
                 {#if mensajeTema}
-                  <p style="font-size: 0.85rem; color: rgba(255,255,255,0.85); margin-bottom: 0.75rem;">{mensajeTema}</p>
+                  <p style="font-size: 0.85rem; color: var(--fg); margin-bottom: 0.75rem;">{mensajeTema}</p>
                 {/if}
 
                 <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
-                  <button onclick={resetearTema} disabled={cargandoGuardarTema} class="crear-contexto-btn" style="background: rgba(0,0,0,0.45); color: rgba(255,255,255,0.95);">
+                  <button onclick={resetearTema} disabled={cargandoGuardarTema} class="crear-contexto-btn" style="background: var(--muted); color: var(--fg);">
                     Reset a defaults
                   </button>
-                  <button onclick={cerrarLookAndFeel} disabled={cargandoGuardarTema} class="crear-contexto-btn" style="background: rgba(0,0,0,0.45); color: rgba(255,255,255,0.95);">
+                  <button onclick={cerrarLookAndFeel} disabled={cargandoGuardarTema} class="crear-contexto-btn" style="background: var(--muted); color: var(--fg);">
                     Cancelar
                   </button>
                   {#if lookAndFeelMasivo}
@@ -4964,7 +4964,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 {#if mostrarConfirmacionMasivo}
                   <div class="confirmacion-borrar" style="margin-top: 1rem;">
                     <h3><Icon name="warning" size={18} /> Confirmar cambio masivo</h3>
-                    <p style="color: rgba(255,255,255,0.85);">
+                    <p style="color: var(--fg);">
                       Se sobrescribirán los colores de los <strong>{asistentes.length}</strong> asistentes de
                       <strong>{proyectoActivo?.nombre ?? 'este proyecto'}</strong>{#if iconoArchivoMasivo}, y se les pondrá el ícono que elegiste{/if}.
                       Los colores que cada uno tenga por su cuenta se pierden y esto no se puede deshacer.
@@ -4973,7 +4973,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                       <button onclick={aplicarTemaATodos} disabled={cargandoGuardarTema} class="crear-contexto-btn">
                         ✓ Sí, aplicar a todos
                       </button>
-                      <button onclick={() => { mostrarConfirmacionMasivo = false; }} disabled={cargandoGuardarTema} class="crear-contexto-btn" style="background: rgba(0,0,0,0.45); color: rgba(255,255,255,0.95);">
+                      <button onclick={() => { mostrarConfirmacionMasivo = false; }} disabled={cargandoGuardarTema} class="crear-contexto-btn" style="background: var(--muted); color: var(--fg);">
                         Cancelar
                       </button>
                     </div>
@@ -4987,30 +4987,30 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         <!-- Usuarios -->
         {#if vectorizacionTab === 'usuarios'}
           {#if proyectoActivo}
-            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.85rem; background: rgba(0,0,0,0.18); border-radius: 8px; margin-bottom: 1rem; font-size: 0.85rem; color: rgba(255,255,255,0.85);">
+            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.85rem; background: var(--muted); border-radius: 8px; margin-bottom: 1rem; font-size: 0.85rem; color: var(--fg);">
               <Icon name="proyecto" size={14} />
               <span>Trabajando en proyecto: <strong>{proyectoActivo.nombre}</strong></span>
-              <code style="background: rgba(0,0,0,0.3); padding: 1px 6px; border-radius: 4px; font-size: 0.75rem; color: rgba(255,255,255,0.7);">{proyectoActivo.slug}</code>
+              <code style="background: var(--muted); padding: 1px 6px; border-radius: 4px; font-size: 0.75rem; color: var(--fg-soft);">{proyectoActivo.slug}</code>
               <button
                 onclick={() => { vectorizacionTab = 'proyectos'; vinoDeCambiarProyecto = true; cargarProyectos(); }}
-                style="margin-left: auto; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.9); cursor: pointer; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 5px; transition: background 0.15s;"
+                style="margin-left: auto; background: var(--card); border: 1px solid var(--border); color: var(--fg); cursor: pointer; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 5px; transition: background 0.15s;"
                 onmouseover={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.22)'}
                 onmouseout={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.12)'}
                 title="Ir a Proyectos para cambiar el proyecto activo"
               >Cambiar de proyecto</button>
             </div>
           {:else}
-            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1rem; background: rgba(200,40,40,0.85); border-radius: 8px; margin-bottom: 1rem; color: #fff; font-size: 0.9rem;">
+            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1rem; background: var(--danger-bg); border: 1px solid var(--danger-border); border-radius: 8px; margin-bottom: 1rem; color: var(--danger-fg); font-size: 0.9rem;">
               <Icon name="warning" size={16} />
               <span>No hay proyecto activo. Crea o selecciona uno en <strong>📁 Proyectos</strong> antes de crear usuarios.</span>
             </div>
           {/if}
 
-          <p style="background: rgba(0,0,0,0.18); border-radius: 8px; padding: 0.75rem 1rem; color: rgba(255,255,255,0.85); font-size: 0.85rem; margin: 0 0 1rem 0; line-height: 1.5; max-width: 720px;">
+          <p style="background: var(--muted); border-radius: 8px; padding: 0.75rem 1rem; color: var(--fg); font-size: 0.85rem; margin: 0 0 1rem 0; line-height: 1.5; max-width: 720px;">
             No es login: los widgets se embeben sin cuenta ni password. Esto es una
             etiqueta para identificar a quién le atribuir cada consulta en Registros
             y Consumo (ej. testers de un cliente). Comparte la URL del widget con
-            <code style="background: rgba(0,0,0,0.3); padding: 1px 6px; border-radius: 4px;">?usuario=&lt;slug&gt;</code>
+            <code style="background: var(--muted); padding: 1px 6px; border-radius: 4px;">?usuario=&lt;slug&gt;</code>
             una sola vez — el navegador de esa persona lo recuerda después, y puede
             volver a usar la URL universal sin el query param.
           </p>
@@ -5039,7 +5039,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     disabled={guardandoUsuario || !!usuarioEditandoId}
                     class="contexto-input"
                   />
-                  <small style="font-size: 0.75rem; color: rgba(0,0,0,0.6); line-height: 1.3; display: block; margin-top: 0.25rem;">
+                  <small style="font-size: 0.75rem; color: var(--fg-muted); line-height: 1.3; display: block; margin-top: 0.25rem;">
                     Va en la URL literal como <code>?usuario={usuarioFormSlug || '&lt;slug&gt;'}</code>. No lleva espacios — si tipeas uno, se convierte a guion automáticamente.
                   </small>
                 </div>
@@ -5072,7 +5072,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   <p class="mensaje-contexto">{mensajeUsuario}</p>
                 {/if}
                 <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
-                  <button onclick={cerrarFormUsuario} disabled={guardandoUsuario} class="crear-contexto-btn" style="background: rgba(0,0,0,0.45); color: rgba(255,255,255,0.95);">
+                  <button onclick={cerrarFormUsuario} disabled={guardandoUsuario} class="crear-contexto-btn" style="background: var(--muted); color: var(--fg);">
                     Cancelar
                   </button>
                   <button onclick={guardarUsuario} disabled={guardandoUsuario} class="crear-contexto-btn">
@@ -5095,34 +5095,34 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               <p class="mensaje-contexto" style="margin-top: 0.5rem;">❌ {errorCargarUsuarios}</p>
             {/if}
             {#if cargandoUsuarios}
-              <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando usuarios...</p>
+              <p style="color: var(--fg-muted); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando usuarios...</p>
             {:else if usuarios.length === 0}
-              <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem; padding: 1rem 0;">No hay usuarios creados todavía para este proyecto.</p>
+              <p style="color: var(--fg-muted); font-size: 0.9rem; padding: 1rem 0;">No hay usuarios creados todavía para este proyecto.</p>
             {:else}
               <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.5rem;">
                 {#each usuarios as u (u.id)}
-                  <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 1rem; display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; opacity: {u.activo ? 1 : 0.55};">
+                  <div style="background: var(--muted); border-radius: 8px; padding: 1rem; display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; opacity: {u.activo ? 1 : 0.55};">
                     <div style="flex: 1; min-width: 0;">
                       <div style="display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap;">
                         {#if !u.activo}
-                          <span style="color: rgba(255,255,255,0.6); font-size: 0.75rem; font-weight: 600;">INACTIVO</span>
+                          <span style="color: var(--fg-soft); font-size: 0.75rem; font-weight: 600;">INACTIVO</span>
                         {/if}
-                        <strong style="color: #fff; font-size: 1rem;">{u.nombre}</strong>
-                        <code style="background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; color: rgba(255,255,255,0.75);">{u.slug}</code>
+                        <strong style="color: var(--fg); font-size: 1rem;">{u.nombre}</strong>
+                        <code style="background: var(--muted); padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; color: var(--fg-soft);">{u.slug}</code>
                       </div>
                       {#if u.notas}
-                        <p style="color: rgba(255,255,255,0.7); font-size: 0.85rem; margin: 0.5rem 0 0 0; line-height: 1.4;">
+                        <p style="color: var(--fg-soft); font-size: 0.85rem; margin: 0.5rem 0 0 0; line-height: 1.4;">
                           {u.notas}
                         </p>
                       {/if}
                       {#if asistentes.length === 0}
-                        <p style="margin: 0.6rem 0 0 0; font-size: 0.78rem; color: rgba(255,255,255,0.5);">
+                        <p style="margin: 0.6rem 0 0 0; font-size: 0.78rem; color: var(--fg-muted);">
                           Crea un asistente en este proyecto para generar el link de este usuario.
                         </p>
                       {:else}
                         {@const slugAsistenteElegido = usuarioUrlAsistenteSlug[u.id] || asistentes[0].slug}
                         {@const urlUsuario = `${hostAsistentesBase}/embed/chat/${encodeURIComponent(slugAsistenteElegido)}?usuario=${encodeURIComponent(u.slug)}`}
-                        <div style="margin-top: 0.6rem; padding-top: 0.6rem; border-top: 1px solid rgba(255,255,255,0.12); display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
+                        <div style="margin-top: 0.6rem; padding-top: 0.6rem; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
                           {#if asistentes.length > 1}
                             <select
                               value={slugAsistenteElegido}
@@ -5136,7 +5136,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                               {/each}
                             </select>
                           {/if}
-                          <code style="background: rgba(0,0,0,0.3); padding: 3px 8px; border-radius: 4px; font-size: 0.78rem; color: rgba(255,255,255,0.85); word-break: break-all; flex: 1; min-width: 200px;">{urlUsuario}</code>
+                          <code style="background: var(--muted); padding: 3px 8px; border-radius: 4px; font-size: 0.78rem; color: var(--fg); word-break: break-all; flex: 1; min-width: 200px;">{urlUsuario}</code>
                           <button class="url-action-btn" onclick={() => copiarUrl(urlUsuario)} title="Copiar URL">
                             {urlCopiada === urlUsuario ? '✓ Copiado' : '📋 Copiar'}
                           </button>
@@ -5165,18 +5165,18 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           {#if mostrarConfirmacionBorrarUsuario && usuarioABorrar}
             <div class="confirmacion-borrar">
               <h3><Icon name="warning" size={18} /> Confirmar Borrado de Usuario</h3>
-              <p style="color: rgba(255,255,255,0.85);">
+              <p style="color: var(--fg);">
                 ¿Estás seguro de borrar a <strong>{usuarioABorrar.nombre}</strong> (<code>{usuarioABorrar.slug}</code>)?
               </p>
-              <p style="color: rgba(0,0,0,0.55); font-size: 0.85rem;">
+              <p style="color: var(--fg-muted); font-size: 0.85rem;">
                 Sus registros históricos en Registros/Consumo conservan el nombre tal
                 como estaba; esto solo evita que se le sigan atribuyendo consultas nuevas.
               </p>
               <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
-                <button onclick={borrarUsuarioConfirmado} disabled={cargandoBorrarUsuario} class="crear-contexto-btn" style="background: #c8102e;">
+                <button onclick={borrarUsuarioConfirmado} disabled={cargandoBorrarUsuario} class="crear-contexto-btn" style="background: var(--danger);">
                   {cargandoBorrarUsuario ? '⟳ Borrando...' : '🗑️ Sí, borrar'}
                 </button>
-                <button onclick={() => { mostrarConfirmacionBorrarUsuario = false; usuarioABorrar = null; }} disabled={cargandoBorrarUsuario} class="crear-contexto-btn" style="background: rgba(0,0,0,0.45); color: rgba(255,255,255,0.95);">
+                <button onclick={() => { mostrarConfirmacionBorrarUsuario = false; usuarioABorrar = null; }} disabled={cargandoBorrarUsuario} class="crear-contexto-btn" style="background: var(--muted); color: var(--fg);">
                   Cancelar
                 </button>
               </div>
@@ -5187,20 +5187,20 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         <!-- Contextos -->
         {#if vectorizacionTab === 'contextos'}
           {#if proyectoActivo}
-            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.85rem; background: rgba(0,0,0,0.18); border-radius: 8px; margin-bottom: 1rem; font-size: 0.85rem; color: rgba(255,255,255,0.85);">
+            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.85rem; background: var(--muted); border-radius: 8px; margin-bottom: 1rem; font-size: 0.85rem; color: var(--fg);">
               <Icon name="proyecto" size={14} />
               <span>Trabajando en proyecto: <strong>{proyectoActivo.nombre}</strong></span>
-              <code style="background: rgba(0,0,0,0.3); padding: 1px 6px; border-radius: 4px; font-size: 0.75rem; color: rgba(255,255,255,0.7);">{proyectoActivo.slug}</code>
+              <code style="background: var(--muted); padding: 1px 6px; border-radius: 4px; font-size: 0.75rem; color: var(--fg-soft);">{proyectoActivo.slug}</code>
               <button
                 onclick={() => { vectorizacionTab = 'proyectos'; vinoDeCambiarProyecto = true; cargarProyectos(); }}
-                style="margin-left: auto; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.9); cursor: pointer; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 5px; transition: background 0.15s;"
+                style="margin-left: auto; background: var(--card); border: 1px solid var(--border); color: var(--fg); cursor: pointer; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 5px; transition: background 0.15s;"
                 onmouseover={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.22)'}
                 onmouseout={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.12)'}
                 title="Ir a Proyectos para cambiar el proyecto activo"
               >Cambiar de proyecto</button>
             </div>
           {:else}
-            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1rem; background: rgba(200,40,40,0.85); border-radius: 8px; margin-bottom: 1rem; color: #fff; font-size: 0.9rem;">
+            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1rem; background: var(--danger-bg); border: 1px solid var(--danger-border); border-radius: 8px; margin-bottom: 1rem; color: var(--danger-fg); font-size: 0.9rem;">
               <Icon name="warning" size={16} />
               <span>No hay proyecto activo. Crea o selecciona uno en <strong>📁 Proyectos</strong> antes de crear bases de conocimiento.</span>
             </div>
@@ -5300,9 +5300,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               </button>
             </div>
             {#if cargandoVectorizacionContextos}
-              <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando bases de conocimiento...</p>
+              <p style="color: var(--fg-muted); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando bases de conocimiento...</p>
             {:else if vectorizacionContextos.length === 0}
-              <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem; padding: 1rem 0;">No hay bases de conocimiento disponibles</p>
+              <p style="color: var(--fg-muted); font-size: 0.9rem; padding: 1rem 0;">No hay bases de conocimiento disponibles</p>
             {:else}
               <div class="contextos-table">
                 {#each vectorizacionContextos as contexto (contexto.nombre)}
@@ -5341,13 +5341,13 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         <!-- Documentos -->
         {#if vectorizacionTab === 'documentos'}
           {#if proyectoActivo}
-            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.85rem; background: rgba(0,0,0,0.18); border-radius: 8px; margin-bottom: 1rem; font-size: 0.85rem; color: rgba(255,255,255,0.85);">
+            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.85rem; background: var(--muted); border-radius: 8px; margin-bottom: 1rem; font-size: 0.85rem; color: var(--fg);">
               <Icon name="proyecto" size={14} />
               <span>Trabajando en proyecto: <strong>{proyectoActivo.nombre}</strong></span>
-              <code style="background: rgba(0,0,0,0.3); padding: 1px 6px; border-radius: 4px; font-size: 0.75rem; color: rgba(255,255,255,0.7);">{proyectoActivo.slug}</code>
+              <code style="background: var(--muted); padding: 1px 6px; border-radius: 4px; font-size: 0.75rem; color: var(--fg-soft);">{proyectoActivo.slug}</code>
               <button
                 onclick={() => { vectorizacionTab = 'proyectos'; vinoDeCambiarProyecto = true; cargarProyectos(); }}
-                style="margin-left: auto; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.9); cursor: pointer; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 5px; transition: background 0.15s;"
+                style="margin-left: auto; background: var(--card); border: 1px solid var(--border); color: var(--fg); cursor: pointer; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 5px; transition: background 0.15s;"
                 onmouseover={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.22)'}
                 onmouseout={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.12)'}
                 title="Ir a Proyectos para cambiar el proyecto activo"
@@ -5370,7 +5370,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     onclick={() => abrirRenombrarBc(contextoSeleccionadoParaDocumentos)}
                     title="Ponerle un nombre a esta base de conocimiento"
                     aria-label="Renombrar base de conocimiento"
-                  >✏️</button>
+                  ><Icon name="editar" size={14} /></button>
                   {#if tieneNombrePropio(contextoSeleccionadoParaDocumentos)}
                     <code class="bc-id-real" title="Identificador real: es lo que usan Chroma, los asistentes y la carpeta de documentos. No cambia al renombrar.">{contextoSeleccionadoParaDocumentos}</code>
                   {/if}
@@ -5386,9 +5386,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               <div class="documentos-list-wrap">
                 <h4>Documentos de la base de conocimiento: <strong>{nombreVisibleBc(contextoSeleccionadoParaDocumentos)}</strong></h4>
                 {#if cargandoVectorizacionDocumentos}
-                  <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando documentos...</p>
+                  <p style="color: var(--fg-muted); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando documentos...</p>
                 {:else if vectorizacionDocumentos.length === 0}
-                  <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem; padding: 1rem 0;">No hay documentos en esta base de conocimiento</p>
+                  <p style="color: var(--fg-muted); font-size: 0.9rem; padding: 1rem 0;">No hay documentos en esta base de conocimiento</p>
                 {:else}
                   <div class="documentos-table">
                     {#each vectorizacionDocumentos as doc (doc)}
@@ -5422,7 +5422,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
           <!-- Integrar Documento -->
           <div class="integrar-documento-wrap">
-            <h3>📤 Integrar Nuevo Documento a <strong>{nombreVisibleBc(contextoSeleccionadoParaDocumentos)}</strong></h3>
+            <h3><Icon name="documentos" size={16} /> Integrar Nuevo Documento a <strong>{nombreVisibleBc(contextoSeleccionadoParaDocumentos)}</strong></h3>
             <div class="integrar-documento-form">
               <div class="form-field">
                 <label for="doc-archivo">Selecciona archivo</label>
@@ -5469,8 +5469,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
           <!-- Agregar Snippet (Q&A sin PDF) -->
           <div class="integrar-documento-wrap" style="margin-top: 1rem;">
-            <h3>✍️ Agregar Snippet (Q&amp;A) a <strong>{nombreVisibleBc(contextoSeleccionadoParaDocumentos)}</strong></h3>
-            <p style="margin: 0 0 0.75rem; color: rgba(10, 26, 58, 0.7); font-size: 0.82rem; line-height: 1.45;">
+            <h3><Icon name="editar" size={16} /> Agregar Snippet (Q&amp;A) a <strong>{nombreVisibleBc(contextoSeleccionadoParaDocumentos)}</strong></h3>
+            <p style="margin: 0 0 0.75rem; color: var(--fg-soft); font-size: 0.82rem; line-height: 1.45;">
               Alternativa rápida a subir un PDF cuando solo quieres meter una pregunta con su respuesta. Se guarda como archivo de texto en la BC y se vectoriza igual que cualquier documento.
             </p>
             <div class="integrar-documento-form" style="flex-direction: column; align-items: stretch; gap: 0.85rem;">
@@ -5484,7 +5484,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   placeholder="ej. horario-atencion"
                   class="documento-input"
                 />
-                <small style="color: rgba(10, 26, 58, 0.6); font-size: 0.75rem;">
+                <small style="color: var(--fg-soft); font-size: 0.75rem;">
                   La extensión <code>.txt</code> se agrega sola si no la tipeas. Si repites un nombre existente con contenido distinto, lo reemplaza.
                 </small>
               </div>
@@ -5519,8 +5519,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
           <!-- Batch de Preguntas y Respuestas -->
           <div class="integrar-documento-wrap" style="margin-top: 1rem;">
-            <h3>📚 Batch de Preguntas a <strong>{nombreVisibleBc(contextoSeleccionadoParaDocumentos)}</strong></h3>
-            <p style="margin: 0 0 0.85rem; color: rgba(10, 26, 58, 0.7); font-size: 0.82rem; line-height: 1.45;">
+            <h3><Icon name="base-conocimiento" size={16} /> Batch de Preguntas a <strong>{nombreVisibleBc(contextoSeleccionadoParaDocumentos)}</strong></h3>
+            <p style="margin: 0 0 0.85rem; color: var(--fg-soft); font-size: 0.82rem; line-height: 1.45;">
               Acumula varias Q&amp;As y vectorízalas todas de un jalón. Cada pregunta se guarda como su propio archivo (filename auto-generado), lo que mejora la precisión del retrieval — cada respuesta es un chunk independiente.
             </p>
 
@@ -5530,12 +5530,12 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 onclick={abrirFormPregunta}
                 disabled={cargandoIntegrarBatch}
                 class="integrar-documento-btn"
-                style="background: rgba(34,197,94,0.85); border-color: rgba(34,197,94,1);"
+                style="background: var(--ok-solid); border-color: rgba(34,197,94,1);"
               >
                 + Nueva Pregunta
               </button>
             {:else}
-              <div style="background: rgba(10, 26, 58, 0.08); border: 1px solid rgba(10, 26, 58, 0.2); border-radius: 8px; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem;">
+              <div style="background: var(--muted); border: 1px solid var(--border-strong); border-radius: 8px; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem;">
                 <div class="form-field">
                   <label for="batch-pregunta">Pregunta</label>
                   <input
@@ -5571,7 +5571,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     type="button"
                     onclick={cancelarFormPregunta}
                     class="integrar-documento-btn"
-                    style="background: rgba(10, 26, 58, 0.4); border-color: rgba(10, 26, 58, 0.5);"
+                    style="background: var(--muted); border-color: var(--border-strong);"
                   >
                     Cancelar
                   </button>
@@ -5582,7 +5582,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             {#if batchPreguntas.length > 0}
               <div style="margin-top: 1rem;">
                 <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 0.5rem;">
-                  <h4 style="margin: 0; color: rgba(10, 26, 58, 0.85);">
+                  <h4 style="margin: 0; color: var(--fg);">
                     Tu set de preguntas ({batchPreguntas.length})
                   </h4>
                   <button
@@ -5590,7 +5590,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     onclick={limpiarBatch}
                     disabled={cargandoIntegrarBatch}
                     class="integrar-documento-btn"
-                    style="background: rgba(10, 26, 58, 0.3); border-color: rgba(10, 26, 58, 0.4); font-size: 0.78rem; padding: 0.35rem 0.7rem;"
+                    style="background: var(--muted); border-color: var(--border-strong); font-size: 0.78rem; padding: 0.35rem 0.7rem;"
                   >
                     🗑️ Limpiar lista
                   </button>
@@ -5598,16 +5598,16 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.65rem;">
                   {#each batchPreguntas as item, i (item.id)}
                     {@const filenamePreview = `${slugifyPregunta(item.pregunta)}.txt`}
-                    <div style="background: rgba(255,255,255,0.55); border: 1px solid rgba(10, 26, 58, 0.2); border-radius: 6px; padding: 0.65rem 0.85rem; display: flex; gap: 0.75rem; align-items: flex-start;">
-                      <span style="color: rgba(10, 26, 58, 0.55); font-weight: 600; font-size: 0.8rem; min-width: 1.5rem;">{i + 1}.</span>
+                    <div style="background: var(--muted); border: 1px solid var(--border-strong); border-radius: 6px; padding: 0.65rem 0.85rem; display: flex; gap: 0.75rem; align-items: flex-start;">
+                      <span style="color: var(--fg-muted); font-weight: 600; font-size: 0.8rem; min-width: 1.5rem;">{i + 1}.</span>
                       <div style="flex: 1; min-width: 0;">
-                        <div style="color: rgba(10, 26, 58, 0.95); font-weight: 600; font-size: 0.88rem; word-break: break-word;">
+                        <div style="color: var(--fg); font-weight: 600; font-size: 0.88rem; word-break: break-word;">
                           {item.pregunta}
                         </div>
-                        <div style="color: rgba(10, 26, 58, 0.7); font-size: 0.82rem; margin-top: 0.2rem; line-height: 1.4; word-break: break-word;">
+                        <div style="color: var(--fg-soft); font-size: 0.82rem; margin-top: 0.2rem; line-height: 1.4; word-break: break-word;">
                           {item.respuesta}
                         </div>
-                        <code style="display: inline-block; margin-top: 0.3rem; font-size: 0.72rem; color: rgba(10, 26, 58, 0.5); background: rgba(10, 26, 58, 0.08); padding: 1px 6px; border-radius: 3px;">
+                        <code style="display: inline-block; margin-top: 0.3rem; font-size: 0.72rem; color: var(--fg-muted); background: var(--muted); padding: 1px 6px; border-radius: 3px;">
                           → {filenamePreview}
                         </code>
                       </div>
@@ -5654,14 +5654,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             {/if}
 
             {#if batchResultados && batchResultados.fail > 0}
-              <div style="margin-top: 0.75rem; padding: 0.75rem; background: rgba(200,40,40,0.12); border: 1px solid rgba(200,40,40,0.35); border-radius: 6px;">
-                <strong style="color: rgba(150,20,20,0.95); font-size: 0.85rem;">Errores ({batchResultados.fail}):</strong>
-                <ul style="margin: 0.4rem 0 0 1.2rem; padding: 0; color: rgba(150,20,20,0.85); font-size: 0.8rem;">
+              <div style="margin-top: 0.75rem; padding: 0.75rem; background: var(--danger-bg); border: 1px solid var(--danger-border); border-radius: 6px;">
+                <strong style="color: var(--danger-fg); font-size: 0.85rem;">Errores ({batchResultados.fail}):</strong>
+                <ul style="margin: 0.4rem 0 0 1.2rem; padding: 0; color: var(--danger-fg); font-size: 0.8rem;">
                   {#each batchResultados.errores as err (err.item.id)}
                     <li><strong>{err.item.pregunta}</strong> — {err.error}</li>
                   {/each}
                 </ul>
-                <p style="margin: 0.5rem 0 0; font-size: 0.75rem; color: rgba(10,26,58,0.65);">
+                <p style="margin: 0.5rem 0 0; font-size: 0.75rem; color: var(--fg-soft);">
                   Las preguntas fallidas se quedan en la lista para que las reintentes.
                 </p>
               </div>
@@ -5673,11 +5673,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         {#if mostrarConfirmacionBorrarDocumento}
           <div class="modal-overlay">
             <div class="modal-content">
-              <h3>⚠️ Confirmar Borrado de Documento</h3>
+              <h3>Confirmar Borrado de Documento</h3>
               <p>
                 ¿Estás seguro de que deseas borrar el documento <strong>"{documentoSeleccionadoParaBorrar}"</strong> de la base de conocimiento <strong>"{nombreVisibleBc(contextoSeleccionadoParaDocumentos)}"</strong>?
               </p>
-              <p style="font-size: 0.85rem; color: rgba(0,0,0,0.55);">
+              <p style="font-size: 0.85rem; color: var(--fg-muted);">
                 Esta acción es irreversible.
               </p>
               <div class="modal-buttons">
@@ -5704,18 +5704,18 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         {#if vectorizacionTab === 'modelos'}
           <div class="modelos-wrap">
             <div class="seccion-header">
-              <h3>🤖 Modelos Disponibles</h3>
+              <h3><Icon name="modelos" size={16} /> Modelos Disponibles</h3>
               <button onclick={cargarModelos} class="vectorizacion-action-btn" disabled={cargandoModelos}>
                 ↻ Recargar
               </button>
             </div>
 
             {#if cargandoModelos}
-              <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando modelos...</p>
+              <p style="color: var(--fg-muted); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando modelos...</p>
             {:else if errorModelos}
-              <p style="color: #fff; font-size: 0.9rem; padding: 1rem; background: rgba(200,40,40,0.9); border-radius: 4px; line-height: 1.5; font-weight: 500;">{errorModelos}</p>
+              <p style="color: var(--danger-fg); font-size: 0.9rem; padding: 1rem; background: var(--danger-bg); border: 1px solid var(--danger-border); border-radius: 4px; line-height: 1.5; font-weight: 500;">{errorModelos}</p>
             {:else if modelosDisponibles.length === 0}
-              <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem; padding: 1rem 0;">No hay modelos disponibles</p>
+              <p style="color: var(--fg-muted); font-size: 0.9rem; padding: 1rem 0;">No hay modelos disponibles</p>
             {:else}
               <div class="modelos-grid">
                 {#each modelosDisponibles as modelo (modelo)}
@@ -5732,9 +5732,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
             {#if modeloSeleccionado && infoModeloSeleccionado}
               <div class="modelo-detalle">
-                <h4>📋 Detalles de <strong>"{modeloSeleccionado}"</strong></h4>
+                <h4>Detalles de <strong>"{modeloSeleccionado}"</strong></h4>
                 {#if cargandoInfoModelo}
-                  <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem;">⟳ Cargando información...</p>
+                  <p style="color: var(--fg-muted); font-size: 0.9rem;">⟳ Cargando información...</p>
                 {:else}
                   <div class="modelo-propiedades">
                     {#each Object.entries(infoModeloSeleccionado) as [key, value]}
@@ -5753,13 +5753,13 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         <!-- Sandbox -->
         {#if vectorizacionTab === 'sandbox'}
           {#if proyectoActivo}
-            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.85rem; background: rgba(0,0,0,0.18); border-radius: 8px; margin-bottom: 1rem; font-size: 0.85rem; color: rgba(255,255,255,0.85);">
+            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.85rem; background: var(--muted); border-radius: 8px; margin-bottom: 1rem; font-size: 0.85rem; color: var(--fg);">
               <Icon name="proyecto" size={14} />
               <span>Trabajando en proyecto: <strong>{proyectoActivo.nombre}</strong></span>
-              <code style="background: rgba(0,0,0,0.3); padding: 1px 6px; border-radius: 4px; font-size: 0.75rem; color: rgba(255,255,255,0.7);">{proyectoActivo.slug}</code>
+              <code style="background: var(--muted); padding: 1px 6px; border-radius: 4px; font-size: 0.75rem; color: var(--fg-soft);">{proyectoActivo.slug}</code>
               <button
                 onclick={() => { vectorizacionTab = 'proyectos'; vinoDeCambiarProyecto = true; cargarProyectos(); }}
-                style="margin-left: auto; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.9); cursor: pointer; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 5px; transition: background 0.15s;"
+                style="margin-left: auto; background: var(--card); border: 1px solid var(--border); color: var(--fg); cursor: pointer; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 5px; transition: background 0.15s;"
                 onmouseover={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.22)'}
                 onmouseout={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.12)'}
                 title="Ir a Proyectos para cambiar el proyecto activo"
@@ -5770,7 +5770,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             {@const sandboxWidgetUrl = `${hostAsistentesBase}/embed/chat/${encodeURIComponent(lightbotAsistenteSlug)}`}
             <div class="lightbot-preview" style="margin-bottom: 1rem;">
               <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.4rem; flex-wrap: wrap;">
-                <h4 style="margin: 0;">📋 URL del widget</h4>
+                <h4 style="margin: 0;">URL del widget</h4>
                 <div style="display: flex; gap: 0.4rem;">
                   <button
                     class="url-action-btn"
@@ -5797,9 +5797,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               <div class="lightbot-field">
                 <label for="lb-asistente">Asistente</label>
                 {#if cargandoAsistentes}
-                  <span style="color:rgba(255,255,255,0.6); font-size:0.9rem;">⟳ Cargando asistentes...</span>
+                  <span style="color:var(--fg-soft); font-size:0.9rem;">⟳ Cargando asistentes...</span>
                 {:else if asistentes.length === 0}
-                  <span style="color:rgba(255,255,255,0.6); font-size:0.9rem;">Sin asistentes — créalos en 🎧 Asistentes.</span>
+                  <span style="color:var(--fg-soft); font-size:0.9rem;">Sin asistentes — créalos en 🎧 Asistentes.</span>
                 {:else}
                   <select id="lb-asistente" bind:value={lightbotAsistenteSlug}>
                     <option value="">— Seleccionar asistente —</option>
@@ -5813,7 +5813,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
             {#if lightbotAsistenteSlug}
               {@const lightbotEmbedUrl = `${hostAsistentesBase}/embed/chat/${encodeURIComponent(lightbotAsistenteSlug)}`}
-              <div style="width:100%; max-width:420px; height:70vh; min-height:520px; border:1px solid rgba(255,255,255,0.12); border-radius:12px; overflow:hidden; background:#fff; flex-shrink: 0;">
+              <div style="width:100%; max-width:420px; height:70vh; min-height:520px; border:1px solid var(--border); border-radius:12px; overflow:hidden; background:var(--card); flex-shrink: 0;">
                 <iframe
                   src={lightbotEmbedUrl}
                   title="Vista previa del widget"
@@ -5828,13 +5828,13 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         <!-- MiniAdmin -->
         {#if vectorizacionTab === 'miniadmin'}
           {#if proyectoActivo}
-            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.85rem; background: rgba(0,0,0,0.18); border-radius: 8px; margin-bottom: 1rem; font-size: 0.85rem; color: rgba(255,255,255,0.85);">
+            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.85rem; background: var(--muted); border-radius: 8px; margin-bottom: 1rem; font-size: 0.85rem; color: var(--fg);">
               <Icon name="proyecto" size={14} />
               <span>Trabajando en proyecto: <strong>{proyectoActivo.nombre}</strong></span>
-              <code style="background: rgba(0,0,0,0.3); padding: 1px 6px; border-radius: 4px; font-size: 0.75rem; color: rgba(255,255,255,0.7);">{proyectoActivo.slug}</code>
+              <code style="background: var(--muted); padding: 1px 6px; border-radius: 4px; font-size: 0.75rem; color: var(--fg-soft);">{proyectoActivo.slug}</code>
               <button
                 onclick={() => { vectorizacionTab = 'proyectos'; vinoDeCambiarProyecto = true; cargarProyectos(); }}
-                style="margin-left: auto; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.9); cursor: pointer; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 5px; transition: background 0.15s;"
+                style="margin-left: auto; background: var(--card); border: 1px solid var(--border); color: var(--fg); cursor: pointer; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 5px; transition: background 0.15s;"
                 onmouseover={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.22)'}
                 onmouseout={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.12)'}
                 title="Ir a Proyectos para cambiar el proyecto activo"
@@ -5845,7 +5845,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             {@const miniadminWidgetUrl = `${hostAsistentesBase}/embed/admin/${encodeURIComponent(contextlightAsistenteSlug)}`}
             <div class="lightbot-preview" style="margin-bottom: 1rem;">
               <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.4rem; flex-wrap: wrap;">
-                <h4 style="margin: 0;">📋 URL del widget</h4>
+                <h4 style="margin: 0;">URL del widget</h4>
                 <div style="display: flex; gap: 0.4rem;">
                   <button
                     class="url-action-btn"
@@ -5872,9 +5872,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               <div class="lightbot-field">
                 <label for="cle-asistente">Asistente</label>
                 {#if cargandoAsistentes}
-                  <span style="color:rgba(255,255,255,0.6); font-size:0.9rem;">⟳ Cargando asistentes...</span>
+                  <span style="color:var(--fg-soft); font-size:0.9rem;">⟳ Cargando asistentes...</span>
                 {:else if asistentes.length === 0}
-                  <span style="color:rgba(255,255,255,0.6); font-size:0.9rem;">Sin asistentes — créalos en 🎧 Asistentes.</span>
+                  <span style="color:var(--fg-soft); font-size:0.9rem;">Sin asistentes — créalos en 🎧 Asistentes.</span>
                 {:else}
                   <select id="cle-asistente" bind:value={contextlightAsistenteSlug}>
                     <option value="">— Seleccionar asistente —</option>
@@ -5888,7 +5888,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
             {#if contextlightAsistenteSlug}
               {@const contextlightEmbedUrl = `${hostAsistentesBase}/embed/admin/${encodeURIComponent(contextlightAsistenteSlug)}`}
-              <div style="width:100%; max-width:720px; height:70vh; min-height:520px; border:1px solid rgba(255,255,255,0.12); border-radius:12px; overflow:hidden; background:#fff; flex-shrink: 0;">
+              <div style="width:100%; max-width:720px; height:70vh; min-height:520px; border:1px solid var(--border); border-radius:12px; overflow:hidden; background:var(--card); flex-shrink: 0;">
                 <iframe
                   src={contextlightEmbedUrl}
                   title="Vista previa del MiniAdmin"
@@ -5904,11 +5904,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           <div class="modal-overlay">
             <div class="modal-content">
               {#if advertenciaBorrar}
-                <h3>⚠️ Esta BC está en uso</h3>
-                <p style="color: rgba(0,0,0,0.85);">
+                <h3>Esta BC está en uso</h3>
+                <p style="color: var(--fg);">
                   {advertenciaBorrar}
                 </p>
-                <p style="font-size: 0.85rem; color: rgba(0,0,0,0.65); margin-top: 0.5rem;">
+                <p style="font-size: 0.85rem; color: var(--fg-muted); margin-top: 0.5rem;">
                   Si borras la BC de todas formas, los asistentes que la usan quedarán sin base de conocimiento (chat puro, sin RAG) hasta que les asignes una nueva.
                 </p>
                 <div class="modal-buttons">
@@ -5928,11 +5928,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   </button>
                 </div>
               {:else}
-                <h3>⚠️ Confirmar Borrado</h3>
+                <h3>Confirmar Borrado</h3>
                 <p>
                   ¿Estás seguro de que deseas borrar la base de conocimiento <strong>"{contextoABorrar}"</strong>?
                 </p>
-                <p style="font-size: 0.85rem; color: rgba(0,0,0,0.55);">
+                <p style="font-size: 0.85rem; color: var(--fg-muted);">
                   Esta acción es irreversible.
                 </p>
                 <div class="modal-buttons">
@@ -5965,7 +5965,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   {#if renombrarBcAbierto}
     <div class="modal-overlay" onclick={() => { if (!renombrarBcGuardando) renombrarBcAbierto = false; }} role="presentation">
       <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 470px;">
-        <h3>✏️ Nombre de la base de conocimiento</h3>
+        <h3>Nombre de la base de conocimiento</h3>
         <p style="font-size: 0.88rem; line-height: 1.5;">
           Es sólo la etiqueta que ves en el panel. Puedes usar espacios, acentos y mayúsculas.
         </p>
@@ -5987,7 +5987,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           {#if renombrarBcError}
             <p class="login-error">❌ {renombrarBcError}</p>
           {/if}
-          <p style="font-size: 0.75rem; color: rgba(255,255,255,0.55); margin: 0; line-height: 1.45;">
+          <p style="font-size: 0.75rem; color: var(--fg-muted); margin: 0; line-height: 1.45;">
             El identificador <code>{contextoSeleccionadoParaDocumentos}</code> no cambia: es lo que usan Chroma,
             los asistentes que la consultan y la carpeta de documentos. Por eso renombrar aquí no rompe nada.
             Déjalo vacío para volver a mostrar el identificador.
@@ -6009,12 +6009,12 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   {#if operadorABorrar}
     <div class="modal-overlay" onclick={() => { if (!borrandoOperador) operadorABorrar = null; }} role="presentation">
       <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 480px;">
-        <h3>⚠️ Borrar operador</h3>
+        <h3>Borrar operador</h3>
         <p>
           Vas a eliminar la cuenta de <strong>{operadorABorrar.nombre}</strong>
           (<code>{operadorABorrar.email}</code>). Dejará de poder entrar al panel de inmediato.
         </p>
-        <p style="font-size: 0.8rem; color: rgba(255,255,255,0.65); margin-top: 0.5rem;">
+        <p style="font-size: 0.8rem; color: var(--fg-soft); margin-top: 0.5rem;">
           Los registros históricos no se tocan. Si solo quieres quitarle el acceso un rato,
           <strong>desactivarlo</strong> es reversible; esto no.
         </p>
@@ -6034,7 +6034,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   {#if operadorParaPassword}
     <div class="modal-overlay" onclick={() => { if (!guardandoPasswordOperador) operadorParaPassword = null; }} role="presentation">
       <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 460px;">
-        <h3>🔑 Restablecer contraseña</h3>
+        <h3><Icon name="accesos" size={18} /> Restablecer contraseña</h3>
         <p>
           Le pondrás una contraseña nueva a <strong>{operadorParaPassword.nombre}</strong>
           (<code>{operadorParaPassword.email}</code>), sin necesidad de saber la anterior.
@@ -6054,7 +6054,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           {#if errorPasswordOperador}
             <p class="login-error">❌ {errorPasswordOperador}</p>
           {/if}
-          <p style="font-size: 0.75rem; color: rgba(255,255,255,0.55); margin: 0; line-height: 1.45;">
+          <p style="font-size: 0.75rem; color: var(--fg-muted); margin: 0; line-height: 1.45;">
             Se cerrarán todas sus sesiones abiertas. Pásasela por un canal seguro;
             esta pantalla no la vuelve a mostrar.
           </p>
@@ -6075,7 +6075,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   {#if proyectoParaDesbloquear}
     <div class="modal-overlay" onclick={cerrarPromptPassword} role="presentation">
       <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 440px;">
-        <h3>🔒 Activar proyecto</h3>
+        <h3><Icon name="accesos" size={16} /> Activar proyecto</h3>
         <p>
           Para activar <strong>{proyectoParaDesbloquear.nombre}</strong> (<code>{proyectoParaDesbloquear.slug}</code>) necesitas su password.
         </p>
@@ -6093,9 +6093,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             autofocus
           />
           {#if errorPasswordProyecto}
-            <p style="font-size: 0.85rem; color: #fca5a5; margin: 0;">{errorPasswordProyecto}</p>
+            <p style="font-size: 0.85rem; color: var(--danger-fg); margin: 0;">{errorPasswordProyecto}</p>
           {/if}
-          <p style="font-size: 0.75rem; color: rgba(255,255,255,0.55); margin: 0;">
+          <p style="font-size: 0.75rem; color: var(--fg-muted); margin: 0;">
             Si lo tipeas bien, queda desbloqueado en este navegador hasta que cierres la pestaña.
           </p>
           <div class="modal-buttons" style="margin-top: 0.25rem;">
@@ -6111,7 +6111,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               type="submit"
               disabled={cargandoVerificarPassword}
               class="modal-btn danger"
-              style="background: rgba(34,197,94,0.75); border-color: rgba(34,197,94,0.85);"
+              style="background: var(--ok-solid); border-color: rgba(34,197,94,0.85);"
             >
               {cargandoVerificarPassword ? '⟳ Verificando...' : '⚡ Activar'}
             </button>
@@ -6153,11 +6153,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             style="
               flex: 1;
               min-height: 280px;
-              background: rgba(0, 0, 0, 0.4);
-              color: rgba(255, 255, 255, 0.95);
+              background: var(--card);
+              color: var(--fg);
               padding: 1rem;
               border-radius: 8px;
-              border: 1px solid rgba(255, 255, 255, 0.2);
+              border: 1px solid var(--border);
               font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
               font-size: 0.88rem;
               line-height: 1.55;
@@ -6165,15 +6165,15 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               margin: 0;
             "
           ></textarea>
-          <p style="margin: 0.5rem 0 0; font-size: 0.75rem; color: rgba(255, 255, 255, 0.55); line-height: 1.4;">
+          <p style="margin: 0.5rem 0 0; font-size: 0.75rem; color: var(--fg-muted); line-height: 1.4;">
             💡 Al guardar, los chunks viejos en Chroma se borran y este contenido se vuelve a vectorizar. Atómico, una sola llamada.
           </p>
         {:else}
           <pre style="
             flex: 1;
             overflow: auto;
-            background: rgba(0, 0, 0, 0.35);
-            color: rgba(255, 255, 255, 0.92);
+            background: var(--muted);
+            color: var(--fg);
             padding: 1rem;
             border-radius: 8px;
             font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
@@ -6186,7 +6186,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         {/if}
 
         {#if mensajeEdicion}
-          <p style="margin: 0.75rem 0 0; font-size: 0.85rem; color: {mensajeEdicion.startsWith('❌') ? '#fca5a5' : '#4ade80'};">
+          <p style="margin: 0.75rem 0 0; font-size: 0.85rem; color: {mensajeEdicion.startsWith('❌') ? 'var(--danger-fg)' : 'var(--ok)'};">
             {mensajeEdicion}
           </p>
         {/if}
@@ -6198,7 +6198,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               onclick={guardarEdicionSnippet}
               disabled={cargandoGuardarEdicion || !documentoBorrador.trim()}
               class="modal-btn"
-              style="background: rgba(34,197,94,0.85); color: #fff; border-color: rgba(34,197,94,1);"
+              style="background: var(--ok-solid); color: #fff; border-color: rgba(34,197,94,1);"
             >
               {cargandoGuardarEdicion ? '⟳ Guardando...' : '💾 Guardar'}
             </button>
@@ -6219,13 +6219,13 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 } catch {}
               }}
               class="modal-btn"
-              style="background: rgba(255,255,255,0.15); color: #fff; border-color: rgba(255,255,255,0.3);"
+              style="background: var(--muted); color: var(--fg); border-color: var(--border);"
             >📋 Copiar</button>
             <button
               type="button"
               onclick={iniciarEdicionSnippet}
               class="modal-btn"
-              style="background: rgba(59,130,246,0.85); color: #fff; border-color: rgba(59,130,246,1);"
+              style="background: var(--primary); color: #fff; border-color: rgba(59,130,246,1);"
             >✏️ Editar</button>
             <button
               type="button"
@@ -6243,11 +6243,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     <main class="vectorizacion-body">
       <div class="vectorizacion-container">
         <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
-          <h2 style="color: white; margin: 0;">👤 Administración</h2>
+          <h2 style="color: var(--fg); margin: 0;"><Icon name="cuenta" size={20} /> Administración</h2>
           <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
             {#if identidad?.tipo === 'operador'}
               <span class="operador-chip" title="Entraste con tu cuenta — rol {identidad.rol}">
-                👤 {nombreOperador} · {identidad.rol}
+                <Icon name="cuenta" size={15} /> {nombreOperador} · {identidad.rol}
               </span>
             {:else if identidad?.tipo === 'legacy'}
               <span class="operador-chip operador-chip--legacy" title="Entraste con el token compartido del .env: no identifica a nadie. Entra con tu cuenta para que quede registro de quién hace qué.">
@@ -6258,9 +6258,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               onclick={cerrarSesionAdmin}
               class="vectorizacion-action-btn"
               title="Cierra la sesión en el servidor y borra el token de este navegador"
-              style="background: rgba(220, 80, 80, 0.2); border-color: rgba(255, 150, 150, 0.4); color: #fff;"
+              style="background: var(--danger-bg); border-color: var(--danger-border); color: var(--fg);"
             >
-              🔒 Cerrar sesión
+              <Icon name="cerrar-sesion" size={15} /> Cerrar sesión
             </button>
           </div>
         </div>
@@ -6272,14 +6272,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             class:active={adminTab === 'modelos'}
             onclick={() => { adminTab = 'modelos'; cargarModelos(); }}
           >
-            🤖 Modelos
+            <Icon name="modelos" size={15} /> Modelos
           </button>
           <button
             class="vectorizacion-subtab-btn"
             class:active={adminTab === 'keys'}
             onclick={() => { adminTab = 'keys'; cargarKeysOpenai(); }}
           >
-            🔐 API keys
+            <Icon name="api-keys" size={15} /> API keys
           </button>
           {#if esSuperadmin}
             <button
@@ -6287,14 +6287,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               class:active={adminTab === 'operadores'}
               onclick={() => { adminTab = 'operadores'; cargarOperadores(); }}
             >
-              👥 Operadores
+              <Icon name="operadores" size={15} /> Operadores
             </button>
             <button
               class="vectorizacion-subtab-btn"
               class:active={adminTab === 'auditoria'}
               onclick={() => { adminTab = 'auditoria'; cargarAuditoria(); }}
             >
-              📜 Bitácora
+              <Icon name="bitacora" size={15} /> Bitácora
             </button>
           {/if}
           <button
@@ -6302,42 +6302,42 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             class:active={adminTab === 'alias'}
             onclick={() => { adminTab = 'alias'; cargarModelosEmbedding(); }}
           >
-            🏷️ Alias
+            <Icon name="alias" size={15} /> Alias
           </button>
           <button
             class="vectorizacion-subtab-btn"
             class:active={adminTab === 'defaultcontext'}
             onclick={() => { adminTab = 'defaultcontext'; if (contextos.length === 0) cargarContextos(); }}
           >
-            ⭐ DefaultContext
+            <Icon name="estrella" size={15} /> DefaultContext
           </button>
           <button
             class="vectorizacion-subtab-btn"
             class:active={adminTab === 'consumo'}
             onclick={() => { adminTab = 'consumo'; if (!consumoData) cargarConsumo(); if (proyectos.length === 0) cargarProyectos(); if (usuariosGlobal.length === 0) cargarUsuariosGlobal(); if (asistentesGlobal.length === 0) cargarAsistentesGlobal(); }}
           >
-            📊 Consumo
+            <Icon name="consumo" size={15} /> Consumo
           </button>
           <button
             class="vectorizacion-subtab-btn"
             class:active={adminTab === 'accesos'}
             onclick={() => { adminTab = 'accesos'; cargarProyectos(); }}
           >
-            🔑 Accesos
+            <Icon name="accesos" size={15} /> Accesos
           </button>
           <button
             class="vectorizacion-subtab-btn"
             class:active={adminTab === 'registros'}
             onclick={() => { adminTab = 'registros'; if (!registrosData) cargarRegistros(); if (proyectos.length === 0) cargarProyectos(); if (hitos.length === 0) cargarHitos(); if (usuariosGlobal.length === 0) cargarUsuariosGlobal(); if (asistentesGlobal.length === 0) cargarAsistentesGlobal(); }}
           >
-            📝 Registros
+            <Icon name="registros" size={15} /> Registros
           </button>
           <button
             class="vectorizacion-subtab-btn"
             class:active={adminTab === 'historial'}
             onclick={() => { adminTab = 'historial'; if (!historialData) cargarHistorial(); }}
           >
-            🗂️ Historial
+            <Icon name="archivo" size={15} /> Historial
           </button>
         </div>
 
@@ -6345,18 +6345,18 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         {#if adminTab === 'modelos'}
         <div class="modelos-wrap">
           <div class="seccion-header">
-            <h3>🤖 Modelos Disponibles</h3>
+            <h3><Icon name="modelos" size={16} /> Modelos Disponibles</h3>
             <button onclick={cargarModelos} class="vectorizacion-action-btn" disabled={cargandoModelos}>
               ↻ Recargar
             </button>
           </div>
 
           {#if cargandoModelos}
-            <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem; padding: 1rem 0;">⏳ Cargando modelos...</p>
+            <p style="color: var(--fg-muted); font-size: 0.9rem; padding: 1rem 0;">⏳ Cargando modelos...</p>
           {:else if errorModelos}
-            <p style="color: #fff; font-size: 0.9rem; padding: 1rem; background: rgba(200,40,40,0.9); border-radius: 4px; line-height: 1.5; font-weight: 500;">{errorModelos}</p>
+            <p style="color: var(--danger-fg); font-size: 0.9rem; padding: 1rem; background: var(--danger-bg); border: 1px solid var(--danger-border); border-radius: 4px; line-height: 1.5; font-weight: 500;">{errorModelos}</p>
           {:else if modelosDisponibles.length === 0}
-            <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem; padding: 1rem 0;">No hay modelos disponibles</p>
+            <p style="color: var(--fg-muted); font-size: 0.9rem; padding: 1rem 0;">No hay modelos disponibles</p>
           {:else}
             <div class="modelos-grid">
               {#each modelosDisponibles as modelo (modelo)}
@@ -6389,9 +6389,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
           {#if modeloSeleccionado && infoModeloSeleccionado}
             <div class="modelo-detalle">
-              <h4>📋 Detalles de <strong>"{modeloSeleccionado}"</strong></h4>
+              <h4>Detalles de <strong>"{modeloSeleccionado}"</strong></h4>
               {#if cargandoInfoModelo}
-                <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem;">⏳ Cargando información...</p>
+                <p style="color: var(--fg-muted); font-size: 0.9rem;">⏳ Cargando información...</p>
               {:else}
                 <div class="modelo-propiedades">
                   {#each Object.entries(infoModeloSeleccionado) as [key, value]}
@@ -6408,37 +6408,37 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           {#if mostrarConfirmacionBorrarModelo && modeloABorrar}
             <div class="modal-overlay">
               <div class="modal-content" style="max-width: 520px;">
-                <h3>⚠️ Borrar Modelo</h3>
+                <h3>Borrar Modelo</h3>
                 <p>
                   Vas a borrar el modelo <strong>"{modeloABorrar}"</strong> del server (equivalente a <code>ollama rm {modeloABorrar}</code>).
                 </p>
 
                 {#if asistentesAfectadosPorBorrado.length > 0}
-                  <div style="margin-top: 0.75rem; padding: 0.75rem; background: rgba(220, 80, 80, 0.22); border: 1px solid rgba(255, 150, 150, 0.4); border-radius: 8px;">
-                    <p style="font-size: 0.85rem; color: rgba(255,255,255,0.95); margin: 0 0 0.4rem; font-weight: 600;">
+                  <div style="margin-top: 0.75rem; padding: 0.75rem; background: var(--danger-bg); border: 1px solid var(--danger-border); border-radius: 8px;">
+                    <p style="font-size: 0.85rem; color: var(--fg); margin: 0 0 0.4rem; font-weight: 600;">
                       ⚠️ {asistentesAfectadosPorBorrado.length} asistente{asistentesAfectadosPorBorrado.length === 1 ? '' : 's'} usa{asistentesAfectadosPorBorrado.length === 1 ? '' : 'n'} este modelo y dejará{asistentesAfectadosPorBorrado.length === 1 ? '' : 'n'} de funcionar:
                     </p>
-                    <ul style="margin: 0; padding-left: 1.25rem; font-size: 0.8rem; color: rgba(255,255,255,0.85); line-height: 1.55;">
+                    <ul style="margin: 0; padding-left: 1.25rem; font-size: 0.8rem; color: var(--fg); line-height: 1.55;">
                       {#each asistentesAfectadosPorBorrado as a (a.id)}
                         <li><strong>{a.nombre}</strong> (<code>{a.slug}</code>)</li>
                       {/each}
                     </ul>
-                    <p style="font-size: 0.75rem; color: rgba(255,255,255,0.7); margin: 0.5rem 0 0;">
+                    <p style="font-size: 0.75rem; color: var(--fg-soft); margin: 0.5rem 0 0;">
                       Tendrás que reasignarles otro modelo manualmente desde el form de edición.
                     </p>
                   </div>
                 {:else}
-                  <p style="font-size: 0.85rem; color: rgba(255,255,255,0.7); margin-top: 0.5rem;">
+                  <p style="font-size: 0.85rem; color: var(--fg-soft); margin-top: 0.5rem;">
                     Ningún asistente actual usa este modelo.
                   </p>
                 {/if}
 
-                <p style="font-size: 0.75rem; color: rgba(255,255,255,0.55); margin-top: 0.75rem;">
+                <p style="font-size: 0.75rem; color: var(--fg-muted); margin-top: 0.75rem;">
                   Esta acción es irreversible. Para recuperarlo tendrás que volver a descargarlo con <code>ollama pull {modeloABorrar}</code>.
                 </p>
 
                 {#if errorBorrarModelo}
-                  <p style="font-size: 0.85rem; color: #fca5a5; background: rgba(180, 30, 30, 0.25); padding: 0.5rem 0.75rem; border-radius: 6px; margin-top: 0.75rem; word-break: break-word;">
+                  <p style="font-size: 0.85rem; color: var(--danger-fg); background: var(--danger-bg); padding: 0.5rem 0.75rem; border-radius: 6px; margin-top: 0.75rem; word-break: break-word;">
                     ❌ {errorBorrarModelo}
                   </p>
                 {/if}
@@ -6469,22 +6469,22 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         {#if adminTab === 'keys'}
         <div class="modelos-wrap">
           <div class="seccion-header">
-            <h3>🔐 API keys de OpenAI</h3>
+            <h3><Icon name="api-keys" size={16} /> API keys de OpenAI</h3>
             <button onclick={cargarKeysOpenai} class="vectorizacion-action-btn" disabled={cargandoKeysOpenai}>
               ↻ Recargar
             </button>
           </div>
 
-          <p style="color: rgba(255,255,255,0.7); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
+          <p style="color: var(--fg-soft); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
             La <strong>principal</strong> es <code>OPENAI_API_KEY</code> y la de <strong>respaldo</strong>, <code>OPENAI_API_KEY_RESPALDO</code>.
             Las dos viven en el <code>.env</code> del backend: desde aquí solo se ve si están configuradas, nunca su valor.
             Cubren el chat y los embeddings (búsqueda en las bases de conocimiento y vectorización de documentos).
           </p>
 
           {#if cargandoKeysOpenai && !keysOpenai}
-            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando estado de las keys...</p>
+            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando estado de las keys...</p>
           {:else if errorKeysOpenai}
-            <p style="color: #fff; font-size: 0.9rem; padding: 1rem; background: rgba(200,40,40,0.85); border-radius: 8px; line-height: 1.5;">
+            <p style="color: var(--danger-fg); font-size: 0.9rem; padding: 1rem; background: var(--danger-bg); border: 1px solid var(--danger-border); border-radius: 8px; line-height: 1.5;">
               ❌ {errorKeysOpenai}
             </p>
           {:else if keysOpenai}
@@ -6517,7 +6517,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               {/each}
             </div>
 
-            <h4 style="color: #fff; margin: 1.5rem 0 0.75rem; font-size: 0.95rem;">¿Cuándo usar cada key?</h4>
+            <h4 style="color: var(--fg); margin: 1.5rem 0 0.75rem; font-size: 0.95rem;">¿Cuándo usar cada key?</h4>
             <div class="keys-modos">
               {#each MODOS_KEYS_OPENAI as m (m.valor)}
                 {@const requerida = m.valor === 'auto' ? null : keyOpenaiPorEtiqueta(m.valor)}
@@ -6535,12 +6535,12 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               {/each}
             </div>
             {#if mensajeKeysOpenai}
-              <p style="margin: 0.75rem 0 0; font-size: 0.85rem; color: {mensajeKeysOpenai.startsWith('❌') ? '#fca5a5' : '#4ade80'};">
+              <p style="margin: 0.75rem 0 0; font-size: 0.85rem; color: {mensajeKeysOpenai.startsWith('❌') ? 'var(--danger-fg)' : 'var(--ok)'};">
                 {mensajeKeysOpenai}
               </p>
             {/if}
 
-            <p style="color: rgba(255,255,255,0.45); font-size: 0.75rem; margin-top: 1rem; line-height: 1.4;">
+            <p style="color: var(--fg-muted); font-size: 0.75rem; margin-top: 1rem; line-height: 1.4;">
               💡 En Automático, una key que acaba de fallar se pausa {Math.round((keysOpenai.enfriamiento_s ?? 300) / 60)} min para no cobrar el intento fallido en cada consulta:
               si el problema es de la cuenta (key inválida o sin saldo) la pausa aplica a todos los modelos; si es de un modelo, solo a ese.
               Cambiar el modo borra las pausas, y el backend las olvida al reiniciarse. En Registros y Consumo se ve qué key respondió cada consulta.
@@ -6553,28 +6553,28 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         {#if adminTab === 'operadores' && esSuperadmin}
         <div class="modelos-wrap">
           <div class="seccion-header">
-            <h3>👥 Operadores</h3>
+            <h3><Icon name="operadores" size={16} /> Operadores</h3>
             <div style="display: flex; gap: 0.4rem;">
               <button onclick={abrirCrearOperador} class="vectorizacion-action-btn">➕ Nuevo operador</button>
               <button onclick={cargarOperadores} class="vectorizacion-action-btn" disabled={cargandoOperadores}>↻ Recargar</button>
             </div>
           </div>
 
-          <p style="color: rgba(255,255,255,0.7); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
+          <p style="color: var(--fg-soft); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
             Quienes entran a este panel con su propia cuenta. No confundir con el subtab <strong>Usuarios</strong> de cada proyecto:
             esos son los usuarios finales de los widgets, que no tienen login y solo sirven para atribuir consultas.
             El <strong>email es la credencial</strong> y no se puede cambiar; si alguien necesita otro, se crea una cuenta nueva.
           </p>
 
           {#if mensajeOperadores}
-            <p style="margin: 0 0 1rem; font-size: 0.88rem; color: {mensajeOperadores.startsWith('❌') ? '#fca5a5' : '#4ade80'};">
+            <p style="margin: 0 0 1rem; font-size: 0.88rem; color: {mensajeOperadores.startsWith('❌') ? 'var(--danger-fg)' : 'var(--ok)'};">
               {mensajeOperadores}
             </p>
           {/if}
 
           {#if operadorFormAbierto}
             <div class="crear-contexto-form" style="flex-direction: column; align-items: stretch; max-width: 560px; margin-bottom: 1.25rem;">
-              <h4 style="margin: 0 0 0.25rem 0; color: #fff;">
+              <h4 style="margin: 0 0 0.25rem 0; color: var(--fg);">
                 {operadorEditandoId ? 'Editar operador' : 'Nuevo operador'}
               </h4>
               <div class="form-field">
@@ -6589,7 +6589,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   autocomplete="off"
                 />
                 {#if operadorEditandoId}
-                  <small style="font-size: 0.75rem; color: rgba(0,0,0,0.6); display: block; margin-top: 0.25rem;">
+                  <small style="font-size: 0.75rem; color: var(--fg-muted); display: block; margin-top: 0.25rem;">
                     El email no se puede cambiar: es la credencial con la que entra.
                   </small>
                 {/if}
@@ -6618,7 +6618,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     autocomplete="new-password"
                     placeholder="Mínimo 8 caracteres"
                   />
-                  <small style="font-size: 0.75rem; color: rgba(0,0,0,0.6); display: block; margin-top: 0.25rem;">
+                  <small style="font-size: 0.75rem; color: var(--fg-muted); display: block; margin-top: 0.25rem;">
                     Se la pasas tú por un canal seguro. Quien entre puede cambiarla después.
                   </small>
                 </div>
@@ -6630,7 +6630,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     <option value={r}>{r}</option>
                   {/each}
                 </select>
-                <small style="font-size: 0.75rem; color: rgba(0,0,0,0.6); display: block; margin-top: 0.25rem;">
+                <small style="font-size: 0.75rem; color: var(--fg-muted); display: block; margin-top: 0.25rem;">
                   <strong>admin</strong> opera el panel. <strong>superadmin</strong> además administra operadores.
                 </small>
               </div>
@@ -6640,7 +6640,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               {/if}
 
               <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
-                <button onclick={cerrarFormOperador} disabled={guardandoOperador} class="crear-contexto-btn" style="background: rgba(0,0,0,0.45); color: rgba(255,255,255,0.95);">
+                <button onclick={cerrarFormOperador} disabled={guardandoOperador} class="crear-contexto-btn" style="background: var(--muted); color: var(--fg);">
                   Cancelar
                 </button>
                 <button onclick={guardarOperador} disabled={guardandoOperador} class="crear-contexto-btn">
@@ -6651,13 +6651,13 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           {/if}
 
           {#if cargandoOperadores && operadores.length === 0}
-            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando operadores...</p>
+            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando operadores...</p>
           {:else if errorOperadores}
-            <p style="color: #fff; font-size: 0.9rem; padding: 1rem; background: rgba(200,40,40,0.85); border-radius: 8px; line-height: 1.5;">
+            <p style="color: var(--danger-fg); font-size: 0.9rem; padding: 1rem; background: var(--danger-bg); border: 1px solid var(--danger-border); border-radius: 8px; line-height: 1.5;">
               ❌ {errorOperadores}
             </p>
           {:else if operadores.length === 0}
-            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">No hay operadores todavía.</p>
+            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">No hay operadores todavía.</p>
           {:else}
             <table class="consumo-tabla">
               <thead>
@@ -6683,21 +6683,21 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     </td>
                     <td>
                       {#if o.activo}
-                        <span style="color: #4ade80;">● activo</span>
+                        <span style="color: var(--ok);">● activo</span>
                       {:else}
-                        <span style="color: rgba(255,255,255,0.5);">○ inactivo</span>
+                        <span style="color: var(--fg-muted);">○ inactivo</span>
                       {/if}
                     </td>
                     <td style="text-align: right; white-space: nowrap;">
-                      <button class="op-btn" title="Editar nombre y rol" onclick={() => abrirEditarOperador(o)}>✏️</button>
-                      <button class="op-btn" title="Restablecer su contraseña" onclick={() => abrirPasswordOperador(o)}>🔑</button>
+                      <button class="op-btn" title="Editar nombre y rol" onclick={() => abrirEditarOperador(o)}><Icon name="editar" size={15} /></button>
+                      <button class="op-btn" title="Restablecer su contraseña" onclick={() => abrirPasswordOperador(o)}><Icon name="accesos" size={15} /></button>
                       {#if !soyYo}
                         <button
                           class="op-btn"
                           title={o.activo ? 'Desactivar (cierra sus sesiones)' : 'Reactivar'}
                           onclick={() => alternarActivoOperador(o)}
-                        >{o.activo ? '🚫' : '✅'}</button>
-                        <button class="op-btn op-btn--danger" title="Borrar" onclick={() => { operadorABorrar = o; }}>🗑️</button>
+                        ><Icon name={o.activo ? 'desactivar' : 'reactivar'} size={15} /></button>
+                        <button class="op-btn op-btn--danger" title="Borrar" onclick={() => { operadorABorrar = o; }}><Icon name="borrar" size={15} /></button>
                       {/if}
                     </td>
                   </tr>
@@ -6705,7 +6705,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               </tbody>
             </table>
 
-            <p style="color: rgba(255,255,255,0.45); font-size: 0.75rem; margin-top: 1rem; line-height: 1.45;">
+            <p style="color: var(--fg-muted); font-size: 0.75rem; margin-top: 1rem; line-height: 1.45;">
               💡 Sobre tu propia fila solo puedes editar nombre y contraseña: desactivarte o borrarte te dejaría fuera.
               Tampoco se puede quitar al último superadmin activo.
               Desactivar o restablecer una contraseña cierra las sesiones de esa persona al instante.
@@ -6718,11 +6718,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         {#if adminTab === 'auditoria' && esSuperadmin}
         <div class="modelos-wrap">
           <div class="seccion-header">
-            <h3>📜 Bitácora</h3>
+            <h3><Icon name="bitacora" size={16} /> Bitácora</h3>
             <button onclick={cargarAuditoria} class="vectorizacion-action-btn" disabled={cargandoAuditoria}>↻ Recargar</button>
           </div>
 
-          <p style="color: rgba(255,255,255,0.7); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
+          <p style="color: var(--fg-soft); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
             Quién hizo qué y cuándo. Se escribe sola con cada cambio hecho desde el panel y <strong>no se puede editar ni borrar</strong>.
             Esto no son las consultas al chatbot — esas viven en <strong>Registros</strong>.
           </p>
@@ -6768,13 +6768,13 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           </div>
 
           {#if cargandoAuditoria && !auditoria}
-            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando bitácora...</p>
+            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando bitácora...</p>
           {:else if errorAuditoria}
-            <p style="color: #fff; font-size: 0.9rem; padding: 1rem; background: rgba(200,40,40,0.85); border-radius: 8px; line-height: 1.5;">
+            <p style="color: var(--danger-fg); font-size: 0.9rem; padding: 1rem; background: var(--danger-bg); border: 1px solid var(--danger-border); border-radius: 8px; line-height: 1.5;">
               ❌ {errorAuditoria}
             </p>
           {:else if !auditoria || auditoria.items.length === 0}
-            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">
+            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">
               Sin movimientos para estos filtros.
             </p>
           {:else}
@@ -6798,14 +6798,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                       {:else}
                         {a.operador_nombre || a.operador_email || '—'}
                         {#if a.operador_nombre}
-                          <div style="font-size: 0.72rem; color: rgba(255,255,255,0.45);">{a.operador_email}</div>
+                          <div style="font-size: 0.72rem; color: var(--fg-muted);">{a.operador_email}</div>
                         {/if}
                       {/if}
                     </td>
                     <td>
-                      {ICONO_ACCION[a.accion] ?? '•'} {a.resumen}
+                      <span class="audit-icono"><Icon name={ICONO_ACCION[a.accion] ?? 'info'} size={14} /></span> {a.resumen}
                       {#if det}
-                        <div style="font-size: 0.72rem; color: rgba(255,255,255,0.45);">{det}</div>
+                        <div style="font-size: 0.72rem; color: var(--fg-muted);">{det}</div>
                       {/if}
                     </td>
                     <td><span class="rol-badge">{a.entidad}</span></td>
@@ -6817,7 +6817,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             <!-- Paginación -->
             {@const hasta = Math.min(auditOffset + auditoria.items.length, auditoria.total)}
             <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; flex-wrap: wrap; gap: 0.75rem;">
-              <span style="color: rgba(255,255,255,0.6); font-size: 0.85rem;">
+              <span style="color: var(--fg-soft); font-size: 0.85rem;">
                 Mostrando {formatNumero(auditOffset + 1)}–{formatNumero(hasta)} de {formatNumero(auditoria.total)}
               </span>
               <div style="display: flex; gap: 0.4rem;">
@@ -6835,7 +6835,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             </div>
           {/if}
 
-          <p style="color: rgba(255,255,255,0.45); font-size: 0.75rem; margin-top: 1rem; line-height: 1.45;">
+          <p style="color: var(--fg-muted); font-size: 0.75rem; margin-top: 1rem; line-height: 1.45;">
             💡 Solo aparece lo que pasa por un endpoint con credencial. Crear o borrar <strong>asistentes</strong> y
             <strong>bases de conocimiento</strong> hoy es público, así que esas acciones no se registran — no porque nadie
             las haga, sino porque el servidor no sabe quién fue. Las contraseñas nunca se guardan aquí: en una edición solo
@@ -6848,20 +6848,20 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         {#if adminTab === 'alias'}
         <div class="modelos-wrap" style="margin-top: 2rem;">
           <div class="seccion-header">
-            <h3>🏷️ Alias de Modelos de Embedding</h3>
+            <h3><Icon name="alias" size={16} /> Alias de Modelos de Embedding</h3>
             <button onclick={cargarModelosEmbedding} class="vectorizacion-action-btn" disabled={cargandoModelosEmbedding}>
               ↻ Recargar
             </button>
           </div>
-          <p style="color: rgba(255,255,255,0.7); font-size: 0.9rem; margin: 0.25rem 0 1rem 0; line-height: 1.5;">
-            <strong style="color: rgba(255,200,80,0.9);">⚠️ Legacy:</strong>
-            Antes cada base de conocimiento se nombraba como <code style="background:rgba(0,0,0,0.25); padding:2px 6px; border-radius:4px;">bzz-&lt;alias&gt;-&lt;chunk&gt;</code>.
-            Ahora se nombra como <code style="background:rgba(0,0,0,0.25); padding:2px 6px; border-radius:4px;">&lt;proyecto-slug&gt;-&lt;N&gt;</code>
+          <p style="color: var(--fg-soft); font-size: 0.9rem; margin: 0.25rem 0 1rem 0; line-height: 1.5;">
+            <strong style="color: var(--warn);">⚠️ Legacy:</strong>
+            Antes cada base de conocimiento se nombraba como <code style="background:var(--muted); padding:2px 6px; border-radius:4px;">bzz-&lt;alias&gt;-&lt;chunk&gt;</code>.
+            Ahora se nombra como <code style="background:var(--muted); padding:2px 6px; border-radius:4px;">&lt;proyecto-slug&gt;-&lt;N&gt;</code>
             (N consecutivo desde 1, reusa huecos de BCs borradas). Estos alias quedan solo como referencia.
           </p>
 
           {#if cargandoModelosEmbedding}
-            <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem; padding: 1rem 0;">⏳ Cargando modelos de embedding...</p>
+            <p style="color: var(--fg-muted); font-size: 0.9rem; padding: 1rem 0;">⏳ Cargando modelos de embedding...</p>
           {/if}
 
           {#snippet filaAlias(modelo, origen)}
@@ -6884,7 +6884,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           <div class="alias-grid">
             {#if modelosEmbedding.length > 0}
               <div class="alias-grupo">
-                <h4 class="alias-grupo-titulo">🦙 Ollama (locales)</h4>
+                <h4 class="alias-grupo-titulo">Ollama (locales)</h4>
                 {#each modelosEmbedding as modelo (modelo)}
                   {@render filaAlias(modelo, 'ollama')}
                 {/each}
@@ -6892,7 +6892,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             {/if}
 
             <div class="alias-grupo">
-              <h4 class="alias-grupo-titulo">☁️ OpenAI</h4>
+              <h4 class="alias-grupo-titulo">OpenAI</h4>
               {#each MODELOS_EMBEDDING_OPENAI as modelo (modelo)}
                 {@render filaAlias(modelo, 'openai')}
               {/each}
@@ -6900,7 +6900,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
             {#if Object.keys(MODELO_ALIAS).filter(m => !modelosEmbedding.includes(m) && !MODELOS_EMBEDDING_OPENAI.includes(m)).length > 0}
               <div class="alias-grupo">
-                <h4 class="alias-grupo-titulo">📌 Otros (configurados manualmente)</h4>
+                <h4 class="alias-grupo-titulo">Otros (configurados manualmente)</h4>
                 {#each Object.keys(MODELO_ALIAS).filter(m => !modelosEmbedding.includes(m) && !MODELOS_EMBEDDING_OPENAI.includes(m)) as modelo (modelo)}
                   {@render filaAlias(modelo, 'manual')}
                 {/each}
@@ -6908,7 +6908,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             {/if}
           </div>
 
-          <p style="color: rgba(255,255,255,0.5); font-size: 0.8rem; margin-top: 1rem;">
+          <p style="color: var(--fg-muted); font-size: 0.8rem; margin-top: 1rem;">
             💾 Los cambios se guardan automáticamente en este navegador (localStorage).
           </p>
         </div>
@@ -6918,22 +6918,22 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         {#if adminTab === 'defaultcontext'}
         <div class="modelos-wrap">
           <div class="seccion-header">
-            <h3>⭐ DefaultContext</h3>
+            <h3><Icon name="estrella" size={16} /> DefaultContext</h3>
             <button onclick={cargarContextos} class="vectorizacion-action-btn" disabled={cargandoContextos}>
               ↻ Recargar
             </button>
           </div>
-          <p style="color: rgba(255,255,255,0.7); font-size: 0.9rem; margin: 0.25rem 0 1rem 0; line-height: 1.5;">
+          <p style="color: var(--fg-soft); font-size: 0.9rem; margin: 0.25rem 0 1rem 0; line-height: 1.5;">
             Selecciona la base de conocimiento que se usará por defecto.
           </p>
 
           <!-- Badge: contexto default actual -->
-          <div style="display:flex; align-items:center; gap:0.6rem; padding:0.75rem 1rem; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); border-radius:8px; margin-bottom:1rem;">
-            <span style="color:rgba(255,255,255,0.6); font-size:0.85rem;">Default actual:</span>
+          <div style="display:flex; align-items:center; gap:0.6rem; padding:0.75rem 1rem; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; margin-bottom:1rem;">
+            <span style="color:var(--fg-soft); font-size:0.85rem;">Default actual:</span>
             {#if defaultContextGuardado}
-              <span style="color:#fff; font-weight:600; font-size:0.95rem;">⭐ {defaultContextGuardado}</span>
+              <span style="color:var(--fg); font-weight:600; font-size:0.95rem;">⭐ {defaultContextGuardado}</span>
             {:else}
-              <span style="color:rgba(255,255,255,0.5); font-style:italic; font-size:0.9rem;">— Sin definir —</span>
+              <span style="color:var(--fg-muted); font-style:italic; font-size:0.9rem;">— Sin definir —</span>
             {/if}
           </div>
 
@@ -6956,7 +6956,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               class="vectorizacion-action-btn"
               onclick={guardarDefaultContext}
               disabled={!defaultContext || defaultContext === defaultContextGuardado}
-              style="background:#198754; border-color:#198754;"
+              style="background:var(--ok-solid); border-color:#198754;"
             >
               {#if defaultContext === defaultContextGuardado && defaultContextGuardado}
                 ✓ Ya es el default
@@ -6966,17 +6966,17 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             </button>
 
             {#if defaultContextGuardadoFlash}
-              <span style="color:#4ade80; font-weight:600; font-size:0.9rem;">✓ Guardado: <strong>{defaultContextGuardado}</strong></span>
+              <span style="color:var(--ok); font-weight:600; font-size:0.9rem;">✓ Guardado: <strong>{defaultContextGuardado}</strong></span>
             {/if}
           </div>
 
           {#if cargandoContextos}
-            <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem; padding: 0.75rem 0;">⏳ Cargando bases de conocimiento...</p>
+            <p style="color: var(--fg-muted); font-size: 0.9rem; padding: 0.75rem 0;">⏳ Cargando bases de conocimiento...</p>
           {:else if contextos.length === 0}
-            <p style="color: rgba(0,0,0,0.55); font-size: 0.9rem; padding: 0.75rem 0;">No hay bases de conocimiento disponibles. Pulsa ↻ Recargar.</p>
+            <p style="color: var(--fg-muted); font-size: 0.9rem; padding: 0.75rem 0;">No hay bases de conocimiento disponibles. Pulsa ↻ Recargar.</p>
           {/if}
 
-          <p style="color: rgba(255,255,255,0.5); font-size: 0.8rem; margin-top: 1rem;">
+          <p style="color: var(--fg-muted); font-size: 0.8rem; margin-top: 1rem;">
             💾 La selección se guarda en este navegador (localStorage).
           </p>
         </div>
@@ -6986,7 +6986,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         {#if adminTab === 'consumo'}
         <div class="modelos-wrap">
           <div class="seccion-header">
-            <h3>📊 Consumo</h3>
+            <h3><Icon name="consumo" size={16} /> Consumo</h3>
             <button onclick={cargarConsumo} class="vectorizacion-action-btn" disabled={cargandoConsumo}>
               ↻ Recargar
             </button>
@@ -7056,13 +7056,13 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           </div>
 
           {#if cargandoConsumo}
-            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando métricas...</p>
+            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando métricas...</p>
           {:else if errorConsumo}
-            <p style="color: #fff; font-size: 0.9rem; padding: 1rem; background: rgba(200,40,40,0.85); border-radius: 8px; line-height: 1.5;">
+            <p style="color: var(--danger-fg); font-size: 0.9rem; padding: 1rem; background: var(--danger-bg); border: 1px solid var(--danger-border); border-radius: 8px; line-height: 1.5;">
               ❌ {errorConsumo}
             </p>
           {:else if !consumoData}
-            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">Sin datos.</p>
+            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">Sin datos.</p>
           {:else}
             <!-- Stat cards: totales -->
             <div class="consumo-grid">
@@ -7087,8 +7087,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             <!-- Tokens OpenAI -->
             {#if consumoData.tokens_openai}
               <div class="consumo-seccion">
-                <h4>🪙 Tokens OpenAI</h4>
-                <div style="display: flex; gap: 1.25rem; flex-wrap: wrap; font-size: 0.9rem; color: rgba(255,255,255,0.85);">
+                <h4><Icon name="consumo" size={16} /> Tokens OpenAI</h4>
+                <div style="display: flex; gap: 1.25rem; flex-wrap: wrap; font-size: 0.9rem; color: var(--fg);">
                   <div><strong>Input:</strong> {formatNumero(consumoData.tokens_openai.input)}</div>
                   <div><strong>Output:</strong> {formatNumero(consumoData.tokens_openai.output)}</div>
                   <div><strong>Total:</strong> {formatNumero((consumoData.tokens_openai.input ?? 0) + (consumoData.tokens_openai.output ?? 0))}</div>
@@ -7132,7 +7132,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                       {/each}
                     </tbody>
                   </table>
-                  <p style="color: rgba(255,255,255,0.45); font-size: 0.75rem; margin: 0.5rem 0 0;">
+                  <p style="color: var(--fg-muted); font-size: 0.75rem; margin: 0.5rem 0 0;">
                     A qué cuenta se le cobró cada consulta. Solo incluye consultas registradas desde que se guarda qué key respondió.
                   </p>
                 {/if}
@@ -7143,13 +7143,13 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             {#if consumoData.llamadas_por_asistente?.length > 0}
               {@const maxLlamadas = Math.max(...consumoData.llamadas_por_asistente.map(a => a.count || 0))}
               <div class="consumo-seccion">
-                <h4>🎧 Llamadas por asistente</h4>
+                <h4><Icon name="asistente" size={16} /> Llamadas por asistente</h4>
                 <div style="display: flex; flex-direction: column; gap: 0.5rem;">
                   {#each consumoData.llamadas_por_asistente as a (a.agente_id)}
                     <div class="consumo-bar-row">
                       <div class="consumo-bar-label">
                         <strong>{a.nombre || a.slug}</strong>
-                        <code style="font-size: 0.75rem; color: rgba(255,255,255,0.55);">{a.slug}</code>
+                        <code style="font-size: 0.75rem; color: var(--fg-muted);">{a.slug}</code>
                       </div>
                       <div class="consumo-bar-track">
                         <div class="consumo-bar-fill" style="width: {maxLlamadas > 0 ? (a.count / maxLlamadas) * 100 : 0}%"></div>
@@ -7157,10 +7157,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                       <div class="consumo-bar-stats">
                         <span>{formatNumero(a.count)} llamadas</span>
                         {#if a.errores != null && a.errores > 0}
-                          <span style="color: #fca5a5;"> · {a.errores} err</span>
+                          <span style="color: var(--danger-fg);"> · {a.errores} err</span>
                         {/if}
                         {#if a.latencia_promedio_ms != null}
-                          <span style="color: rgba(255,255,255,0.55);"> · {formatMs(a.latencia_promedio_ms)} avg</span>
+                          <span style="color: var(--fg-muted);"> · {formatMs(a.latencia_promedio_ms)} avg</span>
                         {/if}
                       </div>
                     </div>
@@ -7172,8 +7172,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             <!-- Documentos en BCs -->
             {#if consumoData.documentos}
               <div class="consumo-seccion">
-                <h4>📄 Documentos en Bases de Conocimiento</h4>
-                <div style="display: flex; gap: 1.25rem; flex-wrap: wrap; font-size: 0.9rem; color: rgba(255,255,255,0.85);">
+                <h4>Documentos en Bases de Conocimiento</h4>
+                <div style="display: flex; gap: 1.25rem; flex-wrap: wrap; font-size: 0.9rem; color: var(--fg);">
                   <div><strong>BCs:</strong> {formatNumero(consumoData.documentos.total_bcs)}</div>
                   <div><strong>Documentos:</strong> {formatNumero(consumoData.documentos.total_documentos)}</div>
                   <div><strong>Tamaño total:</strong> {formatKb(consumoData.documentos.tamano_total_kb)}</div>
@@ -7181,7 +7181,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               </div>
             {/if}
 
-            <p style="color: rgba(255,255,255,0.4); font-size: 0.75rem; margin-top: 1.25rem;">
+            <p style="color: var(--fg-muted); font-size: 0.75rem; margin-top: 1.25rem;">
               Rango: {consumoData.rango?.desde ?? consumoDesde} → {consumoData.rango?.hasta ?? consumoHasta}
             </p>
           {/if}
@@ -7192,20 +7192,20 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         {#if adminTab === 'accesos'}
         <div class="modelos-wrap">
           <div class="seccion-header">
-            <h3>🔑 Accesos</h3>
+            <h3><Icon name="accesos" size={16} /> Accesos</h3>
             <button onclick={cargarProyectos} class="vectorizacion-action-btn" disabled={cargandoProyectos}>
               ↻ Recargar
             </button>
           </div>
 
-          <p style="color: rgba(255,255,255,0.7); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
+          <p style="color: var(--fg-soft); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
             Administra los passwords de activación de cada proyecto. Tú (admin) puedes activar cualquier proyecto sin password; los demás usuarios deberán tipear el password cuando hagan clic en el ⚡ del proyecto.
           </p>
 
           {#if cargandoProyectos}
-            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando proyectos...</p>
+            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando proyectos...</p>
           {:else if proyectos.length === 0}
-            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">No hay proyectos creados todavía.</p>
+            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">No hay proyectos creados todavía.</p>
           {:else}
             <div style="display: flex; flex-direction: column; gap: 0.75rem;">
               {#each proyectos as p (p.id)}
@@ -7213,17 +7213,17 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 {@const visible = !!accesosVisible[p.id]}
                 {@const cargando = !!accesosCargando[p.id]}
                 {@const mensaje = accesosMensaje[p.id] || ''}
-                <div style="background: rgba(0,0,0,0.25); border-radius: 8px; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem;">
+                <div style="background: var(--muted); border-radius: 8px; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem;">
                   <!-- Encabezado de la fila -->
                   <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
-                    <strong style="color: #fff; font-size: 1rem;">{p.nombre}</strong>
-                    <code style="background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; color: rgba(255,255,255,0.75);">{p.slug}</code>
+                    <strong style="color: var(--fg); font-size: 1rem;">{p.nombre}</strong>
+                    <code style="background: var(--muted); padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; color: var(--fg-soft);">{p.slug}</code>
                     {#if tienePass}
-                      <span style="display: inline-flex; align-items: center; gap: 0.3rem; color: #4ade80; font-size: 0.8rem; font-weight: 600;">
+                      <span style="display: inline-flex; align-items: center; gap: 0.3rem; color: var(--ok); font-size: 0.8rem; font-weight: 600;">
                         🔒 Con password
                       </span>
                     {:else}
-                      <span style="display: inline-flex; align-items: center; gap: 0.3rem; color: rgba(255,255,255,0.55); font-size: 0.8rem;">
+                      <span style="display: inline-flex; align-items: center; gap: 0.3rem; color: var(--fg-muted); font-size: 0.8rem;">
                         🔓 Sin password (abierto)
                       </span>
                     {/if}
@@ -7244,7 +7244,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                           onclick={() => quitarPasswordAcceso(p)}
                           class="vectorizacion-action-btn"
                           disabled={cargando}
-                          style="background: rgba(200,40,40,0.55); border-color: rgba(200,40,40,0.7);"
+                          style="background: var(--danger); border-color: rgba(200,40,40,0.7);"
                           title="Eliminar el password (el proyecto quedará abierto a cualquier usuario)"
                         >
                           🗑️ Quitar password
@@ -7261,7 +7261,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                         bind:value={accesosBorrador[p.id]}
                         placeholder={tienePass ? 'Nuevo password (reemplaza el actual)' : 'Password de activación'}
                         disabled={cargando}
-                        style="flex: 1; min-width: 220px; padding: 0.55rem 0.75rem; font-size: 0.95rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.3); color: #fff;"
+                        style="flex: 1; min-width: 220px; padding: 0.55rem 0.75rem; font-size: 0.95rem; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--fg);"
                       />
                       <button
                         type="submit"
@@ -7284,7 +7284,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
                   <!-- Mensaje de feedback -->
                   {#if mensaje}
-                    <p style="margin: 0; font-size: 0.85rem; color: {mensaje.startsWith('❌') ? '#fca5a5' : (mensaje.startsWith('⚠️') ? '#fde68a' : '#4ade80')};">
+                    <p style="margin: 0; font-size: 0.85rem; color: {mensaje.startsWith('❌') ? 'var(--danger-fg)' : (mensaje.startsWith('⚠️') ? 'var(--warn)' : 'var(--ok)')};">
                       {mensaje}
                     </p>
                   {/if}
@@ -7292,7 +7292,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               {/each}
             </div>
 
-            <p style="color: rgba(255,255,255,0.45); font-size: 0.75rem; margin-top: 1rem; line-height: 1.4;">
+            <p style="color: var(--fg-muted); font-size: 0.75rem; margin-top: 1rem; line-height: 1.4;">
               💡 El password se almacena en el servidor por proyecto. Quitar el password deja el proyecto abierto — cualquier usuario podrá activarlo con ⚡ sin prompt.
             </p>
           {/if}
@@ -7303,11 +7303,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         {#if adminTab === 'registros'}
         <div class="modelos-wrap">
           <div class="seccion-header">
-            <h3>📝 Registros</h3>
+            <h3><Icon name="registros" size={16} /> Registros</h3>
             <div style="display: flex; gap: 0.4rem;">
               {#if isAdmin}
                 <button onclick={() => hitoFormAbierto ? cerrarFormHito() : abrirFormCrearHito()} class="vectorizacion-action-btn">
-                  🏁 Marcar hito
+                  <Icon name="hito" size={15} /> Marcar hito
                 </button>
               {/if}
               <button onclick={cargarRegistros} class="vectorizacion-action-btn" disabled={cargandoRegistros}>
@@ -7316,7 +7316,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             </div>
           </div>
 
-          <p style="color: rgba(255,255,255,0.7); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
+          <p style="color: var(--fg-soft); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
             Bitácora de interacciones con los asistentes. El proyecto identifica quién opera el asistente (quien tiene su password); la columna Usuario, cuando existe, identifica a la persona final que escribió — ver subtab Usuarios de cada proyecto.
             Los hitos (🏁) marcan cuándo entró en vigor un cambio que buscaba ahorrar tiempo o tokens — solo se ven cuando la tabla está ordenada por Timestamp.
             La etiqueta <span class="registro-badge-respaldo">respaldo</span> junto a los tokens marca las consultas que respondió la key de respaldo de OpenAI (ver subtab API keys).
@@ -7324,7 +7324,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
           {#if hitoFormAbierto}
             <div class="crear-contexto-form" style="flex-direction: column; align-items: stretch; max-width: 600px; margin-bottom: 1.25rem;">
-              <h4 style="margin: 0 0 0.25rem 0; color: #fff;">{hitoEditandoId ? 'Editar Hito' : 'Nuevo Hito'}</h4>
+              <h4 style="margin: 0 0 0.25rem 0; color: var(--fg);">{hitoEditandoId ? 'Editar Hito' : 'Nuevo Hito'}</h4>
               <div class="form-field">
                 <label for="hito-nombre">Nombre</label>
                 <input
@@ -7346,7 +7346,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   disabled={guardandoHito}
                   class="contexto-input"
                 />
-                <small style="font-size: 0.75rem; color: rgba(0,0,0,0.6); line-height: 1.3; display: block; margin-top: 0.25rem;">
+                <small style="font-size: 0.75rem; color: var(--fg-muted); line-height: 1.3; display: block; margin-top: 0.25rem;">
                   Conviene poner la fecha real en que el cambio entró en vigor (ej. la del commit/deploy), no necesariamente ahora.
                 </small>
               </div>
@@ -7372,12 +7372,12 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     onclick={() => pedirConfirmacionBorrarHito({ id: hitoEditandoId, nombre: hitoFormNombre })}
                     disabled={guardandoHito}
                     class="crear-contexto-btn"
-                    style="background: #c8102e; margin-right: auto;"
+                    style="background: var(--danger); margin-right: auto;"
                   >
                     🗑️ Borrar
                   </button>
                 {/if}
-                <button onclick={cerrarFormHito} disabled={guardandoHito} class="crear-contexto-btn" style="background: rgba(0,0,0,0.45); color: rgba(255,255,255,0.95);">
+                <button onclick={cerrarFormHito} disabled={guardandoHito} class="crear-contexto-btn" style="background: var(--muted); color: var(--fg);">
                   Cancelar
                 </button>
                 <button onclick={guardarHito} disabled={guardandoHito} class="crear-contexto-btn">
@@ -7390,14 +7390,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           {#if hitoABorrar}
             <div class="confirmacion-borrar" style="max-width: 500px; margin-bottom: 1.25rem;">
               <h3><Icon name="warning" size={18} /> Confirmar Borrado de Hito</h3>
-              <p style="color: rgba(255,255,255,0.85);">
+              <p style="color: var(--fg);">
                 ¿Borrar el hito <strong>{hitoABorrar.nombre}</strong>? Los registros no cambian, solo deja de verse la línea.
               </p>
               <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
-                <button onclick={borrarHitoConfirmado} disabled={cargandoBorrarHito} class="crear-contexto-btn" style="background: #c8102e;">
+                <button onclick={borrarHitoConfirmado} disabled={cargandoBorrarHito} class="crear-contexto-btn" style="background: var(--danger);">
                   {cargandoBorrarHito ? '⟳ Borrando...' : '🗑️ Sí, borrar'}
                 </button>
-                <button onclick={() => { hitoABorrar = null; }} disabled={cargandoBorrarHito} class="crear-contexto-btn" style="background: rgba(0,0,0,0.45); color: rgba(255,255,255,0.95);">
+                <button onclick={() => { hitoABorrar = null; }} disabled={cargandoBorrarHito} class="crear-contexto-btn" style="background: var(--muted); color: var(--fg);">
                   Cancelar
                 </button>
               </div>
@@ -7486,7 +7486,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 onblur={aplicarFiltrosRegistros}
                 disabled={cargandoRegistros}
                 placeholder="ej: seguro"
-                style="padding: 0.55rem 0.75rem; min-width: 160px; font-size: 0.95rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.3); color: #fff;"
+                style="padding: 0.55rem 0.75rem; min-width: 160px; font-size: 0.95rem; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--fg);"
               />
             </div>
             <div class="lightbot-field" style="margin: 0;">
@@ -7500,7 +7500,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 onblur={aplicarFiltrosRegistros}
                 disabled={cargandoRegistros}
                 placeholder="(todos)"
-                style="padding: 0.55rem 0.75rem; width: 110px; font-size: 0.95rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.3); color: #fff;"
+                style="padding: 0.55rem 0.75rem; width: 110px; font-size: 0.95rem; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--fg);"
               />
             </div>
             <div class="lightbot-field" style="margin: 0;">
@@ -7514,7 +7514,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 onblur={aplicarFiltrosRegistros}
                 disabled={cargandoRegistros}
                 placeholder="(todos)"
-                style="padding: 0.55rem 0.75rem; width: 110px; font-size: 0.95rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.3); color: #fff;"
+                style="padding: 0.55rem 0.75rem; width: 110px; font-size: 0.95rem; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--fg);"
               />
             </div>
             <div class="lightbot-field" style="margin: 0;">
@@ -7528,7 +7528,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 onblur={aplicarFiltrosRegistros}
                 disabled={cargandoRegistros}
                 placeholder="(todos)"
-                style="padding: 0.55rem 0.75rem; width: 110px; font-size: 0.95rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.3); color: #fff;"
+                style="padding: 0.55rem 0.75rem; width: 110px; font-size: 0.95rem; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--fg);"
               />
             </div>
             <div class="lightbot-field" style="margin: 0;">
@@ -7542,10 +7542,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 onblur={aplicarFiltrosRegistros}
                 disabled={cargandoRegistros}
                 placeholder="(todos)"
-                style="padding: 0.55rem 0.75rem; width: 110px; font-size: 0.95rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.3); color: #fff;"
+                style="padding: 0.55rem 0.75rem; width: 110px; font-size: 0.95rem; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--fg);"
               />
             </div>
-            <label style="display: flex; align-items: center; gap: 0.4rem; color: rgba(255,255,255,0.85); font-size: 0.88rem; cursor: pointer; padding: 0.55rem 0;">
+            <label style="display: flex; align-items: center; gap: 0.4rem; color: var(--fg); font-size: 0.88rem; cursor: pointer; padding: 0.55rem 0;">
               <input
                 type="checkbox"
                 bind:checked={registrosSoloErrores}
@@ -7558,16 +7558,16 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           </div>
 
           {#if cargandoRegistros}
-            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando registros...</p>
+            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando registros...</p>
           {:else if errorRegistros}
-            <p style="color: #fff; font-size: 0.9rem; padding: 1rem; background: rgba(200,40,40,0.85); border-radius: 8px; line-height: 1.5;">
+            <p style="color: var(--danger-fg); font-size: 0.9rem; padding: 1rem; background: var(--danger-bg); border: 1px solid var(--danger-border); border-radius: 8px; line-height: 1.5;">
               ❌ {errorRegistros}
             </p>
-            <p style="color: rgba(255,255,255,0.55); font-size: 0.8rem; margin-top: 0.5rem;">
+            <p style="color: var(--fg-muted); font-size: 0.8rem; margin-top: 0.5rem;">
               Si el endpoint <code>GET /registros</code> todavía no está publicado en la API, este error es esperado — el UI se conecta automáticamente cuando esté listo.
             </p>
           {:else if !registrosData || (registrosData.items?.length ?? 0) === 0}
-            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">
+            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">
               Sin registros para este rango y filtros.
             </p>
           {:else}
@@ -7668,12 +7668,12 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                       {#if r.usuario_nombre}
                         <button class="registro-celda-filtrable" title="Filtrar por este usuario" onclick={(e) => filtrarRegistrosPorCelda('usuario', r.usuario_slug, e)}>{r.usuario_nombre}</button>
                       {:else}
-                        <span style="color: rgba(255,255,255,0.4);">anónimo</span>
+                        <span style="color: var(--fg-muted);">anónimo</span>
                       {/if}
                     </td>
                     <td>
                       {#if tieneError}
-                        <span style="color: #fca5a5;">⚠️ </span>
+                        <span style="color: var(--danger-fg);">⚠️ </span>
                       {/if}
                       {truncar(r.pregunta, 70)}
                     </td>
@@ -7692,14 +7692,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                       <td colspan="10">
                         <div style="display: flex; flex-direction: column; gap: 0.85rem; padding: 0.5rem 0.25rem;">
                           <div>
-                            <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(255,255,255,0.5); margin-bottom: 0.3rem;">Pregunta</div>
-                            <div style="background: rgba(0,0,0,0.3); padding: 0.75rem; border-radius: 6px; color: #fff; white-space: pre-wrap; line-height: 1.5; font-size: 0.9rem;">{r.pregunta ?? '—'}</div>
+                            <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--fg-muted); margin-bottom: 0.3rem;">Pregunta</div>
+                            <div style="background: var(--muted); padding: 0.75rem; border-radius: 6px; color: var(--fg); white-space: pre-wrap; line-height: 1.5; font-size: 0.9rem;">{r.pregunta ?? '—'}</div>
                           </div>
                           <div>
-                            <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(255,255,255,0.5); margin-bottom: 0.3rem;">Respuesta</div>
-                            <div style="background: rgba(0,0,0,0.3); padding: 0.75rem; border-radius: 6px; color: #fff; white-space: pre-wrap; line-height: 1.5; font-size: 0.9rem;">{r.respuesta ?? '—'}</div>
+                            <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--fg-muted); margin-bottom: 0.3rem;">Respuesta</div>
+                            <div style="background: var(--muted); padding: 0.75rem; border-radius: 6px; color: var(--fg); white-space: pre-wrap; line-height: 1.5; font-size: 0.9rem;">{r.respuesta ?? '—'}</div>
                           </div>
-                          <div style="display: flex; gap: 1.25rem; flex-wrap: wrap; font-size: 0.8rem; color: rgba(255,255,255,0.7);">
+                          <div style="display: flex; gap: 1.25rem; flex-wrap: wrap; font-size: 0.8rem; color: var(--fg-soft);">
                             <div><strong>Modelo:</strong> <code>{r.modelo ?? '—'}</code></div>
                             {#if r.key_openai}
                               <div><strong>Key OpenAI:</strong> {r.key_openai}</div>
@@ -7718,8 +7718,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                           </div>
                           {#if tieneError}
                             <div>
-                              <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #fca5a5; margin-bottom: 0.3rem;">Error</div>
-                              <div style="background: rgba(200,40,40,0.25); border: 1px solid rgba(200,40,40,0.5); padding: 0.75rem; border-radius: 6px; color: #fecaca; white-space: pre-wrap; line-height: 1.5; font-size: 0.85rem;">{r.error}</div>
+                              <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--danger-fg); margin-bottom: 0.3rem;">Error</div>
+                              <div style="background: var(--danger-bg); border: 1px solid var(--danger-border); padding: 0.75rem; border-radius: 6px; color: var(--danger-fg); white-space: pre-wrap; line-height: 1.5; font-size: 0.85rem;">{r.error}</div>
                             </div>
                           {/if}
                         </div>
@@ -7733,7 +7733,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
             <!-- Paginación -->
             <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; flex-wrap: wrap; gap: 0.75rem;">
-              <span style="color: rgba(255,255,255,0.6); font-size: 0.85rem;">
+              <span style="color: var(--fg-soft); font-size: 0.85rem;">
                 Mostrando {formatNumero(desde)}–{formatNumero(hasta)} de {formatNumero(total)}
               </span>
               <div style="display: flex; gap: 0.4rem;">
@@ -7754,7 +7754,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               </div>
             </div>
 
-            <p style="color: rgba(255,255,255,0.4); font-size: 0.75rem; margin-top: 1rem;">
+            <p style="color: var(--fg-muted); font-size: 0.75rem; margin-top: 1rem;">
               Rango: {registrosData.rango?.desde ?? 'sin límite'} → {registrosData.rango?.hasta ?? 'sin límite'}
             </p>
           {/if}
@@ -7765,13 +7765,13 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         {#if adminTab === 'historial'}
         <div class="modelos-wrap">
           <div class="seccion-header">
-            <h3>🗂️ Historial</h3>
+            <h3><Icon name="archivo" size={16} /> Historial</h3>
             <button onclick={cargarHistorial} class="vectorizacion-action-btn" disabled={cargandoHistorial}>
               ↻ Recargar
             </button>
           </div>
 
-          <p style="color: rgba(255,255,255,0.7); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
+          <p style="color: var(--fg-soft); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
             Auditoría de los binarios persistidos en disco. Incluye documentos activos y "fantasmas" — archivos que se conservan tras un borrado de documento o de Base de Conocimiento.
           </p>
 
@@ -7794,22 +7794,22 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               </select>
             </div>
             {#if historialData}
-              <div style="color: rgba(255,255,255,0.75); font-size: 0.88rem; padding: 0.55rem 0;">
+              <div style="color: var(--fg-soft); font-size: 0.88rem; padding: 0.55rem 0;">
                 Total: <strong>{formatNumero(historialTotales.total)}</strong> documentos
-                (<span style="color: #4ade80;">{formatNumero(historialTotales.activos)} activos</span>,
-                <span style="color: #fca5a5;">{formatNumero(historialTotales.borrados)} borrados</span>)
+                (<span style="color: var(--ok);">{formatNumero(historialTotales.activos)} activos</span>,
+                <span style="color: var(--danger-fg);">{formatNumero(historialTotales.borrados)} borrados</span>)
               </div>
             {/if}
           </div>
 
           {#if cargandoHistorial}
-            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando historial...</p>
+            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando historial...</p>
           {:else if errorHistorial}
-            <p style="color: #fff; font-size: 0.9rem; padding: 1rem; background: rgba(200,40,40,0.85); border-radius: 8px; line-height: 1.5;">
+            <p style="color: var(--danger-fg); font-size: 0.9rem; padding: 1rem; background: var(--danger-bg); border: 1px solid var(--danger-border); border-radius: 8px; line-height: 1.5;">
               ❌ {errorHistorial}
             </p>
           {:else if !historialData || historialGrupos.length === 0}
-            <p style="color: rgba(255,255,255,0.6); font-size: 0.9rem; padding: 1rem 0;">
+            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">
               {historialContextoFiltro
                 ? `Sin documentos en disco para el contexto "${historialContextoFiltro}".`
                 : 'Sin documentos persistidos en disco.'}
@@ -7826,7 +7826,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     {#if ctxBorrado}
                       <span class="historial-badge historial-badge--ctx-borrado">Contexto eliminado</span>
                     {/if}
-                    <span style="color: rgba(255,255,255,0.5); font-size: 0.78rem; margin-left: auto;">
+                    <span style="color: var(--fg-muted); font-size: 0.78rem; margin-left: auto;">
                       {grupo.items.length} {grupo.items.length === 1 ? 'doc' : 'docs'}
                     </span>
                   </div>
@@ -7852,7 +7852,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               {/each}
             </div>
 
-            <p style="color: rgba(255,255,255,0.4); font-size: 0.75rem; margin-top: 1rem; line-height: 1.45;">
+            <p style="color: var(--fg-muted); font-size: 0.75rem; margin-top: 1rem; line-height: 1.45;">
               💡 Los binarios se conservan en disco aunque se borre el doc de Chroma o se elimine la BC completa — son <em>fantasmas</em> auditables solo desde esta vista. Docs subidos antes de la feature de archivos no aparecen aquí (vivían solo como vectores).
             </p>
           {/if}
@@ -7870,8 +7870,48 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     padding: 0;
   }
 
+  /* ── Tokens del look sobrio (2026-10-08) ─────────────────────
+     Tomados del sistema visual de NexusDoc (nexus_poc_svelte/src/app.css):
+     fondo casi blanco, tarjetas blancas con borde fino, un solo acento azul
+     y Plus Jakarta Sans. Todo el panel usa estas variables; si algo se ve
+     fuera de tono, se corrige aquí y no con un color suelto. */
+  :global(:root) {
+    --bg: #fcfcfc;
+    --fg: #1f2937;
+    --fg-soft: #374151;
+    --fg-muted: #6b7280;
+    --card: #ffffff;
+    --surface-2: #f8fafc;
+    --muted: #f1f5f9;
+    --border: #e2e8f0;
+    --border-strong: #cbd5e1;
+    --primary: #4268fb;
+    --primary-hover: #3355e0;
+    --primary-fg: #f9fafb;
+    --primary-bg: #eef2ff;
+    --primary-border: #c7d2fe;
+    --ring: #a0b3fc;
+    --danger: #dc2626;
+    --danger-fg: #b91c1c;
+    --danger-bg: #fef2f2;
+    --danger-border: #fecaca;
+    --ok: #15803d;
+    --ok-solid: #16a34a;
+    --ok-bg: #f0fdf4;
+    --ok-border: #bbf7d0;
+    --warn: #a16207;
+    --warn-solid: #d97706;
+    --warn-bg: #fefce8;
+    --warn-border: #fde68a;
+    --radius: 10px;
+    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
+    --shadow-md: 0 8px 24px rgba(15, 23, 42, 0.08);
+  }
+
   :global(body) {
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
+    color: var(--fg);
+    background: var(--bg);
     height: 100dvh;
     overflow: hidden;
   }
@@ -7886,115 +7926,34 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     display: flex;
     flex-direction: column;
     height: 100dvh;
-    background: linear-gradient(160deg, #6b0016 0%, #a80028 30%, #c8102e 60%, #e0154a 100%);
-    transition: background 0.5s ease;
+    background: var(--bg);
+    color: var(--fg);
   }
 
-  .app.vectorizacion {
-    background: linear-gradient(160deg, #ffaa00 0%, #ffc040 40%, #ffe8a0 75%, #ffffff 100%);
-  }
 
-  /* Textos del contenido en modo Construcción → azul marino */
-  .app.vectorizacion .seccion-header h3,
-  .app.vectorizacion .contextos-table-wrap h3,
-  .app.vectorizacion .crear-contexto-wrap h3 {
-    color: #0a1a3a;
-  }
 
-  .app.vectorizacion .contexto-nombre {
-    color: #0a1a3a;
-  }
 
-  .app.vectorizacion .contexto-row {
-    background: rgba(10, 26, 58, 0.08);
-    border-left-color: rgba(10, 26, 58, 0.4);
-  }
 
-  .app.vectorizacion .contexto-row:hover {
-    background: rgba(10, 26, 58, 0.15);
-    border-left-color: rgba(10, 26, 58, 0.7);
-  }
 
-  .app.vectorizacion .form-field label {
-    color: rgba(10, 26, 58, 0.7);
-  }
 
-  .app.vectorizacion .field-hint {
-    color: rgba(10, 26, 58, 0.55);
-  }
 
-  .app.vectorizacion .contexto-input {
-    color: #0a1a3a;
-    background: rgba(10, 26, 58, 0.15);
-    border-color: #0b1f4a;
-    border-width: 2px;
-  }
 
-  .app.vectorizacion .contexto-input::placeholder {
-    color: rgba(10, 26, 58, 0.5);
-  }
 
-  .app.vectorizacion .contexto-input:focus {
-    border-color: #0a1a3a;
-    background: rgba(10, 26, 58, 0.2);
-    box-shadow: 0 0 0 3px rgba(10, 26, 58, 0.1);
-  }
 
-  .app.vectorizacion .contexto-select {
-    color: #0a1a3a;
-    background: rgba(10, 26, 58, 0.15);
-    border-color: #0b1f4a;
-    border-width: 2px;
-  }
 
-  .app.vectorizacion .contexto-select:focus {
-    outline: none;
-    border-color: #0a1a3a;
-    background: rgba(10, 26, 58, 0.2);
-    box-shadow: 0 0 0 3px rgba(10, 26, 58, 0.1);
-  }
 
-  .app.vectorizacion .contexto-select option {
-    background: #0b1f4a;
-    color: #fff;
-  }
 
-  .app.vectorizacion .contextos-table-wrap,
-  .app.vectorizacion .crear-contexto-wrap {
-    background: rgba(255, 255, 255, 0.35);
-    border-color: #0b1f4a;
-  }
 
-  .app.vectorizacion .crear-contexto-btn {
-    background: rgba(10, 50, 160, 0.75);
-    border-color: rgba(10, 50, 160, 0.9);
-    color: #fff;
-  }
 
-  .app.vectorizacion .crear-contexto-btn:hover:not(:disabled) {
-    background: rgba(10, 50, 160, 0.95);
-    border-color: #0a32a0;
-  }
 
-  .app.vectorizacion .vectorizacion-subtabs {
-    background: #0b1f4a;
-    border-color: rgba(255, 255, 255, 0.1);
-  }
 
-  .app.vectorizacion .vectorizacion-subtab-btn {
-    color: rgba(255, 255, 255, 0.9);
-  }
 
-  .app.vectorizacion .vectorizacion-subtab-btn:hover:not(.active) {
-    color: rgba(255, 255, 255, 0.85);
-    background: rgba(255, 255, 255, 0.1);
-  }
 
-  .app.vectorizacion .subtab-arrow-indicator {
+  .subtab-arrow-indicator {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    color: #ffd75e;
+    color: var(--warn);
     font-size: 1.6rem;
     font-weight: 900;
     line-height: 1;
@@ -8009,178 +7968,40 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     50% { transform: translateX(4px); opacity: 1; }
   }
 
-  .app.vectorizacion .vectorizacion-subtab-btn.active {
-    background: #2952cc;
-    color: #fff;
-    box-shadow: 0 1px 6px rgba(10, 26, 80, 0.4);
-  }
 
-  .app.vectorizacion .vectorizacion-subtab-btn:disabled:not(.active) {
-    opacity: 0.45;
-    cursor: default;
-  }
 
-  .app.vectorizacion .vectorizacion-subtab-btn:disabled.active {
-    opacity: 1;
-    cursor: default;
-  }
 
-  .app.vectorizacion .header {
-    background: #c8960a;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-    border-bottom-color: rgba(0, 0, 0, 0.15);
-  }
 
-  .app.vectorizacion .tab-btn {
-    color: #0b1f4a;
-  }
 
-  .app.vectorizacion .tab-btn:hover:not(:disabled) {
-    color: #0b1f4a;
-    opacity: 0.75;
-  }
 
-  .app.vectorizacion .tab-btn.active {
-    color: #0b1f4a;
-    border-bottom-color: #0b1f4a;
-  }
 
-  .app.vectorizacion .ambiente-toggle {
-    background: #0b1f4a;
-    border-color: rgba(255, 255, 255, 0.1);
-    margin-left: auto;
-    padding: 4px;
-    gap: 4px;
-  }
 
-  .app.vectorizacion .ambiente-btn {
-    font-size: 0.8rem;
-    padding: 5px 13px;
-    color: rgba(255, 255, 255, 0.9);
-  }
 
-  .app.vectorizacion .ambiente-btn.active {
-    background: #2952cc;
-    color: #fff;
-    box-shadow: 0 1px 6px rgba(10, 26, 80, 0.4);
-  }
 
   /* Construcción tab - navy blue text throughout */
-  .app.vectorizacion {
-    color: #0a1a3a;
-  }
 
-  .app.vectorizacion h2,
-  .app.vectorizacion h3,
-  .app.vectorizacion h4,
-  .app.vectorizacion p,
-  .app.vectorizacion label,
-  .app.vectorizacion span {
-    color: #0a1a3a;
-  }
 
-  .app.vectorizacion .context-select-wrap label {
-    color: rgba(10, 26, 58, 0.7);
-  }
 
-  .app.vectorizacion .context-select-wrap select {
-    color: #0a1a3a;
-  }
 
-  .app.vectorizacion .ctx-loading {
-    color: rgba(10, 26, 58, 0.55);
-  }
 
   /* Documentos subtab - same color scheme as Contextos */
-  .app.vectorizacion .documentos-wrap,
-  .app.vectorizacion .integrar-documento-wrap {
-    background: rgba(255, 255, 255, 0.35);
-    border-color: #0b1f4a;
-  }
 
-  .app.vectorizacion .documentos-wrap h3,
-  .app.vectorizacion .integrar-documento-wrap h3,
-  .app.vectorizacion .documentos-list-wrap h4 {
-    color: #0a1a3a;
-  }
 
-  .app.vectorizacion .documentos-contexto-select {
-    background: rgba(10, 26, 58, 0.08);
-    border-color: rgba(10, 26, 58, 0.2);
-  }
 
-  .app.vectorizacion .documentos-contexto-select label {
-    color: rgba(10, 26, 58, 0.7);
-  }
 
-  .app.vectorizacion .documentos-table {
-    background: rgba(10, 26, 58, 0.08);
-    border-color: rgba(10, 26, 58, 0.15);
-  }
 
-  .app.vectorizacion .documento-row {
-    background: rgba(10, 26, 58, 0.08);
-    border-left-color: rgba(10, 26, 58, 0.4);
-  }
 
-  .app.vectorizacion .documento-row:hover {
-    background: rgba(10, 26, 58, 0.15);
-  }
 
-  .app.vectorizacion .documento-nombre {
-    color: #0a1a3a;
-  }
 
-  .app.vectorizacion .documento-borrar-btn:hover:not(:disabled) {
-    filter: brightness(1) drop-shadow(0 0 6px rgba(255, 200, 50, 0.9)) drop-shadow(0 0 12px rgba(255, 170, 0, 0.6));
-    background: rgba(255, 80, 80, 0.18);
-  }
 
-  .app.vectorizacion .documento-input {
-    color: #0a1a3a;
-    background: rgba(10, 26, 58, 0.08);
-    border-color: #0b1f4a;
-  }
 
-  .app.vectorizacion .documento-input::file-selector-button {
-    background: rgba(10, 50, 160, 0.75);
-    border-color: rgba(10, 50, 160, 0.9);
-  }
 
-  .app.vectorizacion .documento-input::file-selector-button:hover {
-    background: rgba(10, 50, 160, 0.95);
-  }
 
-  .app.vectorizacion .integrar-documento-form small {
-    color: rgba(10, 26, 58, 0.65);
-  }
 
-  .app.vectorizacion .integrar-documento-btn {
-    background: rgba(10, 50, 160, 0.75);
-    border-color: rgba(10, 50, 160, 0.9);
-    color: #fff;
-  }
 
-  .app.vectorizacion .integrar-documento-btn:hover:not(:disabled) {
-    background: rgba(10, 50, 160, 0.95);
-    border-color: #0a32a0;
-  }
 
-  .app.vectorizacion .vectorizacion-action-btn {
-    background: rgba(10, 26, 58, 0.12);
-    border: 1px solid #0b1f4a;
-    color: #0a1a3a;
-  }
 
-  .app.vectorizacion .vectorizacion-action-btn:hover:not(:disabled) {
-    background: rgba(10, 26, 58, 0.22);
-    border-color: #0b1f4a;
-  }
 
-  .app.admin {
-    background: linear-gradient(160deg, #001a4d 0%, #003d99 30%, #0055cc 60%, #0077ff 100%);
-  }
 
   /* ── Header ─────────────────────────────────────── */
   .header {
@@ -8188,26 +8009,24 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     align-items: center;
     justify-content: space-between;
     gap: 1.5rem;
-    padding: 1rem 1.5rem;
-    background: rgba(0, 0, 0, 0.25);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    height: 64px;
+    padding: 0 1.5rem;
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
   }
 
   .header-left {
     display: flex;
     align-items: center;
-    gap: 2rem;
+    gap: 1.25rem;
   }
 
   .avatar {
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.2);
-    border: 2px solid rgba(255, 255, 255, 0.4);
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: var(--primary);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -8215,8 +8034,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .avatar svg {
-    width: 24px;
-    height: 24px;
+    width: 20px;
+    height: 20px;
   }
 
   .header-info {
@@ -8226,17 +8045,17 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .header-title {
-    font-size: 1rem;
-    font-weight: 700;
-    color: #fff;
-    letter-spacing: 0.01em;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--fg);
+    letter-spacing: -0.005em;
   }
 
   .header-version {
     font-size: 0.7rem;
     font-weight: 500;
-    color: rgba(255, 255, 255, 0.55);
-    letter-spacing: 0.04em;
+    color: var(--fg-muted);
+    letter-spacing: 0.02em;
     text-transform: lowercase;
   }
 
@@ -8245,7 +8064,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     align-items: center;
     gap: 5px;
     font-size: 0.75rem;
-    color: rgba(255, 255, 255, 0.75);
+    color: var(--fg-soft);
     cursor: pointer;
     border-radius: 6px;
     padding: 2px 6px;
@@ -8253,31 +8072,31 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .header-status:hover {
-    background: rgba(255, 255, 255, 0.12);
+    background: var(--card);
   }
 
   .status-dot {
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    background: #4ade80;
+    background: var(--ok-solid);
     box-shadow: 0 0 6px #4ade80;
     animation: pulse 2s ease-in-out infinite;
   }
 
   .status-dot.online {
-    background: #4ade80;
+    background: var(--ok-solid);
     box-shadow: 0 0 6px #4ade80;
   }
 
   .status-dot.offline {
-    background: #ef4444;
+    background: var(--danger);
     box-shadow: 0 0 6px #ef4444;
     animation: none;
   }
 
   .status-dot.checking {
-    background: #facc15;
+    background: var(--warn-solid);
     box-shadow: 0 0 6px #facc15;
     animation: pulse 1s ease-in-out infinite;
   }
@@ -8290,7 +8109,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   .header-logo {
     font-size: 1.25rem;
     font-weight: 800;
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--fg);
     letter-spacing: 0.06em;
   }
 
@@ -8303,10 +8122,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   .ambiente-indicador {
     display: inline-flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.3rem 0.7rem;
-    background: rgba(0, 0, 0, 0.25);
-    border: 1px solid rgba(255, 255, 255, 0.18);
+    gap: 0.45rem;
+    padding: 0.3rem 0.6rem;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
     border-radius: 8px;
     cursor: default;
     user-select: none;
@@ -8318,8 +8137,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     transition: background 0.15s, border-color 0.15s, transform 0.1s;
   }
   .ambiente-indicador--btn:hover {
-    background: rgba(0, 0, 0, 0.4);
-    border-color: rgba(255, 255, 255, 0.32);
+    background: var(--muted);
+    border-color: var(--border);
   }
   .ambiente-indicador--btn:active {
     transform: scale(0.97);
@@ -8327,7 +8146,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   .ambiente-indicador-label {
     font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--fg-muted);
     text-transform: uppercase;
     letter-spacing: 0.05em;
     font-weight: 600;
@@ -8337,7 +8156,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     font-size: 0.85rem;
     font-weight: 700;
     letter-spacing: 0.01em;
-    color: rgba(255, 255, 255, 0.92);
+    color: var(--fg);
     font-family: 'Consolas', 'Courier New', monospace;
   }
 
@@ -8347,7 +8166,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     border-radius: 14px;
     border: none;
     background: transparent;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--fg-muted);
     font-family: inherit;
     font-size: 0.7rem;
     font-weight: 600;
@@ -8360,14 +8179,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .ambiente-btn:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.12);
-    color: rgba(255, 255, 255, 0.75);
+    background: var(--card);
+    color: var(--fg-soft);
   }
 
   .ambiente-btn.active {
-    background: rgba(255, 255, 255, 0.22);
-    color: #fff;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+    background: var(--muted);
+    color: var(--fg);
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.05);
   }
 
   /* ── Chat body ───────────────────────────────────── */
@@ -8383,7 +8202,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .chat-body::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.25);
+    background: var(--muted);
     border-radius: 10px;
   }
 
@@ -8416,13 +8235,13 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     width: 34px;
     height: 34px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.15);
-    border: 1.5px solid rgba(255, 255, 255, 0.3);
+    background: var(--muted);
+    border: 1.5px solid var(--border);
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    color: rgba(255, 255, 255, 0.85);
+    color: var(--fg);
   }
 
   .bot-avatar svg {
@@ -8452,50 +8271,50 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   /* Bot bubble */
   .message-row.bot .bubble {
-    background: rgba(255, 255, 255, 0.15);
+    background: var(--muted);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
-    color: #fff;
+    color: var(--fg);
     border-bottom-left-radius: 4px;
-    border: 1px solid rgba(255, 255, 255, 0.18);
+    border: 1px solid var(--border);
   }
 
   /* User bubble */
   .message-row.user .bubble {
-    background: #fff;
-    color: #a80028;
+    background: var(--card);
+    color: var(--danger-fg);
     font-weight: 500;
     border-bottom-right-radius: 4px;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 2px 12px rgba(15, 23, 42, 0.05);
   }
 
   .message-row.error .bubble {
-    background: rgba(0, 0, 0, 0.3);
-    border-color: rgba(255, 100, 100, 0.4);
-    color: rgba(255, 200, 200, 0.9);
+    background: var(--muted);
+    border-color: var(--danger-border);
+    color: var(--danger-fg);
   }
 
   .bubble-link {
-    color: #93c5fd;
+    color: var(--primary);
     text-decoration: underline;
     word-break: break-all;
   }
   .bubble-link:hover {
-    color: #bfdbfe;
+    color: var(--primary);
   }
   .message-row.user .bubble-link {
-    color: #1d4ed8;
+    color: var(--primary);
   }
   .message-row.user .bubble-link:hover {
-    color: #1e3a8a;
+    color: var(--primary);
   }
   .message-row.error .bubble-link {
-    color: rgba(255, 200, 200, 0.95);
+    color: var(--danger-fg);
   }
 
   .time {
     font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--fg-muted);
     padding: 0 4px;
   }
 
@@ -8513,7 +8332,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.7);
+    background: var(--muted);
     animation: bounce 1.2s ease-in-out infinite;
   }
 
@@ -8532,8 +8351,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     height: 38px;
     border-radius: 50%;
     border: none;
-    background: rgba(255, 255, 255, 0.2);
-    color: #fff;
+    background: var(--muted);
+    color: var(--fg);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -8548,23 +8367,23 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .input-container button:not(:disabled):hover {
-    background: rgba(255, 255, 255, 0.35);
+    background: var(--muted);
   }
 
   .reset-btn {
-    background: rgba(255, 255, 255, 0.08) !important;
+    background: var(--card) !important;
   }
 
   .reset-btn:not(:disabled):hover {
-    background: rgba(255, 100, 100, 0.3) !important;
+    background: var(--danger-bg) !important;
   }
 
   .input-area {
     padding: 1rem 1rem 1.25rem;
-    background: rgba(0, 0, 0, 0.2);
+    background: var(--muted);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    border-top: 1px solid var(--border);
     flex-shrink: 0;
   }
 
@@ -8574,16 +8393,16 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     gap: 0.625rem;
     max-width: 780px;
     margin: 0 auto;
-    background: rgba(255, 255, 255, 0.12);
-    border: 1.5px solid rgba(255, 255, 255, 0.22);
+    background: var(--card);
+    border: 1.5px solid var(--border);
     border-radius: 24px;
     padding: 0.5rem 0.5rem 0.5rem 1.25rem;
     transition: border-color 0.2s, background 0.2s;
   }
 
   .input-container:focus-within {
-    border-color: rgba(255, 255, 255, 0.55);
-    background: rgba(255, 255, 255, 0.18);
+    border-color: var(--border-strong);
+    background: var(--muted);
   }
 
   textarea {
@@ -8594,7 +8413,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     outline: none;
     font-family: inherit;
     font-size: 0.9375rem;
-    color: #fff;
+    color: var(--fg);
     resize: none;
     line-height: 1.5;
     max-height: 120px;
@@ -8603,11 +8422,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   textarea::placeholder {
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--fg-muted);
   }
 
   textarea::-webkit-scrollbar { width: 3px; }
-  textarea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.25); border-radius: 10px; }
+  textarea::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 10px; }
 
   textarea:disabled {
     opacity: 0.6;
@@ -8619,15 +8438,15 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     height: 42px;
     border-radius: 50%;
     border: none;
-    background: #fff;
-    color: #c8102e;
+    background: var(--card);
+    color: var(--danger-fg);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
     transition: transform 0.15s, opacity 0.15s, background 0.15s;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.07);
   }
 
   .input-container button svg {
@@ -8637,7 +8456,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   .input-container button:hover:not(:disabled) {
     transform: scale(1.08);
-    background: #f0f0f0;
+    background: var(--card);
   }
 
   .input-container button:active:not(:disabled) {
@@ -8652,7 +8471,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   .disclaimer {
     text-align: center;
     font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.35);
+    color: var(--fg-muted);
     margin-top: 0.6rem;
     letter-spacing: 0.04em;
   }
@@ -8667,17 +8486,17 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   .context-select-wrap label {
     font-size: 0.65rem;
     font-weight: 700;
-    color: rgba(255, 255, 255, 0.45);
+    color: var(--fg-muted);
     letter-spacing: 0.05em;
     white-space: nowrap;
     text-transform: uppercase;
   }
 
   .context-select-wrap select {
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: var(--muted);
+    border: 1px solid var(--border);
     border-radius: 14px;
-    color: #fff;
+    color: var(--fg);
     font-family: inherit;
     font-size: 0.75rem;
     font-weight: 500;
@@ -8694,23 +8513,23 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .context-select-wrap select:hover {
-    background-color: rgba(255, 255, 255, 0.12);
-    border-color: rgba(255, 255, 255, 0.25);
+    background-color: var(--card);
+    border-color: var(--border);
   }
 
   .context-select-wrap select:focus {
-    border-color: rgba(255, 255, 255, 0.4);
-    background-color: rgba(255, 255, 255, 0.18);
+    border-color: var(--border-strong);
+    background-color: var(--muted);
   }
 
   .context-select-wrap select option {
-    background: #a80028;
+    background: var(--danger);
     color: #fff;
   }
 
   .ctx-loading {
     font-size: 0.75rem;
-    color: rgba(255, 255, 255, 0.35);
+    color: var(--fg-muted);
     font-style: italic;
   }
 
@@ -8724,12 +8543,12 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     border-radius: 6px;
     opacity: 0.5;
     transition: opacity 0.2s, background 0.2s;
-    color: #fff;
+    color: var(--fg);
   }
 
   .clear-chat-btn:not(:disabled):hover {
     opacity: 1;
-    background: rgba(255, 80, 80, 0.25);
+    background: var(--danger-bg);
   }
 
   .clear-chat-btn:disabled {
@@ -8740,69 +8559,45 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   /* ── Tabs toggle ────────────────────────────────── */
   .tabs-toggle {
     display: flex;
-    gap: 0;
-    background: transparent;
-    padding: 0;
-    border-radius: 0;
-    border: none;
+    gap: 0.25rem;
     margin-left: auto;
-    border-bottom: 2px solid rgba(255, 255, 255, 0.2);
     align-items: center;
   }
 
   .admin-gear-btn {
-    font-size: 1.4rem;
-    padding: 0.5rem 0.75rem;
-    margin-left: auto;
-    opacity: 0.7;
+    padding: 0.55rem 0.65rem;
     line-height: 1;
-    border-bottom: none !important;
-    bottom: 0;
-    transition: opacity 0.2s ease, transform 0.2s ease;
   }
 
-  .admin-gear-btn:hover:not(:disabled) {
-    opacity: 1;
-    transform: rotate(30deg);
-  }
-
-  .admin-gear-btn,
-  .admin-gear-btn.active,
-  .admin-gear-btn:hover:not(:disabled) {
-    border-bottom: none !important;
-    bottom: 0;
+  .admin-gear-btn.active {
+    background: var(--primary);
+    color: var(--primary-fg);
   }
 
   .tab-btn {
-    width: auto;
-    height: auto;
-    border-radius: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
     border: none;
+    border-radius: 8px;
     background: transparent;
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--fg);
     font-family: inherit;
-    font-size: 0.95rem;
-    font-weight: 600;
-    padding: 0.75rem 1.5rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    padding: 0.6rem 0.8rem;
     cursor: pointer;
-    transition: color 0.25s ease;
-    box-shadow: none;
-    letter-spacing: 0.01em;
     white-space: nowrap;
-    border-bottom: 3px solid transparent;
-    position: relative;
-    bottom: -2px;
+    transition: background 0.15s ease, color 0.15s ease;
   }
 
   .tab-btn:hover:not(:disabled) {
-    color: rgba(255, 255, 255, 0.85);
+    background: var(--muted);
   }
 
   .tab-btn.active:not(.admin-gear-btn) {
-    color: #fff;
-    border-bottom-color: #fff;
-    background: transparent;
-    box-shadow: none;
+    background: var(--primary);
+    color: var(--primary-fg);
   }
 
   /* ── Chat sub-nav ───────────────────────────────── */
@@ -8813,8 +8608,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     gap: 1.25rem;
     flex-wrap: wrap;
     padding: 0.5rem 1.5rem;
-    background: rgba(0, 0, 0, 0.18);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--muted);
+    border-bottom: 1px solid var(--border);
     backdrop-filter: blur(8px);
   }
 
@@ -8839,9 +8634,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     gap: 1rem;
     align-items: flex-start;
     padding: 1rem 1.25rem;
-    background: rgba(255, 170, 0, 0.15);
-    border: 1px solid rgba(255, 170, 0, 0.4);
-    border-left: 4px solid rgba(255, 170, 0, 0.8);
+    background: var(--warn-bg);
+    border: 1px solid var(--warn-border);
+    border-left: 4px solid var(--warn-border);
     border-radius: 10px;
     margin-bottom: 1.5rem;
     animation: slideUp 0.3s ease;
@@ -8858,21 +8653,21 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .banner-integracion-text strong {
-    color: #ffcc00;
+    color: var(--warn);
     font-size: 0.95rem;
   }
 
   .banner-integracion-text p {
-    color: rgba(255, 255, 255, 0.8);
+    color: var(--fg-soft);
     font-size: 0.85rem;
     line-height: 1.5;
     margin-top: 0.25rem;
   }
 
   .banner-dismiss-btn {
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    color: rgba(255, 255, 255, 0.7);
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--fg-soft);
     padding: 0.3rem 0.75rem;
     border-radius: 6px;
     font-size: 0.8rem;
@@ -8884,8 +8679,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .banner-dismiss-btn:hover {
-    background: rgba(255, 255, 255, 0.2);
-    color: #fff;
+    background: var(--muted);
+    color: var(--fg);
   }
 
   /* ── Admin Sub-tabs ──────────────────────────────── */
@@ -8893,10 +8688,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     display: flex;
     gap: 0.5rem;
     margin-bottom: 2rem;
-    background: rgba(0, 0, 0, 0.2);
+    background: var(--muted);
     padding: 0.4rem;
     border-radius: 14px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    border: 1px solid var(--border);
     box-sizing: border-box;
   }
 
@@ -8908,7 +8703,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     border-radius: 10px;
     border: none;
     background: transparent;
-    color: rgba(255, 255, 255, 0.55);
+    color: var(--fg-muted);
     font-family: inherit;
     font-size: 0.85rem;
     font-weight: 600;
@@ -8920,14 +8715,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .vectorizacion-subtab-btn:hover:not(.active) {
-    color: rgba(255, 255, 255, 0.8);
-    background: rgba(255, 255, 255, 0.08);
+    color: var(--fg-soft);
+    background: var(--card);
   }
 
   .vectorizacion-subtab-btn.active {
-    background: rgba(255, 255, 255, 0.18);
-    color: #fff;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+    background: var(--muted);
+    color: var(--fg);
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.1);
   }
 
   .seccion-placeholder {
@@ -8935,16 +8730,16 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     align-items: center;
     justify-content: center;
     padding: 4rem 2rem;
-    color: rgba(255, 255, 255, 0.4);
+    color: var(--fg-muted);
     font-size: 1.1rem;
-    border: 2px dashed rgba(255, 255, 255, 0.15);
+    border: 2px dashed var(--border);
     border-radius: 12px;
   }
 
   .vectorizacion-action-btn {
-    background: rgba(255, 255, 255, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    color: #fff;
+    background: var(--muted);
+    border: 1px solid var(--border);
+    color: var(--fg);
     padding: 0.5rem 1rem;
     border-radius: 8px;
     font-size: 0.8rem;
@@ -8958,8 +8753,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .vectorizacion-action-btn:hover {
-    background: rgba(255, 255, 255, 0.3);
-    border-color: rgba(255, 255, 255, 0.5);
+    background: var(--muted);
+    border-color: var(--border-strong);
   }
 
   .contextos-recargar-btn {
@@ -8982,7 +8777,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     grid-template-columns: 80px 1fr 60px 40px;
     gap: 1rem;
     padding: 0.75rem;
-    background: rgba(0, 0, 0, 0.2);
+    background: var(--muted);
     border-radius: 8px;
     font-size: 0.8rem;
     align-items: center;
@@ -8990,42 +8785,42 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .log-row.has-error {
-    border-left-color: #ff6b6b;
+    border-left-color: var(--danger-border);
   }
 
   .log-fecha {
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--fg-soft);
     font-weight: 600;
     font-family: 'Courier New', monospace;
   }
 
   .log-pregunta {
-    color: rgba(255, 255, 255, 0.85);
+    color: var(--fg);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
   .log-ms {
-    color: #4ade80;
+    color: var(--ok);
     text-align: right;
     font-weight: 600;
   }
 
   .log-error {
-    color: #4ade80;
+    color: var(--ok);
     text-align: center;
     font-weight: 600;
   }
 
   .log-error.has-error {
-    color: #ff6b6b;
+    color: var(--danger-fg);
   }
 
   /* ── Contextos Table ────────────────────────────── */
   .contextos-table-wrap {
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: var(--card);
+    border: 1px solid var(--border);
     border-radius: 12px;
     padding: 1.5rem;
     backdrop-filter: blur(8px);
@@ -9033,7 +8828,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .contextos-table-wrap h3 {
-    color: #fff;
+    color: var(--fg);
     font-size: 1rem;
     margin-bottom: 1rem;
     font-weight: 600;
@@ -9051,20 +8846,20 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     display: flex;
     align-items: center;
     padding: 0.75rem;
-    background: rgba(0, 0, 0, 0.2);
+    background: var(--muted);
     border-radius: 8px;
     font-size: 0.85rem;
-    border-left: 3px solid rgba(0, 200, 255, 0.5);
+    border-left: 3px solid var(--primary-border);
     transition: background 0.2s ease;
   }
 
   .contexto-row:hover {
-    background: rgba(0, 0, 0, 0.3);
-    border-left-color: rgba(0, 200, 255, 0.8);
+    background: var(--muted);
+    border-left-color: var(--primary-border);
   }
 
   .contexto-nombre {
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--fg);
     font-weight: 600;
     flex: 1;
   }
@@ -9098,9 +8893,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .bc-detalle-volver-btn {
-    background: rgba(0, 0, 0, 0.25);
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    color: rgba(255, 255, 255, 0.85);
+    background: var(--muted);
+    border: 1px solid var(--border);
+    color: var(--fg);
     cursor: pointer;
     font-size: 0.85rem;
     padding: 0.4rem 0.75rem;
@@ -9111,20 +8906,20 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .bc-detalle-volver-btn:hover {
-    background: rgba(0, 0, 0, 0.4);
-    border-color: rgba(255, 255, 255, 0.35);
+    background: var(--muted);
+    border-color: var(--border);
   }
 
   .contexto-editar-btn:hover:not(:disabled) {
     opacity: 1;
     filter: brightness(1) drop-shadow(0 0 6px rgba(255, 200, 50, 0.9)) drop-shadow(0 0 12px rgba(255, 170, 0, 0.6));
-    background: rgba(80, 130, 255, 0.18);
+    background: var(--primary-bg);
   }
 
   .contexto-borrar-btn:hover:not(:disabled) {
     opacity: 1;
     filter: brightness(1) drop-shadow(0 0 6px rgba(255, 200, 50, 0.9)) drop-shadow(0 0 12px rgba(255, 170, 0, 0.6));
-    background: rgba(255, 80, 80, 0.18);
+    background: var(--danger-bg);
   }
 
   .contexto-borrar-btn:disabled {
@@ -9148,13 +8943,13 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     margin: 0;
     flex-shrink: 0;
     white-space: nowrap;
-    color: white;
+    color: var(--fg);
   }
 
   /* ── Crear Contexto Form ────────────────────────── */
   .crear-contexto-wrap {
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: var(--card);
+    border: 1px solid var(--border);
     border-radius: 12px;
     padding: 1.25rem 1.5rem;
     backdrop-filter: blur(8px);
@@ -9174,21 +8969,21 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .crear-contexto-toggle h3 {
-    color: #fff;
+    color: var(--fg);
     font-size: 1rem;
     font-weight: 600;
     margin: 0;
   }
 
   .crear-contexto-toggle-icon {
-    color: #fff;
+    color: var(--fg);
     font-size: 0.85rem;
     line-height: 1;
     transition: transform 0.2s ease;
   }
 
   .crear-contexto-wrap h3 {
-    color: #fff;
+    color: var(--fg);
     font-size: 1rem;
     margin-bottom: 1rem;
     font-weight: 600;
@@ -9223,14 +9018,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     top: 100%;
     margin-top: 2px;
     font-size: 0.75rem;
-    color: rgba(255, 255, 255, 0.65);
+    color: var(--fg-soft);
     line-height: 1.2;
   }
 
   .form-field label {
     font-size: 0.8rem;
     font-weight: 600;
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--fg-soft);
     text-transform: uppercase;
     letter-spacing: 0.01em;
   }
@@ -9238,10 +9033,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   .contexto-input {
     flex: 1;
     padding: 0.75rem;
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid var(--border);
     border-radius: 8px;
-    background: rgba(0, 0, 0, 0.2);
-    color: #fff;
+    background: var(--muted);
+    color: var(--fg);
     font-family: inherit;
     font-size: 0.9rem;
     transition: border-color 0.2s ease, background 0.2s ease;
@@ -9266,13 +9061,13 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .contexto-input::placeholder {
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--fg-muted);
   }
 
   .contexto-input:focus {
     outline: none;
-    border-color: rgba(0, 200, 255, 0.8);
-    background: rgba(0, 0, 0, 0.3);
+    border-color: var(--primary-border);
+    background: var(--muted);
   }
 
   .contexto-input:disabled {
@@ -9282,10 +9077,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   .crear-contexto-btn {
     padding: 0.75rem 1.5rem;
-    background: rgba(0, 200, 255, 0.3);
-    border: 1px solid rgba(0, 200, 255, 0.5);
+    background: var(--primary-bg);
+    border: 1px solid var(--primary-border);
     border-radius: 8px;
-    color: #fff;
+    color: var(--fg);
     font-family: inherit;
     font-size: 0.9rem;
     font-weight: 600;
@@ -9298,7 +9093,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .crear-contexto-btn:hover:not(:disabled) {
-    background: rgba(0, 200, 255, 0.5);
+    background: var(--primary);
     border-color: rgba(0, 200, 255, 0.8);
   }
 
@@ -9311,16 +9106,16 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     font-size: 0.9rem;
     padding: 0.75rem;
     border-radius: 8px;
-    background: rgba(255, 0, 0, 0.2);
-    border: 1px solid rgba(255, 0, 0, 0.4);
-    color: rgba(255, 100, 100, 1);
+    background: var(--danger-bg);
+    border: 1px solid var(--danger-border);
+    color: var(--danger-fg);
     margin: 0;
   }
 
   .mensaje-contexto.success {
-    background: rgba(0, 200, 0, 0.2);
-    border-color: rgba(0, 200, 0, 0.4);
-    color: rgba(100, 255, 100, 1);
+    background: var(--ok-bg);
+    border-color: var(--ok-border);
+    color: var(--ok);
   }
 
   /* ── Modal Confirmación ───────────────────────────── */
@@ -9330,7 +9125,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.7);
+    background: rgba(15, 23, 42, 0.45);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -9338,13 +9133,12 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .modal-content {
-    background: linear-gradient(160deg, #3d2a0a 0%, #5e4214 40%, #7a5618 75%, #8e6420 100%);
-    border: 1px solid rgba(255, 200, 100, 0.25);
-    border-radius: 16px;
-    padding: 2rem;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1.75rem;
     max-width: 400px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(12px);
+    box-shadow: 0 20px 50px rgba(15, 23, 42, 0.15);
     animation: slideUp 0.3s ease;
   }
 
@@ -9360,14 +9154,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .modal-content h3 {
-    color: #fff;
+    color: var(--fg);
     font-size: 1.2rem;
     margin-bottom: 1rem;
     font-weight: 700;
   }
 
   .modal-content p {
-    color: rgba(255, 255, 255, 0.85);
+    color: var(--fg);
     font-size: 0.95rem;
     line-height: 1.5;
     margin-bottom: 0.75rem;
@@ -9396,33 +9190,33 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .modal-btn.cancel {
-    background: rgba(255, 255, 255, 0.2);
-    color: #fff;
-    border: 1px solid rgba(255, 255, 255, 0.3);
+    background: var(--muted);
+    color: var(--fg);
+    border: 1px solid var(--border);
   }
 
   .modal-btn.cancel:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.3);
+    background: var(--muted);
   }
 
   .modal-btn.danger {
-    background: rgba(255, 50, 50, 0.8);
+    background: var(--danger);
     color: #fff;
     border: 1px solid rgba(255, 100, 100, 0.8);
   }
 
   .modal-btn.danger:hover:not(:disabled) {
-    background: rgba(255, 50, 50, 1);
+    background: var(--danger);
   }
 
   .modal-btn.confirm {
-    background: rgba(0, 119, 255, 0.85);
+    background: var(--primary);
     color: #fff;
     border: 1px solid rgba(0, 119, 255, 1);
   }
 
   .modal-btn.confirm:hover:not(:disabled) {
-    background: rgba(0, 119, 255, 1);
+    background: var(--primary);
   }
 
   .modal-btn:disabled {
@@ -9436,7 +9230,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--fg-soft);
     margin-bottom: -0.4rem;
   }
 
@@ -9445,9 +9239,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     padding: 0.55rem 0.75rem;
     border-radius: 6px;
     font-size: 0.85rem;
-    color: #fecaca;
-    background: rgba(200, 40, 40, 0.25);
-    border: 1px solid rgba(200, 40, 40, 0.5);
+    color: var(--danger-fg);
+    background: var(--danger-bg);
+    border: 1px solid var(--danger-border);
     word-break: break-word;
   }
 
@@ -9455,11 +9249,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     margin: 1rem 0 0;
     font-size: 0.75rem;
     line-height: 1.45;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--fg-muted);
   }
 
   .login-nota code {
-    background: rgba(0, 0, 0, 0.3);
+    background: var(--muted);
     padding: 1px 5px;
     border-radius: 4px;
   }
@@ -9472,14 +9266,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     border-radius: 999px;
     font-size: 0.8rem;
     font-weight: 600;
-    color: #fff;
-    background: rgba(255, 255, 255, 0.12);
-    border: 1px solid rgba(255, 255, 255, 0.22);
+    color: var(--fg);
+    background: var(--card);
+    border: 1px solid var(--border);
   }
 
   .bc-renombrar-btn {
-    background: rgba(0, 0, 0, 0.18);
-    border: 1px solid rgba(0, 0, 0, 0.22);
+    background: var(--muted);
+    border: 1px solid var(--border);
     border-radius: 6px;
     padding: 0.2rem 0.4rem;
     font-size: 0.85rem;
@@ -9489,16 +9283,16 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .bc-renombrar-btn:hover {
-    background: rgba(0, 0, 0, 0.3);
-    border-color: rgba(0, 0, 0, 0.4);
+    background: var(--muted);
+    border-color: var(--border);
   }
 
   .bc-id-real {
     font-size: 0.72rem;
     padding: 2px 7px;
     border-radius: 4px;
-    background: rgba(0, 0, 0, 0.18);
-    color: rgba(0, 0, 0, 0.55);
+    background: var(--muted);
+    color: var(--fg-muted);
     white-space: nowrap;
   }
 
@@ -9511,8 +9305,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: rgba(255, 255, 255, 0.75);
-    background: rgba(255, 255, 255, 0.15);
+    color: var(--fg-soft);
+    background: var(--muted);
   }
 
   .rol-badge {
@@ -9521,20 +9315,20 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     border-radius: 999px;
     font-size: 0.72rem;
     font-weight: 600;
-    color: rgba(255, 255, 255, 0.85);
-    background: rgba(255, 255, 255, 0.12);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: var(--fg);
+    background: var(--card);
+    border: 1px solid var(--border);
   }
 
   .rol-badge--super {
-    color: #93c5fd;
-    background: rgba(96, 165, 250, 0.18);
-    border-color: rgba(96, 165, 250, 0.45);
+    color: var(--primary);
+    background: var(--primary-bg);
+    border-color: var(--primary-border);
   }
 
   .op-btn {
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: var(--card);
+    border: 1px solid var(--border);
     border-radius: 6px;
     padding: 0.25rem 0.45rem;
     margin-left: 0.25rem;
@@ -9544,25 +9338,25 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .op-btn:hover {
-    background: rgba(255, 255, 255, 0.18);
-    border-color: rgba(255, 255, 255, 0.35);
+    background: var(--muted);
+    border-color: var(--border);
   }
 
   .op-btn--danger:hover {
-    background: rgba(220, 50, 50, 0.5);
+    background: var(--danger);
     border-color: rgba(255, 150, 150, 0.6);
   }
 
   .operador-chip--legacy {
-    color: #fde68a;
-    background: rgba(253, 230, 138, 0.12);
-    border-color: rgba(253, 230, 138, 0.4);
+    color: var(--warn);
+    background: var(--warn-bg);
+    border-color: var(--warn-border);
   }
 
   /* ── Documentos Section ──────────────────────────── */
   .documentos-wrap {
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: var(--card);
+    border: 1px solid var(--border);
     border-radius: 12px;
     padding: 1.5rem;
     backdrop-filter: blur(8px);
@@ -9574,14 +9368,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     gap: 1rem;
     align-items: center;
     margin-bottom: 1.5rem;
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--card);
     padding: 1rem;
     border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    border: 1px solid var(--border);
   }
 
   .documentos-contexto-select label {
-    color: rgba(255, 255, 255, 0.85);
+    color: var(--fg);
     font-size: 0.9rem;
     font-weight: 600;
     white-space: nowrap;
@@ -9594,10 +9388,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   .contexto-select {
     padding: 0.75rem;
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid var(--border);
     border-radius: 8px;
-    background: rgba(0, 0, 0, 0.2);
-    color: #fff;
+    background: var(--muted);
+    color: var(--fg);
     font-family: inherit;
     font-size: 0.9rem;
     cursor: pointer;
@@ -9607,8 +9401,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   .contexto-select:focus {
     outline: none;
-    border-color: rgba(0, 200, 255, 0.6);
-    background: rgba(0, 0, 0, 0.3);
+    border-color: var(--primary-border);
+    background: var(--muted);
   }
 
   .contexto-select:disabled {
@@ -9617,8 +9411,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .contexto-select option {
-    background: #1a1a1a;
-    color: #fff;
+    background: rgba(15, 23, 42, 0.45);
+    color: var(--fg);
   }
 
   .documentos-list-wrap {
@@ -9626,7 +9420,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .documentos-list-wrap h4 {
-    color: #fff;
+    color: var(--fg);
     font-size: 0.95rem;
     margin-bottom: 1rem;
     font-weight: 600;
@@ -9636,28 +9430,28 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
-    background: rgba(0, 0, 0, 0.2);
+    background: var(--muted);
     padding: 1rem;
     border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--border);
   }
 
   .documento-row {
     display: flex;
     align-items: center;
     padding: 0.75rem 1rem;
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--surface-2);
     border-radius: 6px;
-    border-left: 3px solid rgba(0, 119, 255, 0.5);
+    border-left: 3px solid var(--primary-border);
     transition: background 0.2s ease;
   }
 
   .documento-row:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--card);
   }
 
   .documento-nombre {
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--fg);
     font-size: 0.9rem;
     word-break: break-word;
     flex: 1;
@@ -9674,14 +9468,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     font-family: inherit;
     font-size: 0.9rem;
     text-align: left;
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--fg);
   }
   .documento-nombre--link:hover {
-    color: #93c5fd;
+    color: var(--primary);
     text-decoration: underline;
-  }
-  .app.vectorizacion .documento-nombre--link {
-    color: rgba(10, 26, 58, 0.9);
   }
 
   .documento-borrar-btn {
@@ -9699,7 +9490,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   .documento-borrar-btn:hover:not(:disabled) {
     filter: brightness(1) drop-shadow(0 0 6px rgba(255, 200, 50, 0.9)) drop-shadow(0 0 12px rgba(255, 170, 0, 0.6));
-    background: rgba(255, 80, 80, 0.18);
+    background: var(--danger-bg);
   }
 
   .documento-borrar-btn:disabled {
@@ -9709,8 +9500,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   /* ── Integrar Documento Form ─────────────────────── */
   .integrar-documento-wrap {
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: var(--card);
+    border: 1px solid var(--border);
     border-radius: 12px;
     padding: 1.5rem;
     backdrop-filter: blur(8px);
@@ -9718,7 +9509,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .integrar-documento-wrap h3 {
-    color: #fff;
+    color: var(--fg);
     font-size: 1rem;
     margin-bottom: 1rem;
     font-weight: 600;
@@ -9733,10 +9524,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   .documento-input {
     padding: 0.75rem;
-    border: 2px solid rgba(255, 255, 255, 0.2);
+    border: 2px solid var(--border);
     border-radius: 8px;
-    background: rgba(0, 0, 0, 0.2);
-    color: #fff;
+    background: var(--muted);
+    color: var(--fg);
     font-family: inherit;
     font-size: 0.9rem;
     cursor: pointer;
@@ -9745,9 +9536,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .documento-input::file-selector-button {
-    background: rgba(0, 119, 255, 0.3);
-    border: 1px solid rgba(0, 119, 255, 0.5);
-    color: #fff;
+    background: var(--primary-bg);
+    border: 1px solid var(--primary-border);
+    color: var(--fg);
     padding: 0.5rem 1rem;
     border-radius: 6px;
     cursor: pointer;
@@ -9757,12 +9548,12 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .documento-input::file-selector-button:hover {
-    background: rgba(0, 119, 255, 0.6);
+    background: var(--primary);
   }
 
   .documento-input:focus {
     outline: none;
-    border-color: rgba(0, 119, 255, 0.8);
+    border-color: var(--primary-border);
   }
 
   .documento-input:disabled {
@@ -9771,16 +9562,16 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .integrar-documento-form small {
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--fg-soft);
     font-size: 0.8rem;
   }
 
   .integrar-documento-btn {
     padding: 0.75rem 1.5rem;
-    background: rgba(0, 119, 255, 0.3);
-    border: 1px solid rgba(0, 119, 255, 0.5);
+    background: var(--primary-bg);
+    border: 1px solid var(--primary-border);
     border-radius: 8px;
-    color: #fff;
+    color: var(--fg);
     font-family: inherit;
     font-size: 0.9rem;
     font-weight: 600;
@@ -9792,7 +9583,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .integrar-documento-btn:hover:not(:disabled) {
-    background: rgba(0, 119, 255, 0.5);
+    background: var(--primary);
     border-color: rgba(0, 119, 255, 0.8);
   }
 
@@ -9804,7 +9595,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   /* ── Barra de Progreso ───────────────────────────── */
   .progreso-wrap {
     height: 6px;
-    background: rgba(255, 255, 255, 0.15);
+    background: var(--muted);
     border-radius: 99px;
     overflow: hidden;
     margin-top: 0.75rem;
@@ -9819,7 +9610,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   .progreso-bar.indeterminate {
     position: absolute;
     width: 45%;
-    background: linear-gradient(90deg, transparent, #0077ff, #00c8ff, transparent);
+    background: linear-gradient(90deg, transparent, var(--primary), transparent);
     animation: sweep 1.4s ease-in-out infinite;
   }
 
@@ -9830,7 +9621,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   .progreso-bar.done {
     width: 100%;
-    background: linear-gradient(90deg, #16a34a, #4ade80);
+    background: var(--ok-solid);
     box-shadow: 0 0 8px rgba(74, 222, 128, 0.6);
     transition: width 0.3s ease;
   }
@@ -9847,10 +9638,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   .borrar-documento-btn {
     padding: 0.75rem 1.5rem;
-    background: rgba(200, 50, 50, 0.3);
-    border: 1px solid rgba(200, 50, 50, 0.5);
+    background: var(--danger-bg);
+    border: 1px solid var(--danger-border);
     border-radius: 8px;
-    color: #fff;
+    color: var(--fg);
     font-family: inherit;
     font-size: 0.9rem;
     font-weight: 600;
@@ -9863,7 +9654,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .borrar-documento-btn:hover:not(:disabled) {
-    background: rgba(200, 50, 50, 0.5);
+    background: var(--danger);
     border-color: rgba(200, 50, 50, 0.8);
   }
 
@@ -9874,26 +9665,26 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   /* ── Mensajes Documento ──────────────────────────── */
   .mensaje-documento {
-    color: rgba(200, 50, 50, 0.9);
+    color: var(--danger-fg);
     font-size: 0.9rem;
     padding: 0.75rem 1rem;
-    background: rgba(200, 50, 50, 0.15);
-    border-left: 3px solid rgba(200, 50, 50, 0.8);
+    background: var(--danger-bg);
+    border-left: 3px solid var(--danger-border);
     border-radius: 4px;
     margin-top: 0.75rem;
     animation: slideUp 0.3s ease;
   }
 
   .mensaje-documento.success {
-    color: rgba(74, 222, 128, 0.9);
-    background: rgba(74, 222, 128, 0.15);
-    border-left-color: rgba(74, 222, 128, 0.8);
+    color: var(--ok);
+    background: var(--ok-bg);
+    border-left-color: var(--ok-border);
   }
 
   /* ── Modelos Section ───────────────────────────── */
   .modelos-wrap {
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: var(--card);
+    border: 1px solid var(--border);
     border-radius: 12px;
     padding: 1.5rem;
     backdrop-filter: blur(8px);
@@ -9910,10 +9701,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   .modelo-card {
     position: relative;
     padding: 1rem;
-    background: rgba(0, 119, 255, 0.15);
-    border: 2px solid rgba(0, 119, 255, 0.3);
+    background: var(--primary-bg);
+    border: 2px solid var(--primary-border);
     border-radius: 8px;
-    color: rgba(255, 255, 255, 0.8);
+    color: var(--fg-soft);
     cursor: pointer;
     transition: all 0.2s ease;
     text-align: center;
@@ -9926,9 +9717,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     position: absolute;
     top: 4px;
     right: 4px;
-    background: rgba(0, 0, 0, 0.25);
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    color: rgba(255, 255, 255, 0.7);
+    background: var(--muted);
+    border: 1px solid var(--border);
+    color: var(--fg-soft);
     border-radius: 6px;
     width: 26px;
     height: 26px;
@@ -9944,20 +9735,20 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     opacity: 1;
   }
   .modelo-borrar-btn:hover {
-    background: rgba(220, 50, 50, 0.55);
+    background: var(--danger);
     border-color: rgba(255, 150, 150, 0.6);
     color: #fff;
   }
 
   .modelo-card:hover:not(:disabled) {
-    background: rgba(0, 119, 255, 0.25);
-    border-color: rgba(0, 119, 255, 0.6);
+    background: var(--primary-bg);
+    border-color: var(--primary-border);
   }
 
   .modelo-card.active {
-    background: rgba(0, 119, 255, 0.4);
-    border-color: rgba(0, 119, 255, 0.8);
-    color: #fff;
+    background: var(--primary-bg);
+    border-color: var(--primary-border);
+    color: var(--fg);
     box-shadow: 0 0 12px rgba(0, 119, 255, 0.5);
   }
 
@@ -9972,9 +9763,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     width: 44px;
     height: 44px;
     border-radius: 10px;
-    border: 1px solid rgba(255, 200, 60, 0.35);
-    background: rgba(255, 200, 60, 0.12);
-    color: #fcd34d;
+    border: 1px solid var(--warn-border);
+    background: var(--warn-bg);
+    color: var(--warn);
     cursor: pointer;
     display: inline-flex;
     align-items: center;
@@ -9982,18 +9773,18 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     transition: background 0.15s, border-color 0.15s, transform 0.1s, color 0.15s;
   }
   .proyecto-activar-btn:hover:not(:disabled) {
-    background: rgba(255, 200, 60, 0.28);
-    border-color: rgba(255, 200, 60, 0.7);
-    color: #fef08a;
+    background: var(--warn-bg);
+    border-color: var(--warn-border);
+    color: var(--warn);
     transform: scale(1.05);
   }
   .proyecto-activar-btn:active:not(:disabled) {
     transform: scale(0.96);
   }
   .proyecto-activar-btn--activo {
-    background: rgba(34, 197, 94, 0.35);
-    border-color: rgba(34, 197, 94, 0.65);
-    color: #fff;
+    background: var(--ok-bg);
+    border-color: var(--ok-border);
+    color: var(--fg);
     cursor: default;
     box-shadow: 0 0 14px rgba(34, 197, 94, 0.4);
   }
@@ -10006,7 +9797,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   .proyecto-activar-btn--locked {
     border-color: rgba(180, 180, 180, 0.45);
     background: rgba(120, 120, 120, 0.18);
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--fg-soft);
   }
   .proyecto-activar-lock {
     position: absolute;
@@ -10014,15 +9805,15 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     right: -3px;
     font-size: 0.7rem;
     line-height: 1;
-    background: rgba(0, 0, 0, 0.75);
+    background: rgba(15, 23, 42, 0.45);
     border-radius: 999px;
     padding: 2px 3px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid var(--border);
   }
 
   /* ── Vista usuario (preview no-admin) ─────────── */
   .vista-usuario-banner {
-    background: linear-gradient(90deg, rgba(255, 180, 60, 0.92), rgba(255, 140, 40, 0.92));
+    background: var(--warn-bg);
     color: #1a0a00;
     padding: 0.55rem 1rem;
     font-size: 0.88rem;
@@ -10032,16 +9823,16 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     gap: 1rem;
     flex-wrap: wrap;
     border-bottom: 1px solid rgba(0, 0, 0, 0.2);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.09);
     z-index: 1000;
   }
   .vista-usuario-banner strong {
     font-weight: 700;
   }
   .vista-usuario-banner__btn {
-    background: rgba(0, 0, 0, 0.7);
-    color: #fff;
-    border: 1px solid rgba(0, 0, 0, 0.8);
+    background: rgba(15, 23, 42, 0.45);
+    color: var(--fg);
+    border: 1px solid var(--border);
     border-radius: 6px;
     padding: 0.35rem 0.75rem;
     font-size: 0.82rem;
@@ -10051,7 +9842,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     transition: background 0.15s ease, transform 0.15s ease;
   }
   .vista-usuario-banner__btn:hover {
-    background: rgba(0, 0, 0, 0.9);
+    background: rgba(15, 23, 42, 0.45);
     transform: translateY(-1px);
   }
   .vista-usuario-toggle {
@@ -10073,15 +9864,15 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     position: fixed;
     top: 1rem;
     right: 1rem;
-    background: rgba(20, 20, 30, 0.92);
-    color: #fff;
+    background: rgba(15, 23, 42, 0.45);
+    color: var(--fg);
     padding: 0.6rem 1rem;
     border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid var(--border);
     font-size: 0.85rem;
     font-weight: 500;
     z-index: 10000;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12);
     animation: slideInRight 0.25s ease;
   }
   @keyframes slideInRight {
@@ -10097,8 +9888,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     margin-bottom: 1.5rem;
   }
   .consumo-card {
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: var(--card);
+    border: 1px solid var(--border);
     border-radius: 10px;
     padding: 1rem 1.1rem;
     display: flex;
@@ -10109,28 +9900,28 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     font-size: 0.72rem;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    color: rgba(255, 255, 255, 0.55);
+    color: var(--fg-muted);
     font-weight: 600;
   }
   .consumo-valor {
     font-size: 1.6rem;
     font-weight: 700;
-    color: #fff;
+    color: var(--fg);
     line-height: 1.1;
   }
   .consumo-valor--error {
-    color: #fca5a5;
+    color: var(--danger-fg);
   }
   .consumo-seccion {
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
     border-radius: 10px;
     padding: 1rem 1.2rem;
     margin-top: 1rem;
   }
   .consumo-seccion h4 {
     margin: 0 0 0.75rem;
-    color: rgba(255, 255, 255, 0.95);
+    color: var(--fg);
     font-size: 0.95rem;
   }
   .consumo-tabla {
@@ -10138,36 +9929,36 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     border-collapse: collapse;
     margin-top: 0.75rem;
     font-size: 0.85rem;
-    color: rgba(255, 255, 255, 0.85);
+    color: var(--fg);
   }
   .consumo-tabla th {
     text-align: left;
     padding: 0.4rem 0.6rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+    border-bottom: 1px solid var(--border);
     font-size: 0.72rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: rgba(255, 255, 255, 0.55);
+    color: var(--fg-muted);
   }
   .consumo-tabla td {
     padding: 0.4rem 0.6rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    border-bottom: 1px solid var(--border);
   }
   .registro-row {
     cursor: pointer;
     transition: background 0.12s ease;
   }
   .registro-row:hover {
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--surface-2);
   }
   .registro-row--expandido {
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--card);
   }
   .registro-row--expandido:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--card);
   }
   .registro-row--error td {
-    color: rgba(252, 165, 165, 0.9);
+    color: var(--danger-fg);
   }
   .registro-th-ordenable {
     cursor: pointer;
@@ -10175,10 +9966,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     transition: color 0.12s ease;
   }
   .registro-th-ordenable:hover {
-    color: rgba(255, 255, 255, 0.85);
+    color: var(--fg);
   }
   .registro-th-arrow {
-    color: #60a5fa;
+    color: var(--primary);
   }
   .registro-celda-filtrable {
     background: none;
@@ -10194,7 +9985,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     text-underline-offset: 2px;
   }
   .registro-celda-filtrable:hover {
-    color: #93c5fd;
+    color: var(--primary);
     text-decoration-color: #93c5fd;
   }
   .registro-badge-respaldo {
@@ -10205,9 +9996,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     font-size: 0.7rem;
     font-weight: 600;
     letter-spacing: 0.03em;
-    color: #fde68a;
-    background: rgba(253, 230, 138, 0.15);
-    border: 1px solid rgba(253, 230, 138, 0.4);
+    color: var(--warn);
+    background: var(--warn-bg);
+    border: 1px solid var(--warn-border);
     vertical-align: middle;
   }
 
@@ -10218,20 +10009,20 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     gap: 0.85rem;
   }
   .keys-card {
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: var(--card);
+    border: 1px solid var(--border);
     border-radius: 10px;
     padding: 1rem 1.1rem;
     display: flex;
     flex-direction: column;
     gap: 0.45rem;
     min-width: 0;
-    color: rgba(255, 255, 255, 0.85);
+    color: var(--fg);
     font-size: 0.85rem;
   }
   .keys-card--sin-configurar {
     border-style: dashed;
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--surface-2);
   }
   .keys-card-header {
     display: flex;
@@ -10240,37 +10031,37 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     flex-wrap: wrap;
   }
   .keys-card-header strong {
-    color: #fff;
+    color: var(--fg);
     font-size: 1rem;
   }
   .keys-card code {
-    background: rgba(0, 0, 0, 0.3);
+    background: var(--muted);
     padding: 2px 6px;
     border-radius: 4px;
     font-size: 0.78rem;
-    color: rgba(255, 255, 255, 0.75);
+    color: var(--fg-soft);
   }
   .keys-estado {
     font-size: 0.8rem;
     font-weight: 600;
-    color: rgba(255, 255, 255, 0.55);
+    color: var(--fg-muted);
   }
   .keys-estado--ok {
-    color: #4ade80;
+    color: var(--ok);
   }
   .keys-detalle {
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--fg-soft);
     line-height: 1.45;
   }
   .keys-pausa {
-    color: #fde68a;
+    color: var(--warn);
     font-weight: 600;
   }
   .keys-error {
     font-size: 0.8rem;
-    color: #fecaca;
-    background: rgba(200, 40, 40, 0.2);
-    border: 1px solid rgba(200, 40, 40, 0.45);
+    color: var(--danger-fg);
+    background: var(--danger-bg);
+    border: 1px solid var(--danger-border);
     border-radius: 6px;
     padding: 0.5rem 0.65rem;
     line-height: 1.45;
@@ -10286,22 +10077,22 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     gap: 0.35rem;
     text-align: left;
     padding: 0.85rem 1rem;
-    background: rgba(0, 119, 255, 0.12);
-    border: 2px solid rgba(0, 119, 255, 0.3);
+    background: var(--primary-bg);
+    border: 2px solid var(--primary-border);
     border-radius: 8px;
-    color: rgba(255, 255, 255, 0.85);
+    color: var(--fg);
     font-family: inherit;
     cursor: pointer;
     transition: all 0.2s ease;
   }
   .keys-modo:hover:not(:disabled):not(.active) {
-    background: rgba(0, 119, 255, 0.22);
-    border-color: rgba(0, 119, 255, 0.6);
+    background: var(--primary-bg);
+    border-color: var(--primary-border);
   }
   .keys-modo.active {
-    background: rgba(0, 119, 255, 0.4);
-    border-color: rgba(0, 119, 255, 0.8);
-    color: #fff;
+    background: var(--primary-bg);
+    border-color: var(--primary-border);
+    color: var(--fg);
     cursor: default;
   }
   .keys-modo:disabled:not(.active) {
@@ -10315,7 +10106,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   .keys-modo-desc {
     font-size: 0.8rem;
     line-height: 1.4;
-    color: rgba(255, 255, 255, 0.75);
+    color: var(--fg-soft);
   }
   .hito-marcador-row td {
     padding: 0.6rem 0.6rem;
@@ -10329,7 +10120,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   .hito-linea-segmento {
     flex: 1;
     height: 2px;
-    background: linear-gradient(90deg, transparent, #ffd75e 15%, #fff2c2 50%, #ffd75e 85%, transparent);
+    background: linear-gradient(90deg, transparent, var(--warn-border) 15%, var(--warn-border) 85%, transparent);
     box-shadow: 0 0 8px rgba(255, 215, 94, 0.85), 0 0 18px rgba(255, 215, 94, 0.45);
     animation: hito-linea-brillo 2.4s ease-in-out infinite;
   }
@@ -10341,7 +10132,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
-    color: #ffd75e;
+    color: var(--warn);
     font-size: 0.78rem;
     font-weight: 700;
     text-shadow: 0 0 8px rgba(255, 215, 94, 0.65);
@@ -10349,9 +10140,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     letter-spacing: 0.02em;
   }
   .hito-editar-btn {
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 215, 94, 0.4);
-    color: #ffd75e;
+    background: var(--muted);
+    border: 1px solid var(--warn-border);
+    color: var(--warn);
     border-radius: 4px;
     width: 18px;
     height: 18px;
@@ -10362,7 +10153,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     text-shadow: none;
   }
   .hito-editar-btn:hover {
-    background: rgba(255, 215, 94, 0.2);
+    background: var(--warn-bg);
   }
   .hito-marcador-row--arrastrable {
     cursor: grab;
@@ -10374,21 +10165,21 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     box-shadow: inset 0 2px 0 #ffd75e, inset 0 -2px 0 #ffd75e;
   }
   .registro-detalle td {
-    background: rgba(0, 0, 0, 0.25);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: var(--muted);
+    border-bottom: 1px solid var(--border);
     padding: 0.75rem 0.6rem 1rem;
   }
 
   /* ── Historial ──────────────────────── */
   .historial-grupo {
-    background: rgba(0, 0, 0, 0.22);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--muted);
+    border: 1px solid var(--border);
     border-radius: 10px;
     overflow: hidden;
   }
   .historial-grupo--borrado {
-    background: rgba(0, 0, 0, 0.32);
-    border-color: rgba(255, 150, 80, 0.25);
+    background: var(--muted);
+    border-color: var(--danger-border);
     opacity: 0.78;
   }
   .historial-grupo__header {
@@ -10396,19 +10187,19 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     align-items: center;
     gap: 0.6rem;
     padding: 0.7rem 0.9rem;
-    background: rgba(255, 255, 255, 0.04);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
     flex-wrap: wrap;
   }
   .historial-grupo__nombre {
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
     font-size: 0.92rem;
     font-weight: 600;
-    color: rgba(255, 255, 255, 0.95);
+    color: var(--fg);
   }
   .historial-grupo__nombre--tachado {
     text-decoration: line-through;
-    color: rgba(255, 255, 255, 0.55);
+    color: var(--fg-muted);
   }
   .historial-items {
     display: flex;
@@ -10420,7 +10211,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     gap: 0.85rem;
     align-items: center;
     padding: 0.55rem 0.9rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid var(--border);
     font-size: 0.86rem;
   }
   .historial-item:last-child {
@@ -10434,7 +10225,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     background: none;
     border: none;
     padding: 0;
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--fg);
     font-family: inherit;
     font-size: 0.88rem;
     text-align: left;
@@ -10443,14 +10234,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     word-break: break-word;
   }
   .historial-item__nombre:hover {
-    color: #93c5fd;
+    color: var(--primary);
     text-decoration: underline;
   }
   .historial-item--borrado .historial-item__nombre {
-    color: rgba(255, 255, 255, 0.55);
+    color: var(--fg-muted);
   }
   .historial-item__meta {
-    color: rgba(255, 255, 255, 0.55);
+    color: var(--fg-muted);
     font-size: 0.78rem;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
@@ -10467,14 +10258,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     white-space: nowrap;
   }
   .historial-badge--ctx-borrado {
-    background: rgba(255, 140, 60, 0.2);
-    border: 1px solid rgba(255, 140, 60, 0.45);
-    color: #fdba74;
+    background: var(--danger-bg);
+    border: 1px solid var(--danger-border);
+    color: var(--warn);
   }
   .historial-badge--item-borrado {
-    background: rgba(220, 80, 80, 0.18);
-    border: 1px solid rgba(220, 80, 80, 0.4);
-    color: #fca5a5;
+    background: var(--danger-bg);
+    border: 1px solid var(--danger-border);
+    color: var(--danger-fg);
   }
   @media (max-width: 700px) {
     .historial-item {
@@ -10493,38 +10284,38 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     display: flex;
     flex-direction: column;
     gap: 0.1rem;
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--fg);
     min-width: 0;
   }
   .consumo-bar-label strong { font-size: 0.88rem; }
   .consumo-bar-track {
     height: 10px;
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--card);
     border-radius: 999px;
     overflow: hidden;
   }
   .consumo-bar-fill {
     height: 100%;
-    background: linear-gradient(90deg, #2563eb, #38bdf8);
+    background: var(--primary);
     border-radius: 999px;
     transition: width 0.3s ease;
   }
   .consumo-bar-stats {
     font-size: 0.78rem;
-    color: rgba(255, 255, 255, 0.85);
+    color: var(--fg);
     white-space: nowrap;
   }
 
   .modelo-detalle {
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: var(--card);
+    border: 1px solid var(--border);
     border-radius: 10px;
     padding: 1.5rem;
     margin-top: 1.5rem;
   }
 
   .modelo-detalle h4 {
-    color: #fff;
+    color: var(--fg);
     font-size: 0.95rem;
     margin-bottom: 1rem;
     font-weight: 600;
@@ -10540,14 +10331,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     display: flex;
     gap: 1rem;
     padding: 0.75rem 1rem;
-    background: rgba(0, 0, 0, 0.2);
-    border-left: 3px solid rgba(0, 119, 255, 0.5);
+    background: var(--muted);
+    border-left: 3px solid var(--primary-border);
     border-radius: 4px;
     align-items: flex-start;
   }
 
   .propiedad-key {
-    color: rgba(0, 200, 255, 0.8);
+    color: var(--primary);
     font-weight: 600;
     font-size: 0.85rem;
     min-width: fit-content;
@@ -10555,7 +10346,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .propiedad-value {
-    color: rgba(255, 255, 255, 0.75);
+    color: var(--fg-soft);
     font-size: 0.85rem;
     word-break: break-word;
     font-family: 'Monaco', 'Courier New', monospace;
@@ -10569,11 +10360,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .alias-grupo-titulo {
-    color: rgba(255, 255, 255, 0.85);
+    color: var(--fg);
     font-size: 0.95rem;
     margin: 0 0 0.5rem 0;
     padding-bottom: 0.4rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid var(--border);
   }
 
   .alias-row {
@@ -10592,7 +10383,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .alias-modelo-nombre {
-    color: rgba(255, 255, 255, 0.95);
+    color: var(--fg);
     font-size: 0.9rem;
     font-family: 'Monaco', 'Courier New', monospace;
     word-break: break-all;
@@ -10600,19 +10391,19 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   .alias-modelo-origen {
     font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--fg-muted);
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
 
-  .alias-modelo-origen[data-origen="ollama"] { color: rgba(120, 220, 120, 0.8); }
-  .alias-modelo-origen[data-origen="openai"] { color: rgba(120, 200, 255, 0.8); }
-  .alias-modelo-origen[data-origen="manual"] { color: rgba(255, 200, 120, 0.8); }
+  .alias-modelo-origen[data-origen="ollama"] { color: var(--ok); }
+  .alias-modelo-origen[data-origen="openai"] { color: var(--primary); }
+  .alias-modelo-origen[data-origen="manual"] { color: var(--warn); }
 
   .alias-input {
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    color: white;
+    background: var(--muted);
+    border: 1px solid var(--border);
+    color: var(--fg);
     border-radius: 6px;
     padding: 0.5rem 0.75rem;
     font-size: 0.9rem;
@@ -10622,24 +10413,24 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   .alias-input:focus {
     outline: none;
-    border-color: rgba(120, 200, 255, 0.6);
-    background: rgba(0, 0, 0, 0.4);
+    border-color: var(--primary-border);
+    background: var(--muted);
   }
 
   .alias-input::placeholder {
-    color: rgba(255, 255, 255, 0.3);
+    color: var(--fg-muted);
     font-style: italic;
   }
 
   .alias-preview {
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--fg-soft);
     font-size: 0.85rem;
     font-family: 'Monaco', 'Courier New', monospace;
     word-break: break-all;
   }
 
   .alias-preview strong {
-    color: rgba(120, 220, 180, 0.95);
+    color: var(--ok);
     font-weight: 600;
   }
 
@@ -10648,14 +10439,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       grid-template-columns: 1fr;
       gap: 0.4rem;
       padding: 0.75rem 0;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      border-bottom: 1px solid var(--border);
     }
   }
 
   /* ── Lightbot Section ──────────────────────────── */
   .lightbot-wrap {
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: var(--card);
+    border: 1px solid var(--border);
     border-radius: 12px;
     padding: 1.5rem;
     backdrop-filter: blur(8px);
@@ -10663,7 +10454,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .lightbot-desc {
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--fg-soft);
     font-size: 0.85rem;
     margin-bottom: 1.5rem;
     line-height: 1.5;
@@ -10685,7 +10476,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   .lightbot-field label {
     font-size: 0.75rem;
     font-weight: 600;
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--fg-soft);
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
@@ -10693,9 +10484,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   .lightbot-field select {
     padding: 0.6rem 0.75rem;
     border-radius: 8px;
-    border: 1.5px solid rgba(255, 255, 255, 0.2);
-    background: rgba(0, 0, 0, 0.25);
-    color: #fff;
+    border: 1.5px solid var(--border);
+    background: var(--muted);
+    color: var(--fg);
     font-family: inherit;
     font-size: 0.875rem;
     outline: none;
@@ -10704,25 +10495,25 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   .lightbot-field select:focus {
-    border-color: rgba(0, 150, 255, 0.6);
+    border-color: var(--primary-border);
   }
 
   .lightbot-field select option,
   .lightbot-field select optgroup {
-    background: #1a1a2e;
-    color: #fff;
+    background: rgba(15, 23, 42, 0.45);
+    color: var(--fg);
   }
 
   .lightbot-preview {
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--muted);
+    border: 1px solid var(--border);
     border-radius: 8px;
     padding: 1rem 1.25rem;
   }
 
   .lightbot-preview h4 {
     font-size: 0.8rem;
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--fg-soft);
     margin-bottom: 0.5rem;
   }
 
@@ -10732,9 +10523,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     gap: 0.3rem;
     padding: 0.3rem 0.7rem;
     border-radius: 6px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.92);
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--fg);
     font-family: inherit;
     font-size: 0.75rem;
     font-weight: 500;
@@ -10750,8 +10541,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     gap: 0.3rem;
     padding: 0.15rem 0.55rem;
     border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border);
+    background: var(--card);
     color: inherit;
     font-family: inherit;
     font-size: 0.85rem;
@@ -10760,12 +10551,12 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     white-space: nowrap;
   }
   .asistente-link-chip:hover {
-    background: rgba(255, 255, 255, 0.14);
-    border-color: rgba(255, 255, 255, 0.32);
+    background: var(--muted);
+    border-color: var(--border);
   }
   .url-action-btn:hover {
-    background: rgba(255, 255, 255, 0.16);
-    border-color: rgba(255, 255, 255, 0.32);
+    background: var(--muted);
+    border-color: var(--border);
   }
   .url-action-btn:active {
     transform: scale(0.97);
@@ -10773,12 +10564,12 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   .lightbot-url {
     display: block;
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--muted);
+    border: 1px solid var(--border);
     border-radius: 6px;
     padding: 0.6rem 0.75rem;
     font-size: 0.78rem;
-    color: rgba(100, 200, 255, 0.9);
+    color: var(--primary);
     word-break: break-all;
     font-family: 'Monaco', 'Courier New', monospace;
     line-height: 1.5;
@@ -10791,5 +10582,390 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     .chat-body { padding: 1rem 0.75rem; }
     .bubble-wrap { max-width: 85%; }
     .header-logo { display: none; }
+  }
+
+  /* ══ Componentes del look sobrio (estilo NexusDoc) ════════════════════
+     Va al FINAL del <style> a propósito: redefine las piezas que se repiten
+     en todo el panel (tarjetas, botones, inputs, tablas, píldoras) sobre los
+     tokens de :root, ganándole a las reglas viejas de la misma especificidad.
+     Para ajustar el look de todo el panel, este es el lugar. */
+
+  /* Tarjetas: blancas, borde fino, sombra apenas perceptible */
+  .modelos-wrap,
+  .crear-contexto-wrap,
+  .contextos-table-wrap,
+  .documentos-wrap,
+  .integrar-documento-wrap,
+  .progreso-wrap {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow-sm);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .seccion-header h3,
+  .crear-contexto-wrap h3,
+  .contextos-table-wrap h3,
+  .documentos-wrap h3,
+  .integrar-documento-wrap h3,
+  .modelos-wrap h3 {
+    color: var(--fg);
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+  }
+
+  h2 { color: var(--fg); font-weight: 600; letter-spacing: -0.01em; }
+  h4 { color: var(--fg); }
+
+  /* Barra de sub-pestañas: la navegación de Nexus */
+  .vectorizacion-subtabs {
+    display: flex;
+    gap: 0.25rem;
+    padding: 0.3rem;
+    margin-bottom: 1.75rem;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow-sm);
+    overflow-x: auto;
+  }
+
+  .vectorizacion-subtab-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.55rem 0.85rem;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--fg);
+    font-family: inherit;
+    font-size: 0.8rem;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+    box-shadow: none;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+
+  .vectorizacion-subtab-btn:hover:not(.active):not(:disabled) {
+    background: var(--muted);
+    color: var(--fg);
+  }
+
+  .vectorizacion-subtab-btn.active {
+    background: var(--primary);
+    color: var(--primary-fg);
+    box-shadow: none;
+  }
+
+  .vectorizacion-subtab-btn:disabled:not(.active) {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  /* Botón secundario: blanco con borde */
+  .vectorizacion-action-btn,
+  .url-action-btn,
+  .contextos-recargar-btn,
+  .banner-dismiss-btn,
+  .bc-detalle-volver-btn,
+  .reset-btn,
+  .clear-chat-btn {
+    background: var(--card);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 0.8rem;
+    font-weight: 500;
+    box-shadow: var(--shadow-sm);
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+
+  .vectorizacion-action-btn:hover:not(:disabled),
+  .url-action-btn:hover:not(:disabled),
+  .contextos-recargar-btn:hover:not(:disabled),
+  .banner-dismiss-btn:hover,
+  .bc-detalle-volver-btn:hover,
+  .reset-btn:hover:not(:disabled),
+  .clear-chat-btn:hover:not(:disabled) {
+    background: var(--muted);
+    border-color: var(--border-strong);
+    color: var(--fg);
+  }
+
+  /* Botón primario: el azul de Nexus */
+  .crear-contexto-btn,
+  .integrar-documento-btn,
+  .proyecto-activar-btn {
+    background: var(--primary);
+    color: var(--primary-fg);
+    border: 1px solid var(--primary);
+    border-radius: 8px;
+    font-family: inherit;
+    font-weight: 500;
+    box-shadow: var(--shadow-sm);
+    transition: background 0.15s ease;
+  }
+
+  .crear-contexto-btn:hover:not(:disabled),
+  .integrar-documento-btn:hover:not(:disabled),
+  .proyecto-activar-btn:hover:not(:disabled) {
+    background: var(--primary-hover);
+    border-color: var(--primary-hover);
+  }
+
+  .crear-contexto-btn:disabled,
+  .integrar-documento-btn:disabled,
+  .vectorizacion-action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* Botones de modal */
+  .modal-btn {
+    border-radius: 8px;
+    font-family: inherit;
+    font-weight: 500;
+    font-size: 0.85rem;
+  }
+  .modal-btn.cancel {
+    background: var(--card);
+    color: var(--fg);
+    border: 1px solid var(--border);
+  }
+  .modal-btn.cancel:hover:not(:disabled) { background: var(--muted); }
+  .modal-btn.confirm {
+    background: var(--primary);
+    color: var(--primary-fg);
+    border: 1px solid var(--primary);
+  }
+  .modal-btn.confirm:hover:not(:disabled) { background: var(--primary-hover); }
+  .modal-btn.danger {
+    background: var(--danger);
+    color: #fff;
+    border: 1px solid var(--danger);
+  }
+  .modal-btn.danger:hover:not(:disabled) { background: var(--danger-fg); }
+
+  /* Inputs: blancos, borde fino, foco azul */
+  .contexto-input,
+  .contexto-select,
+  .documento-input,
+  .alias-input,
+  .lightbot-field input,
+  .lightbot-field select,
+  .lightbot-field textarea {
+    background: var(--card);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-family: inherit;
+    box-shadow: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .contexto-input::placeholder,
+  .alias-input::placeholder,
+  .lightbot-field input::placeholder {
+    color: var(--fg-muted);
+  }
+
+  .contexto-input:focus,
+  .contexto-select:focus,
+  .documento-input:focus,
+  .alias-input:focus,
+  .lightbot-field input:focus,
+  .lightbot-field select:focus,
+  .lightbot-field textarea:focus {
+    outline: none;
+    background: var(--card);
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-bg);
+  }
+
+  .contexto-select option,
+  .lightbot-field select option {
+    background: var(--card);
+    color: var(--fg);
+  }
+
+  .documento-input::file-selector-button {
+    background: var(--primary);
+    color: var(--primary-fg);
+    border: none;
+    border-radius: 6px;
+    font-family: inherit;
+    font-weight: 500;
+  }
+
+  .form-field label,
+  .lightbot-field label {
+    color: var(--fg-soft);
+    font-weight: 600;
+  }
+
+  .field-hint,
+  .form-field small {
+    color: var(--fg-muted);
+  }
+
+  /* Filas de listado (BCs, documentos) */
+  .contexto-row,
+  .documento-row {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--border-strong);
+    border-radius: 8px;
+  }
+  .contexto-row:hover,
+  .documento-row:hover {
+    background: var(--surface-2);
+    border-left-color: var(--primary);
+  }
+  .contexto-nombre,
+  .documento-nombre {
+    color: var(--fg);
+  }
+
+  /* Tablas */
+  .consumo-tabla th {
+    color: var(--fg-muted);
+    border-bottom: 1px solid var(--border);
+    font-weight: 600;
+  }
+  .consumo-tabla td {
+    color: var(--fg-soft);
+    border-bottom: 1px solid var(--border);
+  }
+  .registro-row:hover { background: var(--surface-2); }
+  .registro-row--expandido,
+  .registro-row--expandido:hover { background: var(--primary-bg); }
+
+  /* Tarjetas de métrica */
+  .consumo-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow-sm);
+  }
+  .consumo-valor { color: var(--fg); }
+  .consumo-label { color: var(--fg-muted); }
+
+  code {
+    color: var(--fg-soft);
+  }
+
+  .audit-icono {
+    display: inline-flex;
+    vertical-align: -2px;
+    margin-right: 0.3rem;
+    color: var(--fg-muted);
+  }
+
+  .op-btn,
+  .bc-renombrar-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--card);
+    color: var(--fg-soft);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+  .op-btn:hover,
+  .bc-renombrar-btn:hover {
+    background: var(--muted);
+    color: var(--fg);
+    border-color: var(--border-strong);
+  }
+  .op-btn--danger:hover {
+    background: var(--danger);
+    border-color: var(--danger);
+    color: #fff;
+  }
+
+  /* Opciones seleccionables (modo de API keys, tarjetas de modelo):
+     inactiva = tarjeta blanca; activa = tinte azul con borde azul. */
+  .keys-modo,
+  .modelo-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    box-shadow: var(--shadow-sm);
+  }
+  .keys-modo:hover:not(:disabled):not(.active),
+  .modelo-card:hover:not(.active) {
+    background: var(--surface-2);
+    border-color: var(--border-strong);
+  }
+  .keys-modo.active,
+  .modelo-card.active {
+    background: var(--primary-bg);
+    border-color: var(--primary);
+    box-shadow: 0 0 0 1px var(--primary);
+    color: var(--fg);
+  }
+  .keys-modo-desc { color: var(--fg-muted); }
+
+  /* Chat: burbuja del usuario en el acento, la del asistente neutra;
+     Enviar es el botón primario y Reiniciar el secundario. */
+  .message-row.user .bubble {
+    background: var(--primary);
+    color: var(--primary-fg);
+    box-shadow: var(--shadow-sm);
+  }
+  .message-row.user .bubble-link,
+  .message-row.user .bubble-link:hover {
+    color: var(--primary-fg);
+  }
+  .message-row.error .bubble {
+    background: var(--danger-bg);
+    border: 1px solid var(--danger-border);
+    color: var(--danger-fg);
+  }
+  .input-container button:not(.reset-btn) {
+    background: var(--primary);
+    color: var(--primary-fg);
+  }
+  .input-container button:not(.reset-btn):hover:not(:disabled) {
+    background: var(--primary-hover);
+  }
+  .input-container button:not(.reset-btn):disabled {
+    background: var(--muted);
+    color: var(--fg-muted);
+  }
+  .input-container .reset-btn {
+    background: var(--card);
+    color: var(--fg-soft);
+    border: 1px solid var(--border);
+  }
+  .input-container .reset-btn:not(:disabled):hover {
+    background: var(--muted) !important;
+    color: var(--fg);
+  }
+
+  /* Pantallas angostas: el encabezado no cabe completo. Se esconde el
+     indicador de host y las pestañas principales quedan sólo con ícono
+     (font-size 0 oculta el texto; el <Icon> tiene tamaño propio). */
+  @media (max-width: 760px) {
+    .header { padding: 0 0.75rem; gap: 0.75rem; }
+    .header-left { gap: 0.6rem; min-width: 0; }
+    .ambiente-indicador { display: none; }
+    .header-info { min-width: 0; }
+    .header-title {
+      font-size: 0.85rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .tabs-toggle { flex-shrink: 0; }
+    .tab-btn { font-size: 0; gap: 0; padding: 0.55rem; }
+    /* el ojo de "vista usuario" es un emoji de texto, no un <Icon>: sin esto desaparece */
+    .tab-btn.vista-usuario-toggle { font-size: 1rem; }
   }
 </style>
