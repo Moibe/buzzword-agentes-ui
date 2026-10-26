@@ -7962,12 +7962,12 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    color: var(--warn);
+    color: var(--primary);
     font-size: 1.6rem;
     font-weight: 900;
     line-height: 1;
     padding: 0 0.4rem;
-    text-shadow: 0 0 8px rgba(255, 215, 94, 0.7);
+    text-shadow: 0 0 8px rgba(66, 104, 251, 0.45);
     animation: subtab-arrow-pulse 1.2s ease-in-out infinite;
     user-select: none;
   }
