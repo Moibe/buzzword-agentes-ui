@@ -1410,10 +1410,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   // Elegir un proyecto lleva directo al siguiente paso del flujo: sus Bases
-  // de Conocimiento. Antes sólo se encendía la flecha »» y había que dar el
-  // clic a mano.
+  // de Conocimiento, sin apagar la flecha » animada que marca el flujo.
   function irABasesDeConocimiento() {
-    vinoDeActivarProyecto = false;
+    vinoDeActivarProyecto = true;
     vinoDeEditarContexto = false;
     vectorizacionTab = 'contextos';
   }
