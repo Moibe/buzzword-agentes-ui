@@ -1386,27 +1386,36 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     if (isAdmin) {
       proyectoActivoId = p.id;
       vinoDeCambiarProyecto = false;
-      vinoDeActivarProyecto = true;
+      irABasesDeConocimiento();
       return;
     }
     // Sin password → activa directo.
     if (!p.requires_password) {
       proyectoActivoId = p.id;
       vinoDeCambiarProyecto = false;
-      vinoDeActivarProyecto = true;
+      irABasesDeConocimiento();
       return;
     }
     // Ya desbloqueado en esta sesión → activa.
     if (proyectoYaDesbloqueado(p.id)) {
       proyectoActivoId = p.id;
       vinoDeCambiarProyecto = false;
-      vinoDeActivarProyecto = true;
+      irABasesDeConocimiento();
       return;
     }
     // Pedir password.
     proyectoParaDesbloquear = { id: p.id, nombre: p.nombre, slug: p.slug };
     passwordIntento = '';
     errorPasswordProyecto = '';
+  }
+
+  // Elegir un proyecto lleva directo al siguiente paso del flujo: sus Bases
+  // de Conocimiento. Antes sólo se encendía la flecha »» y había que dar el
+  // clic a mano.
+  function irABasesDeConocimiento() {
+    vinoDeActivarProyecto = false;
+    vinoDeEditarContexto = false;
+    vectorizacionTab = 'contextos';
   }
 
   function cerrarPromptPassword() {
@@ -1442,7 +1451,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       marcarProyectoDesbloqueado(proyectoParaDesbloquear.id);
       proyectoActivoId = proyectoParaDesbloquear.id;
       vinoDeCambiarProyecto = false;
-      vinoDeActivarProyecto = true;
+      irABasesDeConocimiento();
       cerrarPromptPassword();
     } catch (err) {
       errorPasswordProyecto = `❌ ${err.message}`;
@@ -1610,13 +1619,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       const proyectoCreado = await res.json();
       mensajeProyecto = editando ? '✅ Proyecto actualizado' : '✅ Proyecto creado';
       await cargarProyectos();
-      // Si fue creación, auto-activarlo y marcar el flujo "vino de activar proyecto"
-      // para que aparezca la flechita guiando hacia Base de Conocimiento.
-      if (!editando && proyectoCreado?.id) {
-        proyectoActivoId = proyectoCreado.id;
-        vinoDeActivarProyecto = true;
-      }
-      setTimeout(() => cerrarFormProyecto(), 800);
+      // Si fue creación, auto-activarlo; al cerrar el form (tras dejar ver el
+      // "✅ Proyecto creado") se pasa directo a sus Bases de Conocimiento.
+      const recienCreado = !editando && proyectoCreado?.id;
+      if (recienCreado) proyectoActivoId = proyectoCreado.id;
+      setTimeout(() => {
+        cerrarFormProyecto();
+        if (recienCreado) irABasesDeConocimiento();
+      }, 800);
     } catch (err) {
       mensajeProyecto = `❌ ${err.message}`;
     } finally {
