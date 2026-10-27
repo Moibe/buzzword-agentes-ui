@@ -1793,6 +1793,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   let nuevoContextoEmbedding = $state('');
   let nuevoContextoChunkSize = $state('1500');
+  // Etiqueta opcional al crear; el identificador se sigue numerando solo.
+  let nuevoContextoNombreVisible = $state('');
 
   // Nombre auto-generado: <proyecto-slug>-<N>, donde N es el menor entero
   // positivo libre dentro del proyecto activo. Si se borra una BC, su número
@@ -3041,8 +3043,29 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       console.groupEnd();
 
       mensajeCrearContexto = `✅ ${data.Mensaje ?? `Base de conocimiento "${nombreCreado}" creada exitosamente`}`;
+
+      // La BC ya existe; si falla la etiqueta no se deshace nada, sólo se avisa
+      // (se puede poner después con el lápiz).
+      const etiqueta = nuevoContextoNombreVisible.trim();
+      if (etiqueta) {
+        try {
+          const resNombre = await fetch(`${apiUrl.base}/renombrarContexto?contexto=${encodeURIComponent(nombreCreado)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', ...adminHeaders() },
+            body: JSON.stringify({ nombre_visible: etiqueta }),
+          });
+          const dataNombre = await resNombre.json().catch(() => null);
+          if (!resNombre.ok) throw new Error(dataNombre?.detail || `HTTP ${resNombre.status}`);
+          if (dataNombre.nombre_visible) nombresVisiblesBc[nombreCreado] = dataNombre.nombre_visible;
+          mensajeCrearContexto = `✅ Base de conocimiento "${dataNombre.nombre_visible}" creada exitosamente`;
+        } catch (errNombre) {
+          mensajeCrearContexto = `⚠️ Se creó "${nombreCreado}", pero no se pudo guardar el nombre: ${errNombre.message}. Ponlo con el lápiz.`;
+        }
+      }
+
       nuevoContextoEmbedding = '';
       nuevoContextoChunkSize = '1500';
+      nuevoContextoNombreVisible = '';
 
       // Recarga la lista en el background para que el usuario la vea actualizada al regresar.
       setTimeout(() => {
@@ -5224,7 +5247,21 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             {#if crearContextoAbierto}
             <div class="crear-contexto-form">
               <div class="form-field">
-                <label for="contexto-nombre">Nombre de la Base de Conocimiento</label>
+                <label for="contexto-nombre-visible">Nombre <span style="text-transform: none; font-weight: 400; color: var(--fg-muted);">(opcional)</span></label>
+                <input
+                  id="contexto-nombre-visible"
+                  type="text"
+                  bind:value={nuevoContextoNombreVisible}
+                  disabled={cargandoCrearContexto}
+                  maxlength="120"
+                  placeholder="ej. Pólizas de autos"
+                  autocomplete="off"
+                  class="contexto-input"
+                />
+                <p class="field-hint">Libre, con acentos. Editable después.</p>
+              </div>
+              <div class="form-field">
+                <label for="contexto-nombre">Identificador</label>
                 <input
                   id="contexto-nombre"
                   type="text"
@@ -5233,6 +5270,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   class="contexto-input"
                   style="opacity: 0.65; cursor: default;"
                 />
+                <p class="field-hint">Automático, no cambia.</p>
               </div>
               <div class="form-field">
                 <label for="contexto-embedding">
