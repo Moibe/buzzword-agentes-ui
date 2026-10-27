@@ -3226,6 +3226,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       console.groupEnd();
 
       const nombreArchivo = archivoParaIntegrar.name;
+      // La API compara el hash del contenido y, si ya está en la base, no lo
+      // vuelve a integrar: responde 200 con duplicado=true.
+      let duplicado = false;
 
       await new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
@@ -3246,6 +3249,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               console.log('Status      :', xhr.status);
               console.log('Respuesta   :', data);
               console.groupEnd();
+              duplicado = data?.duplicado === true || /ya había sido integrado/i.test(data?.mensaje ?? '');
             } catch (_) {}
             resolve();
           } else {
@@ -3257,7 +3261,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         xhr.send(formData);
       });
 
-      mensajeIntegrarDocumento = `✅ Documento "${nombreArchivo}" integrado exitosamente`;
+      mensajeIntegrarDocumento = duplicado
+        ? `⚠️ "${nombreArchivo}" ya estaba en esta base de conocimiento (mismo contenido). No se volvió a integrar.`
+        : `✅ Documento "${nombreArchivo}" integrado exitosamente`;
       archivoParaIntegrar = null;
       localStorage.removeItem('mide_integracion_pendiente');
       integracionEnCurso = null;
@@ -5531,7 +5537,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 {/if}
               </div>
               {#if mensajeIntegrarDocumento && !integrarModalAbierto}
-                <p class="mensaje-documento" class:success={mensajeIntegrarDocumento.includes('✅')} style="margin-top: 0.5rem;">
+                <p class="mensaje-documento" class:success={mensajeIntegrarDocumento.includes('✅')} class:aviso={mensajeIntegrarDocumento.startsWith('⚠️')} style="margin-top: 0.5rem;">
                   {mensajeIntegrarDocumento}
                 </p>
               {/if}
@@ -6137,7 +6143,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             </div>
           {/if}
           {#if mensajeIntegrarDocumento}
-            <p class="mensaje-documento" class:success={mensajeIntegrarDocumento.includes('✅')} style="margin: 0;">
+            <p class="mensaje-documento" class:success={mensajeIntegrarDocumento.includes('✅')} class:aviso={mensajeIntegrarDocumento.startsWith('⚠️')} style="margin: 0;">
               {mensajeIntegrarDocumento}
             </p>
           {/if}
@@ -9933,6 +9939,12 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     color: var(--ok);
     background: var(--ok-bg);
     border-left-color: var(--ok-border);
+  }
+
+  .mensaje-documento.aviso {
+    color: var(--warn);
+    background: var(--warn-bg);
+    border-left-color: var(--warn-border);
   }
 
   /* ── Modelos Section ───────────────────────────── */
