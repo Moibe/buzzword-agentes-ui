@@ -72,6 +72,7 @@
     'hito':                 { emoji: '🏁', iconify: 'ph:flag-pennant' },
     'desactivar':           { emoji: '🚫', iconify: 'ph:prohibit' },
     'reactivar':            { emoji: '✅', iconify: 'ph:check-circle' },
+    'desplegar':            { emoji: '▾', iconify: 'ph:caret-down' },
   };
 
   let entry = $derived(ICONS[name]);

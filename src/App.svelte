@@ -1845,6 +1845,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   // slugify de la pregunta), lo que mejora la calidad de retrieval con top_k=1.
   let batchPreguntas = $state([]); // [{ id, pregunta, respuesta }]
   let batchFormAbierto = $state(false);
+  // Secciones de Documentos que arrancan replegadas.
+  let snippetSeccionAbierta = $state(false);
+  let batchSeccionAbierta = $state(false);
   let batchPreguntaTexto = $state('');
   let batchRespuestaTexto = $state('');
   let batchEditandoId = $state(null); // si distinto de null, el form está editando un item de la lista
@@ -5478,7 +5481,16 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
           <!-- Agregar Snippet (Q&A sin PDF) -->
           <div class="integrar-documento-wrap" style="margin-top: 1rem;">
-            <h3><Icon name="editar" size={16} /> Agregar Snippet (Q&amp;A) a <strong>{nombreVisibleBc(contextoSeleccionadoParaDocumentos)}</strong></h3>
+            <button
+              type="button"
+              class="seccion-plegable-header"
+              aria-expanded={snippetSeccionAbierta}
+              onclick={() => (snippetSeccionAbierta = !snippetSeccionAbierta)}
+            >
+              <h3><Icon name="editar" size={16} /> Agregar Snippet (Q&amp;A) a <strong>{nombreVisibleBc(contextoSeleccionadoParaDocumentos)}</strong></h3>
+              <span class="seccion-plegable-caret" class:abierta={snippetSeccionAbierta}><Icon name="desplegar" size={18} /></span>
+            </button>
+            {#if snippetSeccionAbierta}
             <p style="margin: 0 0 0.75rem; color: var(--fg-soft); font-size: 0.82rem; line-height: 1.45;">
               Alternativa rápida a subir un PDF cuando solo quieres meter una pregunta con su respuesta. Se guarda como archivo de texto en la BC y se vectoriza igual que cualquier documento.
             </p>
@@ -5524,11 +5536,26 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 {mensajeAgregarSnippet}
               </p>
             {/if}
+            {/if}
           </div>
 
           <!-- Batch de Preguntas y Respuestas -->
           <div class="integrar-documento-wrap" style="margin-top: 1rem;">
-            <h3><Icon name="base-conocimiento" size={16} /> Batch de Preguntas a <strong>{nombreVisibleBc(contextoSeleccionadoParaDocumentos)}</strong></h3>
+            <button
+              type="button"
+              class="seccion-plegable-header"
+              aria-expanded={batchSeccionAbierta}
+              onclick={() => (batchSeccionAbierta = !batchSeccionAbierta)}
+            >
+              <h3>
+                <Icon name="base-conocimiento" size={16} /> Batch de Preguntas a <strong>{nombreVisibleBc(contextoSeleccionadoParaDocumentos)}</strong>
+                {#if !batchSeccionAbierta && batchPreguntas.length > 0}
+                  <span class="seccion-plegable-badge">{batchPreguntas.length} pendiente{batchPreguntas.length === 1 ? '' : 's'}</span>
+                {/if}
+              </h3>
+              <span class="seccion-plegable-caret" class:abierta={batchSeccionAbierta}><Icon name="desplegar" size={18} /></span>
+            </button>
+            {#if batchSeccionAbierta}
             <p style="margin: 0 0 0.85rem; color: var(--fg-soft); font-size: 0.82rem; line-height: 1.45;">
               Acumula varias Q&amp;As y vectorízalas todas de un jalón. Cada pregunta se guarda como su propio archivo (filename auto-generado), lo que mejora la precisión del retrieval — cada respuesta es un chunk independiente.
             </p>
@@ -5674,6 +5701,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   Las preguntas fallidas se quedan en la lista para que las reintentes.
                 </p>
               </div>
+            {/if}
             {/if}
           </div>
         {/if}
@@ -7970,6 +7998,47 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     text-shadow: 0 0 8px rgba(66, 104, 251, 0.45);
     animation: subtab-arrow-pulse 1.2s ease-in-out infinite;
     user-select: none;
+  }
+
+  .seccion-plegable-header {
+    all: unset;
+    box-sizing: border-box;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    cursor: pointer;
+  }
+  .integrar-documento-wrap .seccion-plegable-header h3 {
+    margin: 0;
+  }
+  .seccion-plegable-header[aria-expanded='true'] {
+    margin-bottom: 0.75rem;
+  }
+  .seccion-plegable-header:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 4px;
+    border-radius: 6px;
+  }
+  .seccion-plegable-caret {
+    display: inline-flex;
+    color: var(--fg-muted);
+    transform: rotate(-90deg);
+    transition: transform 0.15s ease;
+  }
+  .seccion-plegable-caret.abierta {
+    transform: rotate(0deg);
+  }
+  .seccion-plegable-badge {
+    margin-left: 0.5rem;
+    padding: 0.1rem 0.5rem;
+    border-radius: 999px;
+    background: var(--primary);
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 600;
+    vertical-align: middle;
   }
 
   @keyframes subtab-arrow-pulse {
