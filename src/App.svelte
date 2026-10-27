@@ -1714,6 +1714,13 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     renombrarBcAbierto = true;
   }
 
+  // Esc cierra el modal de renombrar, salvo mientras guarda (igual que el clic fuera).
+  function cerrarRenombrarBcConEsc(e) {
+    if (e.key === 'Escape' && renombrarBcAbierto && !renombrarBcGuardando) {
+      renombrarBcAbierto = false;
+    }
+  }
+
   async function guardarNombreBc() {
     const objetivo = renombrarBcObjetivo;
     if (!objetivo) return;
@@ -3882,6 +3889,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     }
   }
 </script>
+
+<svelte:window onkeydown={cerrarRenombrarBcConEsc} />
 
 <div class="app" class:vectorizacion={activeTab === 'vectorizacion'} class:admin={activeTab === 'admin'}>
 
