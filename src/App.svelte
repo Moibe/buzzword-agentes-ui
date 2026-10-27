@@ -1681,6 +1681,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let renombrarBcValor = $state('');
   let renombrarBcGuardando = $state(false);
   let renombrarBcError = $state('');
+  // BC que se está renombrando: se abre desde la lista o desde la vista de documentos.
+  let renombrarBcObjetivo = $state('');
 
   // identificador → etiqueta. Lo llenan los dos cargadores de BCs
   // (`cargarContextos` y `cargarVectorizacionContextos`) para que el nombre se
@@ -1706,13 +1708,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   function abrirRenombrarBc(nombreChroma) {
+    renombrarBcObjetivo = nombreChroma;
     renombrarBcValor = nombresVisiblesBc[nombreChroma] || '';
     renombrarBcError = '';
     renombrarBcAbierto = true;
   }
 
   async function guardarNombreBc() {
-    const objetivo = contextoSeleccionadoParaDocumentos;
+    const objetivo = renombrarBcObjetivo;
     if (!objetivo) return;
     renombrarBcGuardando = true;
     renombrarBcError = '';
@@ -5363,6 +5366,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     {/if}
                     <button
                       class="contexto-editar-btn"
+                      title="Cambiar el nombre"
+                      aria-label="Renombrar base de conocimiento"
+                      onclick={() => abrirRenombrarBc(contexto.nombre)}
+                    >
+                      <Icon name="editar" size={22} label="Renombrar" />
+                    </button>
+                    <button
+                      class="contexto-editar-btn"
                       title="Editar base de conocimiento (ir a Documentos)"
                       onclick={() => {
                         contextoSeleccionadoParaDocumentos = contexto.nombre;
@@ -6063,7 +6074,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             <p class="login-error">❌ {renombrarBcError}</p>
           {/if}
           <p style="font-size: 0.75rem; color: var(--fg-muted); margin: 0; line-height: 1.45;">
-            El identificador <code>{contextoSeleccionadoParaDocumentos}</code> no cambia: es lo que usan Chroma,
+            El identificador <code>{renombrarBcObjetivo}</code> no cambia: es lo que usan Chroma,
             los asistentes que la consultan y la carpeta de documentos. Por eso renombrar aquí no rompe nada.
             Déjalo vacío para volver a mostrar el identificador.
           </p>
