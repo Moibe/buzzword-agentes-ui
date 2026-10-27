@@ -73,6 +73,7 @@
     'desactivar':           { emoji: '🚫', iconify: 'ph:prohibit' },
     'reactivar':            { emoji: '✅', iconify: 'ph:check-circle' },
     'desplegar':            { emoji: '▾', iconify: 'ph:caret-down' },
+    'agregar':              { emoji: '➕', iconify: 'ph:plus-bold' },
   };
 
   let entry = $derived(ICONS[name]);

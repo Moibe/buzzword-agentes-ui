@@ -1835,6 +1835,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let cargandoIntegrarDocumento = $state(false);
   let progresoIntegrar = $state(0);
   let mensajeIntegrarDocumento = $state('');
+  // Desde dónde se lanzó la integración ('mas' = botón + de la lista, 'form' =
+  // tarjeta de abajo), para pintar el progreso y el resultado en ese lugar.
+  let integrarOrigen = $state('form');
+  let inputArchivoRapido = $state(null);
   let cargandoBorrarDocumento = $state(false);
   let mensajeBorrarDocumento = $state('');
   let mostrarConfirmacionBorrarDocumento = $state(false);
@@ -3266,6 +3270,17 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       localStorage.removeItem('mide_integracion_pendiente');
       integracionEnCurso = null;
     }
+  }
+
+  // Botón + de la lista de documentos: sube en cuanto se elige el archivo.
+  async function integrarDesdeBotonMas(e) {
+    const archivo = e.target.files?.[0];
+    e.target.value = ''; // permite volver a elegir el mismo archivo
+    if (!archivo) return;
+    integrarOrigen = 'mas';
+    archivoParaIntegrar = archivo;
+    await integrarDocumento();
+    archivoParaIntegrar = null;
   }
 
   // POST /agregarSnippet — agrega una Q&A corta sin subir PDF.
@@ -5445,7 +5460,30 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             <!-- Lista de documentos -->
             {#if contextoSeleccionadoParaDocumentos}
               <div class="documentos-list-wrap">
-                <h4>Documentos de la base de conocimiento: <strong>{nombreVisibleBc(contextoSeleccionadoParaDocumentos)}</strong></h4>
+                <div class="documentos-list-header">
+                  <h4>Documentos de la base de conocimiento: <strong>{nombreVisibleBc(contextoSeleccionadoParaDocumentos)}</strong></h4>
+                  <button
+                    type="button"
+                    class="documentos-agregar-btn"
+                    onclick={() => inputArchivoRapido?.click()}
+                    disabled={cargandoIntegrarDocumento}
+                    title="Integrar un documento nuevo"
+                    aria-label="Integrar un documento nuevo"
+                  ><Icon name="agregar" size={18} /></button>
+                  <input
+                    type="file"
+                    accept=".txt,.pdf,.doc,.docx"
+                    bind:this={inputArchivoRapido}
+                    onchange={integrarDesdeBotonMas}
+                    hidden
+                  />
+                </div>
+                {#if cargandoIntegrarDocumento && integrarOrigen === 'mas'}
+                  <div class="documentos-integrando">
+                    <span>⟳ Integrando <strong>{integracionEnCurso?.archivo ?? 'documento'}</strong>…</span>
+                    <div class="progreso-wrap"><div class="progreso-bar indeterminate"></div></div>
+                  </div>
+                {/if}
                 {#if cargandoVectorizacionDocumentos}
                   <p style="color: var(--fg-muted); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando documentos...</p>
                 {:else if vectorizacionDocumentos.length === 0}
@@ -5473,6 +5511,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   </div>
                 {/if}
               </div>
+              {#if mensajeIntegrarDocumento && integrarOrigen === 'mas'}
+                <p class="mensaje-documento" class:success={mensajeIntegrarDocumento.includes('✅')} style="margin-top: 0.5rem;">
+                  {mensajeIntegrarDocumento}
+                </p>
+              {/if}
               {#if mensajeBorrarDocumento}
                 <p class="mensaje-documento" class:success={mensajeBorrarDocumento.includes('✅')} style="margin-top: 0.5rem;">
                   {mensajeBorrarDocumento}
@@ -5503,7 +5546,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 {/if}
               </div>
               <button
-                onclick={integrarDocumento}
+                onclick={() => { integrarOrigen = 'form'; integrarDocumento(); }}
                 disabled={cargandoIntegrarDocumento || !contextoSeleccionadoParaDocumentos.trim() || !archivoParaIntegrar}
                 class="integrar-documento-btn"
               >
@@ -5511,6 +5554,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               </button>
             </div>
 
+            {#if integrarOrigen === 'form'}
             {#if cargandoIntegrarDocumento}
               <div class="progreso-wrap">
                 <div class="progreso-bar indeterminate"></div>
@@ -5520,8 +5564,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 <div class="progreso-bar done"></div>
               </div>
             {/if}
+            {/if}
 
-            {#if mensajeIntegrarDocumento}
+            {#if mensajeIntegrarDocumento && integrarOrigen === 'form'}
               <p class="mensaje-documento" class:success={mensajeIntegrarDocumento.includes('✅')}>
                 {mensajeIntegrarDocumento}
               </p>
@@ -9551,6 +9596,49 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     font-size: 0.95rem;
     margin-bottom: 1rem;
     font-weight: 600;
+  }
+
+  .documentos-list-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .documentos-list-wrap .documentos-list-header h4 {
+    margin: 0;
+  }
+
+  .documentos-agregar-btn {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: none;
+    border-radius: 8px;
+    background: var(--primary);
+    color: #fff;
+    cursor: pointer;
+    transition: filter 0.15s, opacity 0.15s;
+  }
+
+  .documentos-agregar-btn:hover:not(:disabled) {
+    filter: brightness(1.08);
+  }
+
+  .documentos-agregar-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .documentos-integrando {
+    margin-bottom: 0.75rem;
+    font-size: 0.85rem;
+    color: var(--fg-soft);
   }
 
   .documentos-table {
