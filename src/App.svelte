@@ -5486,12 +5486,13 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   <h4>Documentos de la base de conocimiento: <strong>{nombreVisibleBc(contextoSeleccionadoParaDocumentos)}</strong></h4>
                   <button
                     type="button"
-                    class="documentos-agregar-btn"
+                    class="documentos-agregar"
                     onclick={abrirIntegrarModal}
                     disabled={cargandoIntegrarDocumento}
-                    title="Integrar un documento nuevo"
-                    aria-label="Integrar un documento nuevo"
-                  ><Icon name="agregar" size={18} /></button>
+                  >
+                    <span class="documentos-agregar-texto">Agregar más documentos</span>
+                    <span class="documentos-agregar-btn"><Icon name="agregar" size={18} /></span>
+                  </button>
                 </div>
                 {#if cargandoVectorizacionDocumentos}
                   <p style="color: var(--fg-muted); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando documentos...</p>
@@ -9608,6 +9609,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   .documentos-list-header {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
@@ -9618,29 +9620,56 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     margin: 0;
   }
 
-  .documentos-agregar-btn {
+  /* Texto + cuadro azul forman un solo botón: el texto también abre el modal. */
+  .documentos-agregar {
+    all: unset;
+    box-sizing: border-box;
     flex-shrink: 0;
+    margin-left: auto; /* si el encabezado se parte en el celular, sigue a la derecha */
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+
+  .documentos-agregar:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 3px;
+    border-radius: 8px;
+  }
+
+  .documentos-agregar:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .documentos-agregar-texto {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--fg-soft);
+    white-space: nowrap;
+    transition: color 0.15s;
+  }
+
+  .documentos-agregar:hover:not(:disabled) .documentos-agregar-texto {
+    color: var(--primary);
+  }
+
+  .documentos-agregar-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     width: 34px;
     height: 34px;
-    padding: 0;
-    border: none;
     border-radius: 8px;
     background: var(--primary);
     color: #fff;
-    cursor: pointer;
-    transition: filter 0.15s, opacity 0.15s;
+    transition: filter 0.15s;
   }
 
-  .documentos-agregar-btn:hover:not(:disabled) {
+  .documentos-agregar:hover:not(:disabled) .documentos-agregar-btn {
     filter: brightness(1.08);
-  }
-
-  .documentos-agregar-btn:disabled {
-    opacity: 0.5;
-    cursor: default;
   }
   .documentos-table {
     display: flex;
