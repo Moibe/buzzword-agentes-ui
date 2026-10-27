@@ -1838,9 +1838,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let vinoDeActivarProyecto = $state(false);
   let vinoDeCambiarProyecto = $state(false);
   let crearContextoAbierto = $state(false);
-  let archivoParaIntegrar = $state(null);
   let cargandoIntegrarDocumento = $state(false);
-  let progresoIntegrar = $state(0);
   let mensajeIntegrarDocumento = $state('');
   // Modal que abre el botón + de la lista de documentos.
   let integrarModalAbierto = $state(false);
@@ -3190,108 +3188,124 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     }
   }
 
-  async function integrarDocumento() {
-    if (!contextoSeleccionadoParaDocumentos.trim()) {
-      mensajeIntegrarDocumento = '❌ Selecciona una base de conocimiento';
-      return;
+  // Cola del modal de integrar: varios PDFs que se suben UNO POR UNO, porque
+  // cada uno ocupa al server mientras lo procesa (OCR + embeddings).
+  // Estados: espera | subiendo | ok | duplicado | error.
+  let colaIntegrar = $state([]);
+  // Si cierran el modal a medias, el que va subiendo termina y el resto se descarta.
+  let colaIntegrarCancelada = false;
+  let colaIntegrarSiguienteId = 0;
+
+  // Sube un PDF y resuelve 'ok' o 'duplicado'; si falla, lanza Error.
+  function subirDocumento(archivo, contexto) {
+    const fetchUrl = `${apiUrl.base}/integrarDocumento?contexto=${encodeURIComponent(contexto)}`;
+
+    console.groupCollapsed(`%c📤 POST /integrarDocumento`, 'color:#0077ff;font-weight:bold;font-size:12px');
+    console.log('URL enviada :', `${apiUrl.real}/integrarDocumento`);
+    console.log('Contexto   :', contexto);
+    console.log('Archivo    :', archivo.name);
+    console.groupEnd();
+
+    const formData = new FormData();
+    formData.append('documento', archivo);
+
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', fetchUrl);
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          let data = null;
+          try { data = JSON.parse(xhr.responseText); } catch (_) {}
+          console.groupCollapsed(`%c📥 Respuesta /integrarDocumento`, 'color:#16a34a;font-weight:bold;font-size:12px');
+          console.log('Status      :', xhr.status);
+          console.log('Respuesta   :', data);
+          console.groupEnd();
+          // La API compara el hash del contenido y, si ya está en la base, no lo
+          // vuelve a integrar: responde 200 con duplicado=true.
+          const duplicado = data?.duplicado === true || /ya había sido integrado/i.test(data?.mensaje ?? '');
+          resolve(duplicado ? 'duplicado' : 'ok');
+        } else {
+          let detalle = xhr.responseText || '(sin detalles)';
+          try { detalle = JSON.parse(xhr.responseText).detail ?? detalle; } catch (_) {}
+          reject(new Error(`HTTP ${xhr.status}: ${detalle}`));
+        }
+      };
+
+      xhr.onerror = () => reject(new Error('Error de red al enviar el archivo'));
+      xhr.send(formData);
+    });
+  }
+
+  function resumenCola(cola) {
+    const cuenta = (estado) => cola.filter((i) => i.estado === estado).length;
+    const ok = cuenta('ok'), dup = cuenta('duplicado'), err = cuenta('error'), omitidos = cuenta('espera');
+    if (cola.length === 1) {
+      const nombre = cola[0].archivo.name;
+      if (ok) return `✅ Documento "${nombre}" integrado exitosamente`;
+      if (dup) return `⚠️ "${nombre}" ya estaba en esta base de conocimiento (mismo contenido). No se volvió a integrar.`;
+      if (err) return `❌ Error al integrar "${nombre}": ${cola[0].detalle}`;
     }
-    if (!archivoParaIntegrar) {
-      mensajeIntegrarDocumento = '❌ Selecciona un archivo';
-      return;
-    }
+    const partes = [];
+    if (ok) partes.push(`${ok} ${ok === 1 ? 'integrado' : 'integrados'}`);
+    if (dup) partes.push(`${dup} ya ${dup === 1 ? 'estaba' : 'estaban'} en la base`);
+    if (err) partes.push(`${err} con error`);
+    if (omitidos) partes.push(`${omitidos} sin subir (se cerró la ventana)`);
+    const icono = err ? '❌' : (dup || omitidos) ? '⚠️' : '✅';
+    return `${icono} Documentos: ${partes.join(', ')}.`;
+  }
+
+  async function integrarCola() {
+    const contexto = contextoSeleccionadoParaDocumentos;
+    if (!contexto.trim() || !colaIntegrar.some((i) => i.estado === 'espera')) return;
 
     cargandoIntegrarDocumento = true;
-    progresoIntegrar = 0;
+    colaIntegrarCancelada = false;
     mensajeIntegrarDocumento = '';
+    const cola = colaIntegrar;
 
-    // Guardar en localStorage que hay una integración en curso
-    const infoIntegracion = {
-      archivo: archivoParaIntegrar.name,
-      contexto: contextoSeleccionadoParaDocumentos,
-      inicio: new Date().toISOString()
-    };
-    localStorage.setItem('mide_integracion_pendiente', JSON.stringify(infoIntegracion));
-    integracionEnCurso = infoIntegracion;
-
-    try {
-      const formData = new FormData();
-      formData.append('documento', archivoParaIntegrar);
-
-      const fetchUrl = `${apiUrl.base}/integrarDocumento?contexto=${encodeURIComponent(contextoSeleccionadoParaDocumentos)}`;
-
-      console.groupCollapsed(`%c📤 POST /integrarDocumento`, 'color:#0077ff;font-weight:bold;font-size:12px');
-      console.log('URL enviada :', `${apiUrl.real}/integrarDocumento`);
-      console.log('Contexto   :', contextoSeleccionadoParaDocumentos);
-      console.log('Archivo    :', archivoParaIntegrar.name);
-      console.groupEnd();
-
-      const nombreArchivo = archivoParaIntegrar.name;
-      // La API compara el hash del contenido y, si ya está en la base, no lo
-      // vuelve a integrar: responde 200 con duplicado=true.
-      let duplicado = false;
-
-      await new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', fetchUrl);
-
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) {
-            progresoIntegrar = Math.round((e.loaded / e.total) * 100);
-          }
-        };
-
-        xhr.onload = () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            progresoIntegrar = 100;
-            try {
-              const data = JSON.parse(xhr.responseText);
-              console.groupCollapsed(`%c📥 Respuesta /integrarDocumento`, 'color:#16a34a;font-weight:bold;font-size:12px');
-              console.log('Status      :', xhr.status);
-              console.log('Respuesta   :', data);
-              console.groupEnd();
-              duplicado = data?.duplicado === true || /ya había sido integrado/i.test(data?.mensaje ?? '');
-            } catch (_) {}
-            resolve();
-          } else {
-            reject(new Error(`HTTP ${xhr.status}: ${xhr.responseText || '(sin detalles)'}`))
-          }
-        };
-
-        xhr.onerror = () => reject(new Error('Error de red al enviar el archivo'));
-        xhr.send(formData);
-      });
-
-      mensajeIntegrarDocumento = duplicado
-        ? `⚠️ "${nombreArchivo}" ya estaba en esta base de conocimiento (mismo contenido). No se volvió a integrar.`
-        : `✅ Documento "${nombreArchivo}" integrado exitosamente`;
-      archivoParaIntegrar = null;
-      localStorage.removeItem('mide_integracion_pendiente');
-      integracionEnCurso = null;
-
-      // Recarga la lista después de 1 segundo
-      setTimeout(() => {
-        cargarDocumentosVectorizacion(contextoSeleccionadoParaDocumentos);
-      }, 1000);
-
-    } catch (err) {
-      console.error('%c❌ Error al integrar documento', 'color:red;font-weight:bold', err);
-      mensajeIntegrarDocumento = `❌ Error: ${err.message}`;
-    } finally {
-      cargandoIntegrarDocumento = false;
-      localStorage.removeItem('mide_integracion_pendiente');
-      integracionEnCurso = null;
+    for (const item of cola) {
+      if (colaIntegrarCancelada) break;
+      if (item.estado !== 'espera') continue;
+      item.estado = 'subiendo';
+      // Banner de "integración en curso" si recargan la página a media subida.
+      const info = { archivo: item.archivo.name, contexto, inicio: new Date().toISOString() };
+      localStorage.setItem('mide_integracion_pendiente', JSON.stringify(info));
+      integracionEnCurso = info;
+      try {
+        item.estado = await subirDocumento(item.archivo, contexto);
+      } catch (err) {
+        console.error('%c❌ Error al integrar documento', 'color:red;font-weight:bold', err);
+        item.estado = 'error';
+        item.detalle = err.message;
+      }
     }
+
+    localStorage.removeItem('mide_integracion_pendiente');
+    integracionEnCurso = null;
+    cargandoIntegrarDocumento = false;
+    mensajeIntegrarDocumento = resumenCola(cola);
+    if (contexto === contextoSeleccionadoParaDocumentos) cargarDocumentosVectorizacion(contexto);
+
+    // Si todo entró, se cierra solo y el resumen queda en la tarjeta; con
+    // duplicados o errores se queda abierto con el detalle de cada archivo.
+    if (cola.every((i) => i.estado === 'ok')) integrarModalAbierto = false;
   }
 
   function abrirIntegrarModal() {
-    archivoParaIntegrar = null;
+    colaIntegrar = [];
     mensajeIntegrarDocumento = '';
-    progresoIntegrar = 0;
     integrarModalAbierto = true;
   }
 
   function cerrarIntegrarModal() {
-    if (cargandoIntegrarDocumento) return;
+    if (cargandoIntegrarDocumento) {
+      // El que va subiendo termina; los que siguen en espera ya no se suben.
+      // Al acabar, integrarCola deja el resumen en la tarjeta.
+      colaIntegrarCancelada = true;
+      integrarModalAbierto = false;
+      return;
+    }
     integrarModalAbierto = false;
     mensajeIntegrarDocumento = '';
   }
@@ -3299,23 +3313,19 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   // La ingesta es sólo PDF: el backend carga todo con UnstructuredPDFLoader
   // (generacion_aumentada.py) y cualquier otro formato truena con un 500
   // confuso. El texto suelto entra por Agregar Snippet.
-  function elegirArchivoParaIntegrar(e) {
-    const archivo = e.target.files?.[0] ?? null;
-    mensajeIntegrarDocumento = '';
-    if (archivo && !archivo.name.toLowerCase().endsWith('.pdf')) {
-      archivoParaIntegrar = null;
-      e.target.value = '';
-      mensajeIntegrarDocumento = '❌ Sólo se pueden integrar archivos PDF. Para texto suelto usa Agregar Snippet.';
-      return;
-    }
-    archivoParaIntegrar = archivo;
+  function elegirArchivosParaIntegrar(e) {
+    const archivos = [...(e.target.files ?? [])];
+    e.target.value = ''; // permite volver a elegir los mismos
+    const pdfs = archivos.filter((a) => a.name.toLowerCase().endsWith('.pdf'));
+    const rechazados = archivos.length - pdfs.length;
+    mensajeIntegrarDocumento = rechazados
+      ? `❌ ${rechazados === 1 ? 'Se descartó 1 archivo que no es PDF' : `Se descartaron ${rechazados} archivos que no son PDF`}. Sólo se pueden integrar PDF; para texto suelto usa Agregar Snippet.`
+      : '';
+    colaIntegrar = pdfs.map((archivo) => ({ id: ++colaIntegrarSiguienteId, archivo, estado: 'espera', detalle: '' }));
   }
 
-  async function integrarDesdeModal() {
-    await integrarDocumento();
-    // Con éxito se cierra y el aviso queda en la tarjeta, junto al documento
-    // nuevo; con error se queda abierto para reintentar.
-    if (mensajeIntegrarDocumento.startsWith('✅')) integrarModalAbierto = false;
+  function quitarDeColaIntegrar(id) {
+    colaIntegrar = colaIntegrar.filter((i) => i.id !== id);
   }
 
   // POST /agregarSnippet — agrega una Q&A corta sin subir PDF.
@@ -5536,6 +5546,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   </div>
                 {/if}
               </div>
+              {#if cargandoIntegrarDocumento && !integrarModalAbierto}
+                <p style="margin: 0.5rem 0 0; font-size: 0.85rem; color: var(--fg-soft);">
+                  ⟳ Terminando de integrar <strong>{integracionEnCurso?.archivo ?? 'el documento en curso'}</strong>; los demás ya no se subirán.
+                </p>
+              {/if}
               {#if mensajeIntegrarDocumento && !integrarModalAbierto}
                 <p class="mensaje-documento" class:success={mensajeIntegrarDocumento.includes('✅')} class:aviso={mensajeIntegrarDocumento.startsWith('⚠️')} style="margin-top: 0.5rem;">
                   {mensajeIntegrarDocumento}
@@ -6116,31 +6131,60 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   {#if integrarModalAbierto}
     <div class="modal-overlay" onclick={cerrarIntegrarModal} role="presentation">
       <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 500px;">
-        <h3>Integrar documento a {nombreVisibleBc(contextoSeleccionadoParaDocumentos)}</h3>
+        <h3>Integrar documentos a {nombreVisibleBc(contextoSeleccionadoParaDocumentos)}</h3>
         <p style="font-size: 0.88rem; line-height: 1.5;">
-          Sólo archivos PDF. Para meter una pregunta con su respuesta sin PDF, usa <strong>Agregar Snippet</strong>.
+          Sólo archivos PDF; puedes elegir varios a la vez. Para meter una pregunta con su respuesta sin PDF, usa <strong>Agregar Snippet</strong>.
         </p>
         <form
-          onsubmit={(e) => { e.preventDefault(); integrarDesdeModal(); }}
+          onsubmit={(e) => { e.preventDefault(); integrarCola(); }}
           style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.75rem;"
         >
           <input
             id="doc-archivo"
             type="file"
             accept=".pdf,application/pdf"
-            onchange={elegirArchivoParaIntegrar}
+            multiple
+            onchange={elegirArchivosParaIntegrar}
             disabled={cargandoIntegrarDocumento}
             class="documento-input"
           />
-          {#if archivoParaIntegrar}
-            <small style="color: var(--fg-soft); font-size: 0.78rem;">
-              {archivoParaIntegrar.name} ({(archivoParaIntegrar.size / 1024).toFixed(2)} KB)
-            </small>
+          {#if colaIntegrar.length > 0}
+            <ul class="cola-integrar">
+              {#each colaIntegrar as item (item.id)}
+                <li class="cola-integrar-item" data-estado={item.estado}>
+                  <div class="cola-integrar-fila">
+                    <span class="cola-integrar-nombre" title={item.archivo.name}>{item.archivo.name}</span>
+                    <span class="cola-integrar-estado">
+                      {#if item.estado === 'espera'}{(item.archivo.size / 1024).toFixed(0)} KB
+                      {:else if item.estado === 'subiendo'}⟳ Integrando…
+                      {:else if item.estado === 'ok'}✅ Integrado
+                      {:else if item.estado === 'duplicado'}⚠️ Ya estaba
+                      {:else}❌ Error{/if}
+                    </span>
+                    {#if item.estado === 'espera' && !cargandoIntegrarDocumento}
+                      <button
+                        type="button"
+                        class="cola-integrar-quitar"
+                        onclick={() => quitarDeColaIntegrar(item.id)}
+                        title="Quitar de la lista"
+                        aria-label={`Quitar ${item.archivo.name}`}
+                      >✕</button>
+                    {/if}
+                  </div>
+                  {#if item.estado === 'error'}
+                    <div class="cola-integrar-detalle">{item.detalle}</div>
+                  {/if}
+                </li>
+              {/each}
+            </ul>
           {/if}
           {#if cargandoIntegrarDocumento}
             <div class="progreso-wrap" style="margin: 0;">
               <div class="progreso-bar indeterminate"></div>
             </div>
+            <p style="margin: 0; font-size: 0.75rem; color: var(--fg-muted); line-height: 1.45;">
+              Se suben uno por uno. Si cierras esta ventana, termina el que va en curso y los demás ya no se suben.
+            </p>
           {/if}
           {#if mensajeIntegrarDocumento}
             <p class="mensaje-documento" class:success={mensajeIntegrarDocumento.includes('✅')} class:aviso={mensajeIntegrarDocumento.startsWith('⚠️')} style="margin: 0;">
@@ -6148,11 +6192,16 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             </p>
           {/if}
           <div class="modal-buttons" style="margin-top: 0.25rem;">
-            <button type="button" onclick={cerrarIntegrarModal} disabled={cargandoIntegrarDocumento} class="modal-btn cancel">
-              Cancelar
+            <button type="button" onclick={cerrarIntegrarModal} class="modal-btn cancel">
+              {cargandoIntegrarDocumento ? 'Cerrar' : 'Cancelar'}
             </button>
-            <button type="submit" disabled={cargandoIntegrarDocumento || !archivoParaIntegrar} class="modal-btn confirm">
-              {cargandoIntegrarDocumento ? '⟳ Integrando...' : '✓ Integrar'}
+            <button type="submit" disabled={cargandoIntegrarDocumento || !colaIntegrar.some((i) => i.estado === 'espera')} class="modal-btn confirm">
+              {#if cargandoIntegrarDocumento}
+                ⟳ {colaIntegrar.filter((i) => i.estado !== 'espera').length} de {colaIntegrar.length}…
+              {:else}
+                {@const n = colaIntegrar.filter((i) => i.estado === 'espera').length}
+                ✓ Integrar{n > 1 ? ` ${n}` : ''}
+              {/if}
             </button>
           </div>
         </form>
@@ -9945,6 +9994,74 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     color: var(--warn);
     background: var(--warn-bg);
     border-left-color: var(--warn-border);
+  }
+
+  .cola-integrar {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 240px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+
+  .cola-integrar-item {
+    padding: 0.5rem 0.75rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.82rem;
+  }
+
+  .cola-integrar-item:first-child {
+    border-top: none;
+  }
+
+  .cola-integrar-item[data-estado='subiendo'] {
+    background: var(--surface-2);
+  }
+
+  .cola-integrar-fila {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .cola-integrar-nombre {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--fg);
+  }
+
+  .cola-integrar-estado {
+    flex-shrink: 0;
+    color: var(--fg-muted);
+    font-size: 0.78rem;
+  }
+
+  .cola-integrar-item[data-estado='ok'] .cola-integrar-estado { color: var(--ok); }
+  .cola-integrar-item[data-estado='duplicado'] .cola-integrar-estado { color: var(--warn); }
+  .cola-integrar-item[data-estado='error'] .cola-integrar-estado { color: var(--danger-fg); }
+
+  .cola-integrar-quitar {
+    all: unset;
+    cursor: pointer;
+    color: var(--fg-muted);
+    padding: 0 0.25rem;
+    font-size: 0.8rem;
+  }
+
+  .cola-integrar-quitar:hover {
+    color: var(--danger-fg);
+  }
+
+  .cola-integrar-detalle {
+    margin-top: 0.3rem;
+    color: var(--danger-fg);
+    font-size: 0.75rem;
+    word-break: break-word;
   }
 
   /* ── Modelos Section ───────────────────────────── */
