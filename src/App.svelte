@@ -2354,6 +2354,103 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     resetAsistenteForm();
   }
 
+  // ─── Clonar asistente ───────────────────────────────────────────
+  // Copia todo salvo la identidad: el slug es UNIQUE global (lo usa la URL del
+  // widget) y el id lo pone la API.
+  let clonandoAsistenteId = $state('');
+  let mensajeClonar = $state('');
+
+  function slugParaClon(slugOriginal, intento) {
+    // Al clonar un clon no se encadena "-copia-copia": se reusa la base.
+    const base = slugOriginal.replace(/-copia(-\d+)?$/, '');
+    const sufijo = intento === 1 ? '-copia' : `-copia-${intento}`;
+    // El slug no puede pasar de 64 caracteres (SLUG_REGEX).
+    return `${base.slice(0, 64 - sufijo.length)}${sufijo}`;
+  }
+
+  function nombreParaClon(nombreOriginal, intento) {
+    // Mismo criterio que el slug, para que nombre y slug digan lo mismo:
+    // "ARIA (copia 2)" ↔ "aria-copia-2", en vez de "ARIA (copia) (copia)".
+    const base = nombreOriginal.replace(/\s*\(copia(\s+\d+)?\)$/i, '').trim();
+    const sufijo = intento === 1 ? ' (copia)' : ` (copia ${intento})`;
+    return `${base.slice(0, 80 - sufijo.length)}${sufijo}`;
+  }
+
+  async function clonarAsistente(asistente) {
+    if (clonandoAsistenteId) return;
+    clonandoAsistenteId = asistente.id;
+    mensajeClonar = '';
+
+    // Todo lo copiable, incluido el Look and Feel, en un solo POST.
+    const base = {
+      instrucciones: asistente.instrucciones,
+      contexto: asistente.contexto || null,
+      modelo_llm: asistente.modelo_llm,
+      historial_max: asistente.historial_max,
+      top_k: asistente.top_k ?? 1,
+      mensaje_inicial: asistente.mensaje_inicial ?? null,
+      proyecto_id: asistente.proyecto_id,
+      color_primario: asistente.color_primario ?? null,
+      color_burbuja_bot: asistente.color_burbuja_bot ?? null,
+      color_fondo_chat: asistente.color_fondo_chat ?? null,
+      color_header: asistente.color_header ?? null,
+      color_avatar: asistente.color_avatar ?? null,
+      color_boton_enviar: asistente.color_boton_enviar ?? null,
+      color_texto_header: asistente.color_texto_header ?? null,
+      color_icono: asistente.color_icono ?? null,
+      color_icono_boton: asistente.color_icono_boton ?? null,
+      icono_url: asistente.icono_url ?? null,
+    };
+
+    try {
+      let creado = null;
+      let ultimoError = '';
+      // El slug choca con los de CUALQUIER proyecto, no sólo con los de la
+      // lista a la vista, así que el 409 se reintenta con el siguiente sufijo.
+      for (let intento = 1; intento <= 20 && !creado; intento++) {
+        const res = await fetch(`${apiUrl.base}/agentes`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...adminHeaders() },
+          body: JSON.stringify({
+            ...base,
+            slug: slugParaClon(asistente.slug, intento),
+            nombre: nombreParaClon(asistente.nombre, intento),
+          }),
+        });
+        if (res.ok) {
+          creado = await res.json();
+          break;
+        }
+        if (res.status === 409) continue;
+        const txt = await res.text().catch(() => '');
+        let msg = txt;
+        try {
+          const j = JSON.parse(txt);
+          msg = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail ?? j);
+        } catch {}
+        ultimoError = `HTTP ${res.status}: ${msg}`;
+        break;
+      }
+
+      if (!creado) {
+        mensajeClonar = `❌ No se pudo clonar: ${ultimoError || 'ya hay demasiadas copias de este asistente.'}`;
+        return;
+      }
+
+      // Se inserta justo debajo del original en vez de recargar, porque la API
+      // devuelve la lista por fecha de creación descendente y el clon saltaría
+      // hasta arriba.
+      const posicion = asistentes.findIndex((a) => a.id === asistente.id);
+      if (posicion === -1) asistentes.push(creado);
+      else asistentes.splice(posicion + 1, 0, creado);
+      mensajeClonar = `✅ Se creó "${creado.nombre}" (${creado.slug}) como copia de "${asistente.nombre}".`;
+    } catch (err) {
+      mensajeClonar = `❌ No se pudo clonar: ${err.message}`;
+    } finally {
+      clonandoAsistenteId = '';
+    }
+  }
+
   async function cargarAsistentes() {
     cargandoAsistentes = true;
     errorCargarAsistentes = '';
@@ -4781,6 +4878,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             {#if errorCargarAsistentes}
               <p class="mensaje-contexto" style="margin-top: 0.5rem;">❌ {errorCargarAsistentes}</p>
             {/if}
+            {#if mensajeClonar}
+              <p class="mensaje-contexto" class:success={mensajeClonar.includes('✅')} style="margin-top: 0.5rem;">
+                {mensajeClonar}
+              </p>
+            {/if}
             {#if cargandoAsistentes}
               <p style="color: var(--fg-muted); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando asistentes...</p>
             {:else if asistentes.length === 0}
@@ -4827,6 +4929,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     </div>
                     <div style="display: flex; gap: 0.4rem; flex-shrink: 0;">
                       <button onclick={() => abrirLookAndFeel(asistente)} class="vectorizacion-action-btn" title="Look and Feel"><Icon name="look-and-feel" size={16} label="Look and Feel" /></button>
+                      <button
+                        onclick={() => clonarAsistente(asistente)}
+                        disabled={!!clonandoAsistenteId}
+                        class="vectorizacion-action-btn"
+                        title="Clonar asistente (crea una copia idéntica)"
+                      >
+                        {#if clonandoAsistenteId === asistente.id}⟳{:else}<Icon name="clonar" size={16} label="Clonar" />{/if}
+                      </button>
                       <button onclick={() => abrirFormEditarAsistente(asistente)} class="vectorizacion-action-btn" title="Editar asistente"><Icon name="editar" size={16} label="Editar" /></button>
                       <button onclick={() => pedirConfirmacionBorrarAsistente(asistente)} class="vectorizacion-action-btn" title="Borrar asistente"><Icon name="borrar" size={16} label="Borrar" /></button>
                     </div>

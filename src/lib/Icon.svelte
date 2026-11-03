@@ -74,6 +74,7 @@
     'reactivar':            { emoji: '✅', iconify: 'ph:check-circle' },
     'desplegar':            { emoji: '▾', iconify: 'ph:caret-down' },
     'agregar':              { emoji: '➕', iconify: 'ph:plus-bold' },
+    'clonar':               { emoji: '📑', iconify: 'ph:copy' },
   };
 
   let entry = $derived(ICONS[name]);
