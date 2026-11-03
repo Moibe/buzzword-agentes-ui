@@ -240,7 +240,7 @@
     <div class="embed-header-info">
       <span class="embed-title">{asistente?.nombre ?? 'Asistente'}</span>
       {#if asistente}
-        <span class="embed-context">{asistente.contexto}</span>
+        <span class="embed-context">{asistente.contexto_nombre_visible || asistente.contexto}</span>
       {/if}
     </div>
   </header>
