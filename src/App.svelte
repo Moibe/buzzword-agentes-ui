@@ -4891,8 +4891,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.5rem;">
                 {#each asistentes as asistente (asistente.id)}
                   {@const asistenteEmbedUrl = `${hostAsistentesBase}/embed/chat/${encodeURIComponent(asistente.slug)}`}
-                  <div style="background: var(--muted); border-radius: 8px; padding: 1rem; display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;">
-                    <div style="flex: 1; min-width: 0;">
+                  <div class="asistente-fila">
+                    <div class="asistente-info">
                       <div style="display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap;">
                         {#if asistente.slug === lightbotAsistenteSlug}
                           <span title="Default del Lightbot" style="color: var(--warn); display: inline-flex; align-items: center;">
@@ -4927,7 +4927,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                         </button>
                       </div>
                     </div>
-                    <div style="display: flex; gap: 0.4rem; flex-shrink: 0;">
+                    <div class="asistente-acciones">
                       <button onclick={() => abrirLookAndFeel(asistente)} class="vectorizacion-action-btn" title="Look and Feel"><Icon name="look-and-feel" size={16} label="Look and Feel" /></button>
                       <button
                         onclick={() => clonarAsistente(asistente)}
@@ -5536,34 +5536,36 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     {#if tieneNombrePropio(contexto.nombre)}
                       <code class="bc-id-real" title="Identificador real, el que usan Chroma y los asistentes">{contexto.nombre}</code>
                     {/if}
-                    <button
-                      class="contexto-editar-btn"
-                      title="Cambiar el nombre"
-                      aria-label="Renombrar base de conocimiento"
-                      onclick={() => abrirRenombrarBc(contexto.nombre)}
-                    >
-                      <Icon name="editar" size={22} label="Renombrar" />
-                    </button>
-                    <button
-                      class="contexto-editar-btn"
-                      title="Editar base de conocimiento (ir a Documentos)"
-                      onclick={() => {
-                        contextoSeleccionadoParaDocumentos = contexto.nombre;
-                        vinoDeEditarContexto = true;
-                        vectorizacionTab = 'documentos';
-                        cargarDocumentosVectorizacion(contexto.nombre);
-                      }}
-                    >
-                      <Icon name="documentos" size={22} label="Editar" />
-                    </button>
-                    <button
-                      class="contexto-borrar-btn"
-                      title="Borrar base de conocimiento"
-                      disabled={cargandoBorrarContexto}
-                      onclick={() => { contextoABorrar = contexto.nombre; mostrarConfirmacionBorrar = true; }}
-                    >
-                      <Icon name="borrar" size={22} label="Borrar" />
-                    </button>
+                    <div class="contexto-acciones">
+                      <button
+                        class="contexto-editar-btn"
+                        title="Cambiar el nombre"
+                        aria-label="Renombrar base de conocimiento"
+                        onclick={() => abrirRenombrarBc(contexto.nombre)}
+                      >
+                        <Icon name="editar" size={22} label="Renombrar" />
+                      </button>
+                      <button
+                        class="contexto-editar-btn"
+                        title="Editar base de conocimiento (ir a Documentos)"
+                        onclick={() => {
+                          contextoSeleccionadoParaDocumentos = contexto.nombre;
+                          vinoDeEditarContexto = true;
+                          vectorizacionTab = 'documentos';
+                          cargarDocumentosVectorizacion(contexto.nombre);
+                        }}
+                      >
+                        <Icon name="documentos" size={22} label="Editar" />
+                      </button>
+                      <button
+                        class="contexto-borrar-btn"
+                        title="Borrar base de conocimiento"
+                        disabled={cargandoBorrarContexto}
+                        onclick={() => { contextoABorrar = contexto.nombre; mostrarConfirmacionBorrar = true; }}
+                      >
+                        <Icon name="borrar" size={22} label="Borrar" />
+                      </button>
+                    </div>
                   </div>
                 {/each}
               </div>
@@ -5589,7 +5591,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           {/if}
           <div class="documentos-wrap">
             <div class="seccion-header">
-              <div style="display: flex; align-items: center; gap: 0.75rem;">
+              <div class="bc-detalle-cabecera">
                 <button
                   class="bc-detalle-volver-btn"
                   onclick={() => { vectorizacionTab = 'contextos'; vinoDeEditarContexto = false; }}
@@ -11460,5 +11462,55 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     .tab-btn { font-size: 0; gap: 0; padding: 0.55rem; }
     /* el ojo de "vista usuario" es un emoji de texto, no un <Icon>: sin esto desaparece */
     .tab-btn.vista-usuario-toggle { font-size: 1rem; }
+  }
+
+  /* ── Teléfono: filas y encabezados que no caben ────────────────────────
+     Las filas envuelven por contenido, no por breakpoint: el texto pide un
+     ancho mínimo y los botones pasan debajo cuando ya no caben a su lado. */
+  .asistente-fila {
+    background: var(--muted);
+    border-radius: 8px;
+    padding: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 0.75rem 1rem;
+  }
+  .asistente-info { flex: 1 1 14rem; min-width: 0; }
+  .asistente-acciones { display: flex; gap: 0.4rem; flex-shrink: 0; margin-left: auto; }
+  .contexto-acciones { display: flex; align-items: center; flex-shrink: 0; margin-left: auto; }
+  .bc-detalle-cabecera { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; min-width: 0; }
+  .bc-renombrar-btn { flex-shrink: 0; }
+
+  @media (max-width: 560px) {
+    /* el título del encabezado puede partirse en dos líneas en vez de empujar
+       el botón de recargar fuera de la tarjeta */
+    .seccion-header { flex-wrap: wrap; gap: 0.5rem 0.75rem; }
+    .seccion-header h3 { white-space: normal; flex: 1 1 6.5rem; min-width: min-content; }
+    .seccion-header .bc-detalle-cabecera { flex: 1 1 10rem; }
+    /* grupos de botones del encabezado (Operadores, Registros...): envuelven en vez de salirse */
+    .seccion-header > div { flex-wrap: wrap; }
+    .seccion-header .contextos-recargar-btn { align-self: flex-start; }
+    .asistente-acciones { gap: 0.25rem; }
+    /* "← Bases de Conocimiento" (185px) no cabe junto al recargar a 320px: que baje de línea */
+    .bc-detalle-volver-btn { white-space: normal; flex-shrink: 1; text-align: left; }
+    .contexto-row { flex-wrap: wrap; gap: 0.25rem 0.5rem; }
+    .contexto-nombre { flex: 1 1 5.5rem; min-width: 0; overflow-wrap: anywhere; }
+  }
+
+  /* Botones de ícono de esas filas: 44px donde hay dedo o la pantalla es angosta */
+  @media (pointer: coarse), (max-width: 560px) {
+    .asistente-acciones .vectorizacion-action-btn,
+    .seccion-header .contextos-recargar-btn,
+    .contexto-acciones button,
+    .bc-renombrar-btn,
+    .bc-detalle-volver-btn {
+      min-width: 44px;
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
   }
 </style>
