@@ -1,6 +1,12 @@
 import { resolve } from 'path';
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
+
+// PORT y API_PORT salen del .env del checkout (default prod: UI 4175/4176, API 8077),
+// para poder correr un entorno dev con otros puertos en el mismo servidor.
+const env = loadEnv('', process.cwd(), '');
+const PORT = Number(env.PORT) || 4175;
+const API_PORT = Number(env.API_PORT) || 8077;
 
 // El admin y sus widgets bundleados llaman al API por ruta relativa
 // (/api/...) en vez de host:8077 directo — ver App.svelte/Embed.svelte/
@@ -9,7 +15,7 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 // `vite preview`).
 const apiProxy = {
   '/api': {
-    target: 'http://127.0.0.1:8077',
+    target: `http://127.0.0.1:${API_PORT}`,
     changeOrigin: true,
     rewrite: (path) => path.replace(/^\/api/, ''),
   },
@@ -27,12 +33,12 @@ export default defineConfig({
     },
   },
   server: {
-    port: 4175,
+    port: PORT,
     host: true,
     proxy: apiProxy,
   },
   preview: {
-    port: 4175,
+    port: PORT,
     host: true,
     proxy: apiProxy,
   },
