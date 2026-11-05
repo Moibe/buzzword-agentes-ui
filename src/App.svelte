@@ -1,6 +1,7 @@
 <script>
   import { tick, onMount, untrack } from 'svelte';
   import Icon from './lib/Icon.svelte';
+  import { modal } from './lib/modal.js';
 
   // ─── Sesión & Logs ───────────────────────────────────────────────
   function generateSessionId() {
@@ -1714,13 +1715,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     renombrarBcAbierto = true;
   }
 
-  // Esc cierra el modal de renombrar, salvo mientras guarda (igual que el clic fuera).
-  function cerrarRenombrarBcConEsc(e) {
-    if (e.key === 'Escape' && renombrarBcAbierto && !renombrarBcGuardando) {
-      renombrarBcAbierto = false;
-    }
-  }
-
   async function guardarNombreBc() {
     const objetivo = renombrarBcObjetivo;
     if (!objetivo) return;
@@ -1872,6 +1866,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   // filename y nuevo contenido — la API hace upsert).
   let documentoVisualizar = $state(null); // { contexto, filename, contenido }
   let documentoEditando = $state(false);
+  // Confirmación genérica (sustituye al confirm() nativo del navegador): { titulo, mensaje, confirmar, alConfirmar }
+  let confirmacion = $state(null);
   let documentoBorrador = $state('');
   let cargandoGuardarEdicion = $state(false);
   let mensajeEdicion = $state('');
@@ -3549,12 +3545,28 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     batchPreguntas = batchPreguntas.filter(p => p.id !== id);
   }
 
+  function pedirConfirmacion(opciones) {
+    confirmacion = opciones;
+  }
+
+  function resolverConfirmacion(acepta) {
+    const actual = confirmacion;
+    confirmacion = null;
+    if (acepta && actual) actual.alConfirmar();
+  }
+
   function limpiarBatch() {
     if (!batchPreguntas.length) return;
-    if (!window.confirm(`Borrar las ${batchPreguntas.length} preguntas pendientes?`)) return;
-    batchPreguntas = [];
-    batchResultados = null;
-    cancelarFormPregunta();
+    pedirConfirmacion({
+      titulo: 'Borrar preguntas pendientes',
+      mensaje: batchPreguntas.length === 1 ? '¿Borrar la pregunta pendiente?' : `¿Borrar las ${batchPreguntas.length} preguntas pendientes?`,
+      confirmar: 'Sí, borrar',
+      alConfirmar: () => {
+        batchPreguntas = [];
+        batchResultados = null;
+        cancelarFormPregunta();
+      },
+    });
   }
 
   async function integrarPreguntasBatch() {
@@ -3636,26 +3648,40 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   function cancelarEdicionSnippet() {
     if (!documentoVisualizar) return;
-    const haCambios = documentoBorrador !== documentoVisualizar.contenido;
-    if (haCambios && !window.confirm('Tienes cambios sin guardar. ¿Descartar la edición?')) {
+    const salirDeEdicion = () => {
+      documentoEditando = false;
+      documentoBorrador = '';
+      mensajeEdicion = '';
+    };
+    if (documentoBorrador !== documentoVisualizar.contenido) {
+      pedirConfirmacion({
+        titulo: 'Cambios sin guardar',
+        mensaje: 'Tienes cambios sin guardar. ¿Descartar la edición?',
+        confirmar: 'Descartar',
+        alConfirmar: salirDeEdicion,
+      });
       return;
     }
-    documentoEditando = false;
-    documentoBorrador = '';
-    mensajeEdicion = '';
+    salirDeEdicion();
   }
 
   function cerrarModalDocumento() {
-    if (documentoEditando) {
-      const haCambios = documentoBorrador !== documentoVisualizar?.contenido;
-      if (haCambios && !window.confirm('Tienes cambios sin guardar. ¿Descartar la edición y cerrar?')) {
-        return;
-      }
+    const cerrar = () => {
+      documentoVisualizar = null;
+      documentoEditando = false;
+      documentoBorrador = '';
+      mensajeEdicion = '';
+    };
+    if (documentoEditando && documentoBorrador !== documentoVisualizar?.contenido) {
+      pedirConfirmacion({
+        titulo: 'Cambios sin guardar',
+        mensaje: 'Tienes cambios sin guardar. ¿Descartar la edición y cerrar?',
+        confirmar: 'Descartar y cerrar',
+        alConfirmar: cerrar,
+      });
+      return;
     }
-    documentoVisualizar = null;
-    documentoEditando = false;
-    documentoBorrador = '';
-    mensajeEdicion = '';
+    cerrar();
   }
 
   async function guardarEdicionSnippet() {
@@ -4003,8 +4029,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 </script>
 
-<svelte:window onkeydown={cerrarRenombrarBcConEsc} />
-
 <div class="app" class:vectorizacion={activeTab === 'vectorizacion'} class:admin={activeTab === 'admin'}>
 
 {#if adminMensaje}
@@ -4094,7 +4118,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   <!-- Login de operador -->
   {#if loginAbierto}
     <div class="modal-overlay" onclick={() => { if (!loginCargando) cerrarLogin(); }} role="presentation">
-      <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 420px;">
+      <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 420px;" use:modal>
         <h3><Icon name="api-keys" size={18} /> Entrar</h3>
         <form
           onsubmit={(e) => { e.preventDefault(); iniciarSesion(); }}
@@ -4125,7 +4149,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           />
 
           {#if loginError}
-            <p class="login-error">❌ {loginError}</p>
+            <p class="login-error" role="alert">❌ {loginError}</p>
           {/if}
 
           <div class="modal-buttons" style="margin-top: 0.25rem;">
@@ -4965,7 +4989,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
           {#if lookAndFeelAsistente || lookAndFeelMasivo}
             <div class="modal-overlay" onclick={cerrarLookAndFeel} role="presentation">
-              <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 720px; width: 92%;">
+              <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 720px; width: 92%;" use:modal>
                 {#if lookAndFeelMasivo}
                   <h3 style="margin: 0 0 0.25rem;"><Icon name="look-and-feel" size={18} /> Look and Feel — todos los asistentes</h3>
                   <p style="color: var(--fg-soft); font-size: 0.85rem; margin: 0 0 1rem;">
@@ -4985,7 +5009,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     Color primario (dots; default de avatar/botón)
                     <span style="display: flex; align-items: center; gap: 0.5rem;">
                       <input type="color" bind:value={lookAndFeelForm.color_primario} style="width: 44px; height: 36px; border: 1px solid var(--border); border-radius: 6px; background: transparent; cursor: pointer;" />
-                      <input type="text" bind:value={lookAndFeelForm.color_primario} placeholder="#5b6abf" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
+                      <input type="text" bind:value={lookAndFeelForm.color_primario} aria-label="Color primario (código hexadecimal)" placeholder="#5b6abf" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
                     </span>
                   </label>
 
@@ -4993,7 +5017,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     Avatar
                     <span style="display: flex; align-items: center; gap: 0.5rem;">
                       <input type="color" bind:value={lookAndFeelForm.color_avatar} style="width: 44px; height: 36px; border: 1px solid var(--border); border-radius: 6px; background: transparent; cursor: pointer;" />
-                      <input type="text" bind:value={lookAndFeelForm.color_avatar} placeholder="#5b6abf" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
+                      <input type="text" bind:value={lookAndFeelForm.color_avatar} aria-label="Avatar (código hexadecimal)" placeholder="#5b6abf" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
                     </span>
                   </label>
 
@@ -5001,7 +5025,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     Ícono del avatar
                     <span style="display: flex; align-items: center; gap: 0.5rem;">
                       <input type="color" bind:value={lookAndFeelForm.color_icono} style="width: 44px; height: 36px; border: 1px solid var(--border); border-radius: 6px; background: transparent; cursor: pointer;" />
-                      <input type="text" bind:value={lookAndFeelForm.color_icono} placeholder="#ffffff" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
+                      <input type="text" bind:value={lookAndFeelForm.color_icono} aria-label="Ícono del avatar (código hexadecimal)" placeholder="#ffffff" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
                     </span>
                   </label>
 
@@ -5009,7 +5033,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     Botón de enviar
                     <span style="display: flex; align-items: center; gap: 0.5rem;">
                       <input type="color" bind:value={lookAndFeelForm.color_boton_enviar} style="width: 44px; height: 36px; border: 1px solid var(--border); border-radius: 6px; background: transparent; cursor: pointer;" />
-                      <input type="text" bind:value={lookAndFeelForm.color_boton_enviar} placeholder="#5b6abf" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
+                      <input type="text" bind:value={lookAndFeelForm.color_boton_enviar} aria-label="Botón de enviar (código hexadecimal)" placeholder="#5b6abf" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
                     </span>
                   </label>
 
@@ -5017,7 +5041,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     Ícono del botón de enviar
                     <span style="display: flex; align-items: center; gap: 0.5rem;">
                       <input type="color" bind:value={lookAndFeelForm.color_icono_boton} style="width: 44px; height: 36px; border: 1px solid var(--border); border-radius: 6px; background: transparent; cursor: pointer;" />
-                      <input type="text" bind:value={lookAndFeelForm.color_icono_boton} placeholder="#ffffff" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
+                      <input type="text" bind:value={lookAndFeelForm.color_icono_boton} aria-label="Ícono del botón de enviar (código hexadecimal)" placeholder="#ffffff" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
                     </span>
                   </label>
 
@@ -5025,7 +5049,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     Burbuja del bot
                     <span style="display: flex; align-items: center; gap: 0.5rem;">
                       <input type="color" bind:value={lookAndFeelForm.color_burbuja_bot} style="width: 44px; height: 36px; border: 1px solid var(--border); border-radius: 6px; background: transparent; cursor: pointer;" />
-                      <input type="text" bind:value={lookAndFeelForm.color_burbuja_bot} placeholder="#d4e4f7" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
+                      <input type="text" bind:value={lookAndFeelForm.color_burbuja_bot} aria-label="Burbuja del bot (código hexadecimal)" placeholder="#d4e4f7" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
                     </span>
                   </label>
 
@@ -5033,7 +5057,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     Fondo del chat
                     <span style="display: flex; align-items: center; gap: 0.5rem;">
                       <input type="color" bind:value={lookAndFeelForm.color_fondo_chat} style="width: 44px; height: 36px; border: 1px solid var(--border); border-radius: 6px; background: transparent; cursor: pointer;" />
-                      <input type="text" bind:value={lookAndFeelForm.color_fondo_chat} placeholder="#f0f2f5" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
+                      <input type="text" bind:value={lookAndFeelForm.color_fondo_chat} aria-label="Fondo del chat (código hexadecimal)" placeholder="#f0f2f5" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
                     </span>
                   </label>
 
@@ -5041,7 +5065,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     Header
                     <span style="display: flex; align-items: center; gap: 0.5rem;">
                       <input type="color" bind:value={lookAndFeelForm.color_header} style="width: 44px; height: 36px; border: 1px solid var(--border); border-radius: 6px; background: transparent; cursor: pointer;" />
-                      <input type="text" bind:value={lookAndFeelForm.color_header} placeholder="#ffffff" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
+                      <input type="text" bind:value={lookAndFeelForm.color_header} aria-label="Header (código hexadecimal)" placeholder="#ffffff" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
                     </span>
                   </label>
 
@@ -5049,7 +5073,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     Texto del header
                     <span style="display: flex; align-items: center; gap: 0.5rem;">
                       <input type="color" bind:value={lookAndFeelForm.color_texto_header} style="width: 44px; height: 36px; border: 1px solid var(--border); border-radius: 6px; background: transparent; cursor: pointer;" />
-                      <input type="text" bind:value={lookAndFeelForm.color_texto_header} placeholder="#1a1a2e" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
+                      <input type="text" bind:value={lookAndFeelForm.color_texto_header} aria-label="Texto del header (código hexadecimal)" placeholder="#1a1a2e" maxlength="7" class="contexto-input" style="flex: 1; font-family: monospace; text-transform: lowercase;" />
                     </span>
                   </label>
                 </div>
@@ -5906,7 +5930,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         <!-- Confirmación Modal para Borrar Documento (compartido entre Documentos y ContextLight) -->
         {#if mostrarConfirmacionBorrarDocumento}
           <div class="modal-overlay">
-            <div class="modal-content">
+            <div class="modal-content" use:modal={{ cerrar: () => { if (!cargandoBorrarDocumento) mostrarConfirmacionBorrarDocumento = false; } }}>
               <h3>Confirmar Borrado de Documento</h3>
               <p>
                 ¿Estás seguro de que deseas borrar el documento <strong>"{documentoSeleccionadoParaBorrar}"</strong> de la base de conocimiento <strong>"{nombreVisibleBc(contextoSeleccionadoParaDocumentos)}"</strong>?
@@ -6136,7 +6160,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         <!-- Confirmación Modal -->
         {#if mostrarConfirmacionBorrar}
           <div class="modal-overlay">
-            <div class="modal-content">
+            <div class="modal-content" use:modal={{ cerrar: () => { if (!cargandoBorrarContexto) cancelarBorradoBC(); } }}>
               {#if advertenciaBorrar}
                 <h3>Esta BC está en uso</h3>
                 <p style="color: var(--fg);">
@@ -6198,7 +6222,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   <!-- Modal: ponerle nombre a una base de conocimiento -->
   {#if renombrarBcAbierto}
     <div class="modal-overlay" onclick={() => { if (!renombrarBcGuardando) renombrarBcAbierto = false; }} role="presentation">
-      <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 470px;">
+      <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 470px;" use:modal>
         <h3>Nombre de la base de conocimiento</h3>
         <p style="font-size: 0.88rem; line-height: 1.5;">
           Es sólo la etiqueta que ves en el panel. Puedes usar espacios, acentos y mayúsculas.
@@ -6214,12 +6238,13 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             bind:value={renombrarBcValor}
             disabled={renombrarBcGuardando}
             maxlength="120"
+            aria-label="Nombre de la base de conocimiento"
             placeholder="ej. Pólizas de autos"
             autocomplete="off"
             autofocus
           />
           {#if renombrarBcError}
-            <p class="login-error">❌ {renombrarBcError}</p>
+            <p class="login-error" role="alert">❌ {renombrarBcError}</p>
           {/if}
           <p style="font-size: 0.75rem; color: var(--fg-muted); margin: 0; line-height: 1.45;">
             El identificador <code>{renombrarBcObjetivo}</code> no cambia: es lo que usan Chroma,
@@ -6242,7 +6267,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   <!-- Modal: integrar un documento a la base abierta (botón + de la lista) -->
   {#if integrarModalAbierto}
     <div class="modal-overlay" onclick={cerrarIntegrarModal} role="presentation">
-      <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 500px;">
+      <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 500px;" use:modal>
         <h3>Integrar documentos a {nombreVisibleBc(contextoSeleccionadoParaDocumentos)}</h3>
         <p style="font-size: 0.88rem; line-height: 1.5;">
           Sólo archivos PDF; puedes elegir varios a la vez. Para meter una pregunta con su respuesta sin PDF, usa <strong>Agregar Snippet</strong>.
@@ -6253,6 +6278,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         >
           <input
             id="doc-archivo"
+            aria-label="Archivos PDF a integrar"
             type="file"
             accept=".pdf,application/pdf"
             multiple
@@ -6261,7 +6287,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             class="documento-input"
           />
           {#if colaIntegrar.length > 0}
-            <ul class="cola-integrar">
+            <ul class="cola-integrar" aria-live="polite">
               {#each colaIntegrar as item (item.id)}
                 <li class="cola-integrar-item" data-estado={item.estado}>
                   <div class="cola-integrar-fila">
@@ -6299,7 +6325,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             </p>
           {/if}
           {#if mensajeIntegrarDocumento}
-            <p class="mensaje-documento" class:success={mensajeIntegrarDocumento.includes('✅')} class:aviso={mensajeIntegrarDocumento.startsWith('⚠️')} style="margin: 0;">
+            <p class="mensaje-documento" role="status" class:success={mensajeIntegrarDocumento.includes('✅')} class:aviso={mensajeIntegrarDocumento.startsWith('⚠️')} style="margin: 0;">
               {mensajeIntegrarDocumento}
             </p>
           {/if}
@@ -6324,7 +6350,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   <!-- Modal: confirmar borrado de un operador -->
   {#if operadorABorrar}
     <div class="modal-overlay" onclick={() => { if (!borrandoOperador) operadorABorrar = null; }} role="presentation">
-      <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 480px;">
+      <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 480px;" use:modal>
         <h3>Borrar operador</h3>
         <p>
           Vas a eliminar la cuenta de <strong>{operadorABorrar.nombre}</strong>
@@ -6349,7 +6375,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   <!-- Modal: restablecer la contraseña de un operador -->
   {#if operadorParaPassword}
     <div class="modal-overlay" onclick={() => { if (!guardandoPasswordOperador) operadorParaPassword = null; }} role="presentation">
-      <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 460px;">
+      <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 460px;" use:modal>
         <h3><Icon name="accesos" size={18} /> Restablecer contraseña</h3>
         <p>
           Le pondrás una contraseña nueva a <strong>{operadorParaPassword.nombre}</strong>
@@ -6364,11 +6390,12 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             class="contexto-input"
             bind:value={passwordNueva}
             disabled={guardandoPasswordOperador}
+            aria-label="Nueva contraseña"
             placeholder="Nueva contraseña (mínimo 8 caracteres)"
             autocomplete="new-password"
           />
           {#if errorPasswordOperador}
-            <p class="login-error">❌ {errorPasswordOperador}</p>
+            <p class="login-error" role="alert">❌ {errorPasswordOperador}</p>
           {/if}
           <p style="font-size: 0.75rem; color: var(--fg-muted); margin: 0; line-height: 1.45;">
             Se cerrarán todas sus sesiones abiertas. Pásasela por un canal seguro;
@@ -6390,7 +6417,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   <!-- Modal: pedir password para activar proyecto -->
   {#if proyectoParaDesbloquear}
     <div class="modal-overlay" onclick={cerrarPromptPassword} role="presentation">
-      <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 440px;">
+      <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 440px;" use:modal>
         <h3><Icon name="accesos" size={16} /> Activar proyecto</h3>
         <p>
           Para activar <strong>{proyectoParaDesbloquear.nombre}</strong> (<code>{proyectoParaDesbloquear.slug}</code>) necesitas su password.
@@ -6446,6 +6473,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         role="dialog"
         tabindex="-1"
         style="max-width: 760px; width: 92vw; max-height: 85vh; display: flex; flex-direction: column;"
+        use:modal
       >
         <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 0.85rem;">
           <h3 style="margin: 0; word-break: break-word;">
@@ -6549,6 +6577,21 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               class="modal-btn cancel"
             >Cerrar</button>
           {/if}
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  <!-- Confirmación genérica (descartar cambios, vaciar lista...). Va después de los demás modales
+       para quedar encima si se abre desde uno de ellos. -->
+  {#if confirmacion}
+    <div class="modal-overlay" onclick={() => resolverConfirmacion(false)} role="presentation">
+      <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 440px;" use:modal>
+        <h3>{confirmacion.titulo}</h3>
+        <p>{confirmacion.mensaje}</p>
+        <div class="modal-buttons">
+          <button type="button" class="modal-btn cancel" onclick={() => resolverConfirmacion(false)}>Cancelar</button>
+          <button type="button" class="modal-btn danger" onclick={() => resolverConfirmacion(true)}>{confirmacion.confirmar}</button>
         </div>
       </div>
     </div>
@@ -6723,7 +6766,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
           {#if mostrarConfirmacionBorrarModelo && modeloABorrar}
             <div class="modal-overlay">
-              <div class="modal-content" style="max-width: 520px;">
+              <div class="modal-content" style="max-width: 520px;" use:modal={{ cerrar: () => { if (!cargandoBorrarModelo) cerrarConfirmacionBorrarModelo(); } }}>
                 <h3>Borrar Modelo</h3>
                 <p>
                   Vas a borrar el modelo <strong>"{modeloABorrar}"</strong> del server (equivalente a <code>ollama rm {modeloABorrar}</code>).
@@ -6754,7 +6797,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                 </p>
 
                 {#if errorBorrarModelo}
-                  <p style="font-size: 0.85rem; color: var(--danger-fg); background: var(--danger-bg); padding: 0.5rem 0.75rem; border-radius: 6px; margin-top: 0.75rem; word-break: break-word;">
+                  <p role="alert" style="font-size: 0.85rem; color: var(--danger-fg); background: var(--danger-bg); padding: 0.5rem 0.75rem; border-radius: 6px; margin-top: 0.75rem; word-break: break-word;">
                     ❌ {errorBorrarModelo}
                   </p>
                 {/if}
