@@ -2359,6 +2359,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let fuenteFormDescripcion = $state('');
   let fuenteFormUrlBase = $state('');
   let fuenteFormSpec = $state('');
+  let fuenteFormSpecUrl = $state('');          // alternativa a pegar: el API descarga el spec
+  let descargandoSpec = $state(false);
   let fuenteFormAnalisis = $state(null);       // resultado de /fuentes/analizar
   let fuenteFormOperaciones = $state(new Set()); // ids de operaciones elegidas
   let fuenteFormAuthTipo = $state('ninguna');
@@ -2423,6 +2425,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     fuenteFormDescripcion = '';
     fuenteFormUrlBase = '';
     fuenteFormSpec = '';
+    fuenteFormSpecUrl = '';
     fuenteFormAnalisis = null;
     fuenteFormOperaciones = new Set();
     fuenteFormAuthTipo = 'ninguna';
@@ -2466,17 +2469,26 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     document.getElementById('fuente-form-wrap')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }
 
-  async function analizarSpecFuente(conservarEleccion = false) {
-    if (!fuenteFormSpec.trim()) { mensajeFuente = '❌ Pega primero el spec OpenAPI.'; return; }
+  // Con `url` el API descarga el spec y lo devuelve en `spec`: se pega en el
+  // textarea para que el guardado sea el mismo de siempre (la fuente guarda el texto).
+  function descargarSpecFuente() {
+    if (!fuenteFormSpecUrl.trim()) return;
+    descargandoSpec = true;
+    analizarSpecFuente(false, fuenteFormSpecUrl.trim()).finally(() => { descargandoSpec = false; });
+  }
+
+  async function analizarSpecFuente(conservarEleccion = false, url = null) {
+    if (!url && !fuenteFormSpec.trim()) { mensajeFuente = '❌ Pega primero el spec OpenAPI o pon su URL.'; return; }
     analizandoSpec = true;
     mensajeFuente = '';
     try {
       const res = await fetch(`${apiUrl.base}/fuentes/analizar`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', ...adminHeaders() },
-        body: JSON.stringify({ spec: fuenteFormSpec }),
+        body: JSON.stringify(url ? { url } : { spec: fuenteFormSpec }),
       });
       if (!res.ok) throw new Error(await leerErrorRespuesta(res));
       fuenteFormAnalisis = await res.json();
+      if (url && typeof fuenteFormAnalisis.spec === 'string') fuenteFormSpec = fuenteFormAnalisis.spec;
       const ids = new Set(fuenteFormAnalisis.operaciones.map((o) => o.id));
       // Al pegar un spec nuevo se eligen todas; al editar se respeta lo que ya estaba elegido.
       fuenteFormOperaciones = conservarEleccion
@@ -5880,7 +5892,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               <div class="crear-contexto-form" style="flex-direction: column; align-items: stretch; max-width: 820px;">
                 <p class="fuente-ayuda">
                   Una fuente es una API externa que el asistente puede consultar mientras conversa (estado de una póliza, un pedido, un saldo).
-                  Pega el spec OpenAPI de la API, elige qué consultas exponer y carga la credencial. Sólo se permiten lecturas (GET).
+                  Da la URL de su spec OpenAPI (o pégalo), elige qué consultas exponer y carga la credencial. Sólo se permiten lecturas (GET).
                 </p>
                 <div class="form-field">
                   <label for="fuente-nombre">Nombre</label>
@@ -5891,7 +5903,17 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   <input id="fuente-descripcion" type="text" class="contexto-input" bind:value={fuenteFormDescripcion} maxlength="300" placeholder="ej. Consulta pólizas vigentes y sus coberturas por número o por titular" disabled={guardandoFuente} />
                 </div>
                 <div class="form-field">
-                  <label for="fuente-spec">Spec OpenAPI <span style="text-transform: none; font-weight: 400; color: var(--fg-muted);">(JSON o YAML; en FastAPI es <code>/openapi.json</code>)</span></label>
+                  <label for="fuente-spec-url">Spec OpenAPI por URL <span style="text-transform: none; font-weight: 400; color: var(--fg-muted);">(el servidor lo descarga y lo pega abajo)</span></label>
+                  <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    <input id="fuente-spec-url" type="url" class="contexto-input" style="flex: 1 1 16rem;" bind:value={fuenteFormSpecUrl} placeholder="https://api.ejemplo.com/openapi.json" disabled={guardandoFuente || analizandoSpec} autocomplete="off"
+                      onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); descargarSpecFuente(); } }} />
+                    <button type="button" class="vectorizacion-action-btn" onclick={descargarSpecFuente} disabled={analizandoSpec || guardandoFuente || !fuenteFormSpecUrl.trim()}>
+                      {analizandoSpec && descargandoSpec ? '⟳ Descargando…' : 'Descargar y analizar'}
+                    </button>
+                  </div>
+                </div>
+                <div class="form-field">
+                  <label for="fuente-spec">… o pégalo aquí <span style="text-transform: none; font-weight: 400; color: var(--fg-muted);">(JSON o YAML; en FastAPI es <code>/openapi.json</code>)</span></label>
                   <textarea id="fuente-spec" class="contexto-input" bind:value={fuenteFormSpec} rows="7" spellcheck="false" placeholder={'{ "openapi": "3.1.0", "paths": { ... } }'} disabled={guardandoFuente} style="font-family: ui-monospace, monospace; font-size: 0.78rem; resize: vertical; line-height: 1.4;"></textarea>
                   <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-top: 0.4rem;">
                     <button type="button" class="vectorizacion-action-btn" onclick={() => analizarSpecFuente(false)} disabled={analizandoSpec || guardandoFuente || !fuenteFormSpec.trim()}>
