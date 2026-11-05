@@ -19,6 +19,8 @@
     'admin':                { emoji: '⚙️', iconify: 'ph:gear' },
     'proyecto':             { emoji: '📁', iconify: 'ph:folders' },
     'asistente':            { emoji: '🎧', iconify: 'ph:headset' },
+    'fuente-datos':         { emoji: '🔌', iconify: 'ph:plugs-connected' },
+    'probar':               { emoji: '▶',  iconify: 'ph:play' },
     'usuario':              { emoji: '🙋', iconify: 'ph:identification-card' },
     'base-conocimiento':    { emoji: '📚', iconify: 'ph:books' },
     'documentos':           { emoji: '📄', iconify: 'ph:file-text' },

@@ -2320,6 +2320,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     // defaults de la plantilla (regla critica pre-llena, etc.) en cada nueva creación.
     asistenteFormVariables = {};
     variablesTocadasEnEdicion = false;
+    asistenteFormFuentes = new Set();
     mensajeAsistente = '';
     sincronizarVariablesAsistente();
   }
@@ -2339,6 +2340,280 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     wrap.scrollIntoView({ block: 'start', behavior: reducido ? 'auto' : 'smooth' });
     if (window.matchMedia('(pointer: fine)').matches) {
       document.getElementById('asistente-nombre')?.focus({ preventScroll: true });
+    }
+  }
+
+  // ─── Fuentes de datos externas (APIs que el asistente consulta) ───────────
+  // Por proyecto, igual que las bases de conocimiento. El admin pega el spec
+  // OpenAPI, elige qué operaciones GET exponer y carga la credencial; el backend
+  // la guarda cifrada y nunca la regresa (sólo `auth_configurada`).
+  let fuentes = $state([]);
+  let cargandoFuentes = $state(false);
+  let errorFuentes = $state('');
+  let fuentesClaveConfigurada = $state(true);
+  let fuenteFormAbierto = $state(false);
+  let fuenteEditandoId = $state(null);
+  let fuenteFormNombre = $state('');
+  let fuenteFormDescripcion = $state('');
+  let fuenteFormUrlBase = $state('');
+  let fuenteFormSpec = $state('');
+  let fuenteFormAnalisis = $state(null);       // resultado de /fuentes/analizar
+  let fuenteFormOperaciones = $state(new Set()); // ids de operaciones elegidas
+  let fuenteFormAuthTipo = $state('ninguna');
+  let fuenteFormAuthNombre = $state('');
+  let fuenteFormAuthSecreto = $state('');
+  let fuenteFormAuthConfigurada = $state(false); // al editar: ya hay credencial guardada
+  let analizandoSpec = $state(false);
+  let guardandoFuente = $state(false);
+  let mensajeFuente = $state('');
+  let fuenteABorrar = $state(null);
+  let fuenteBorrarUsos = $state(null);         // asistentes que la usan (409 del backend)
+  let borrandoFuente = $state(false);
+  let fuenteAProbar = $state(null);
+  let probarOperacion = $state('');
+  let probarParametros = $state({});
+  let probarResultado = $state(null);
+  let probando = $state(false);
+  const fuentesPorId = $derived(new Map(fuentes.map((f) => [f.id, f])));
+  const AUTH_TIPOS_FUENTE = [
+    { valor: 'ninguna', etiqueta: 'Sin autenticación', nombre: '', secreto: '' },
+    { valor: 'header', etiqueta: 'API key en cabecera', nombre: 'Nombre de la cabecera (ej. X-API-Key o Authorization)', secreto: 'Valor (ej. la key, o "Bearer …")' },
+    { valor: 'query', etiqueta: 'API key en la URL', nombre: 'Nombre del parámetro (ej. api_key)', secreto: 'Valor de la key' },
+    { valor: 'basic', etiqueta: 'Usuario y contraseña (Basic)', nombre: 'Usuario', secreto: 'Contraseña' },
+  ];
+  const authTipoFuente = $derived(AUTH_TIPOS_FUENTE.find((a) => a.valor === fuenteFormAuthTipo) ?? AUTH_TIPOS_FUENTE[0]);
+
+  async function leerErrorRespuesta(res) {
+    const txt = await res.text().catch(() => '');
+    try {
+      const j = JSON.parse(txt);
+      const d = j.detail ?? j;
+      if (typeof d === 'string') return d;
+      if (d && typeof d.mensaje === 'string') return d.mensaje;
+      return JSON.stringify(d);
+    } catch {
+      return txt || `HTTP ${res.status}`;
+    }
+  }
+
+  async function cargarFuentes() {
+    if (!proyectoActivoId) { fuentes = []; return; }
+    cargandoFuentes = true;
+    errorFuentes = '';
+    try {
+      const res = await fetch(`${apiUrl.base}/fuentes?proyecto_id=${encodeURIComponent(proyectoActivoId)}`, { headers: adminHeaders() });
+      if (res.status === 404) throw new Error('El API aún no tiene fuentes de datos (falta desplegar el backend).');
+      if (!res.ok) throw new Error(await leerErrorRespuesta(res));
+      const data = await res.json();
+      fuentes = data.fuentes ?? [];
+      fuentesClaveConfigurada = data.clave_configurada !== false;
+    } catch (err) {
+      fuentes = [];
+      errorFuentes = err.message;
+    } finally {
+      cargandoFuentes = false;
+    }
+  }
+
+  function resetFormFuente() {
+    fuenteEditandoId = null;
+    fuenteFormNombre = '';
+    fuenteFormDescripcion = '';
+    fuenteFormUrlBase = '';
+    fuenteFormSpec = '';
+    fuenteFormAnalisis = null;
+    fuenteFormOperaciones = new Set();
+    fuenteFormAuthTipo = 'ninguna';
+    fuenteFormAuthNombre = '';
+    fuenteFormAuthSecreto = '';
+    fuenteFormAuthConfigurada = false;
+    mensajeFuente = '';
+  }
+
+  function abrirFormCrearFuente() {
+    resetFormFuente();
+    fuenteFormAbierto = true;
+  }
+
+  function cerrarFormFuente() {
+    fuenteFormAbierto = false;
+    resetFormFuente();
+  }
+
+  async function abrirFormEditarFuente(f) {
+    resetFormFuente();
+    fuenteFormAbierto = true;
+    fuenteEditandoId = f.id;
+    fuenteFormNombre = f.nombre;
+    fuenteFormDescripcion = f.descripcion ?? '';
+    fuenteFormUrlBase = f.url_base;
+    fuenteFormAuthTipo = f.auth_tipo ?? 'ninguna';
+    fuenteFormAuthNombre = f.auth_nombre ?? '';
+    fuenteFormAuthConfigurada = !!f.auth_configurada;
+    fuenteFormOperaciones = new Set((f.operaciones ?? []).map((o) => o.id));
+    try {
+      const res = await fetch(`${apiUrl.base}/fuentes/${encodeURIComponent(f.id)}`, { headers: adminHeaders() });
+      if (!res.ok) throw new Error(await leerErrorRespuesta(res));
+      const completa = await res.json();
+      fuenteFormSpec = completa.spec ?? '';
+      await analizarSpecFuente(true);
+    } catch (err) {
+      mensajeFuente = `❌ ${err.message}`;
+    }
+    await tick();
+    document.getElementById('fuente-form-wrap')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
+
+  async function analizarSpecFuente(conservarEleccion = false) {
+    if (!fuenteFormSpec.trim()) { mensajeFuente = '❌ Pega primero el spec OpenAPI.'; return; }
+    analizandoSpec = true;
+    mensajeFuente = '';
+    try {
+      const res = await fetch(`${apiUrl.base}/fuentes/analizar`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...adminHeaders() },
+        body: JSON.stringify({ spec: fuenteFormSpec }),
+      });
+      if (!res.ok) throw new Error(await leerErrorRespuesta(res));
+      fuenteFormAnalisis = await res.json();
+      const ids = new Set(fuenteFormAnalisis.operaciones.map((o) => o.id));
+      // Al pegar un spec nuevo se eligen todas; al editar se respeta lo que ya estaba elegido.
+      fuenteFormOperaciones = conservarEleccion
+        ? new Set([...fuenteFormOperaciones].filter((id) => ids.has(id)))
+        : new Set(ids);
+      if (!fuenteFormUrlBase && fuenteFormAnalisis.url_base_sugerida) fuenteFormUrlBase = fuenteFormAnalisis.url_base_sugerida;
+      if (!fuenteFormNombre && fuenteFormAnalisis.titulo) fuenteFormNombre = fuenteFormAnalisis.titulo;
+    } catch (err) {
+      fuenteFormAnalisis = null;
+      mensajeFuente = `❌ ${err.message}`;
+    } finally {
+      analizandoSpec = false;
+    }
+  }
+
+  function alternarOperacionFuente(id) {
+    const s = new Set(fuenteFormOperaciones);
+    s.has(id) ? s.delete(id) : s.add(id);
+    fuenteFormOperaciones = s;
+  }
+
+  async function guardarFuente() {
+    if (!fuenteFormNombre.trim()) { mensajeFuente = '❌ Ponle un nombre a la fuente.'; return; }
+    if (!fuenteFormAnalisis) { mensajeFuente = '❌ Analiza el spec antes de guardar.'; return; }
+    if (fuenteFormOperaciones.size === 0) { mensajeFuente = '❌ Elige al menos una operación.'; return; }
+    if (fuenteFormAuthTipo !== 'ninguna' && !fuenteFormAuthNombre.trim()) { mensajeFuente = `❌ Falta: ${authTipoFuente.nombre}.`; return; }
+    if (fuenteFormAuthTipo !== 'ninguna' && !fuenteFormAuthSecreto && !fuenteFormAuthConfigurada) { mensajeFuente = `❌ Falta: ${authTipoFuente.secreto}.`; return; }
+    guardandoFuente = true;
+    mensajeFuente = '';
+    try {
+      const editando = !!fuenteEditandoId;
+      const body = {
+        nombre: fuenteFormNombre.trim(),
+        descripcion: fuenteFormDescripcion.trim() || null,
+        url_base: fuenteFormUrlBase.trim() || null,
+        spec: fuenteFormSpec,
+        operaciones: [...fuenteFormOperaciones],
+        auth_tipo: fuenteFormAuthTipo,
+        auth_nombre: fuenteFormAuthTipo === 'ninguna' ? null : fuenteFormAuthNombre.trim(),
+      };
+      // Al editar, un secreto vacío significa "conservar el que ya está guardado".
+      if (fuenteFormAuthSecreto) body.auth_secreto = fuenteFormAuthSecreto;
+      if (!editando) body.proyecto_id = proyectoActivoId;
+      const res = await fetch(editando ? `${apiUrl.base}/fuentes/${encodeURIComponent(fuenteEditandoId)}` : `${apiUrl.base}/fuentes`, {
+        method: editando ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json', ...adminHeaders() },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(await leerErrorRespuesta(res));
+      mensajeFuente = editando ? '✅ Fuente actualizada' : '✅ Fuente dada de alta';
+      await cargarFuentes();
+      setTimeout(cerrarFormFuente, 800);
+    } catch (err) {
+      mensajeFuente = `❌ ${err.message}`;
+    } finally {
+      guardandoFuente = false;
+    }
+  }
+
+  function pedirBorrarFuente(f) {
+    fuenteABorrar = f;
+    fuenteBorrarUsos = null;
+  }
+
+  async function confirmarBorrarFuente(force = false) {
+    if (!fuenteABorrar) return;
+    borrandoFuente = true;
+    try {
+      const res = await fetch(`${apiUrl.base}/fuentes/${encodeURIComponent(fuenteABorrar.id)}${force ? '?force=true' : ''}`, {
+        method: 'DELETE', headers: adminHeaders(),
+      });
+      if (res.status === 409) {
+        // La usan asistentes: se muestra quiénes y se pide confirmar de nuevo.
+        const j = await res.json().catch(() => ({}));
+        fuenteBorrarUsos = j.detail?.asistentes ?? [];
+        return;
+      }
+      if (!res.ok) throw new Error(await leerErrorRespuesta(res));
+      fuenteABorrar = null;
+      fuenteBorrarUsos = null;
+      await cargarFuentes();
+      if (vectorizacionTab === 'asistente') cargarAsistentes();
+    } catch (err) {
+      errorFuentes = err.message;
+      fuenteABorrar = null;
+    } finally {
+      borrandoFuente = false;
+    }
+  }
+
+  function abrirProbarFuente(f) {
+    fuenteAProbar = f;
+    probarOperacion = f.operaciones?.[0]?.id ?? '';
+    probarParametros = {};
+    probarResultado = null;
+  }
+
+  const operacionAProbar = $derived(fuenteAProbar?.operaciones?.find((o) => o.id === probarOperacion) ?? null);
+
+  // La cabecera o parámetro de autenticación la pone el backend con la credencial
+  // guardada: no se muestra ni al probar ni en la lista de parámetros.
+  function parametrosVisibles(op, authTipo, authNombre) {
+    const nombre = (authNombre || '').toLowerCase();
+    return (op?.parametros ?? []).filter((p) => !(authTipo !== 'ninguna' && (p.en === 'header' || p.en === 'query') && p.nombre.toLowerCase() === nombre));
+  }
+
+  async function ejecutarPruebaFuente() {
+    if (!fuenteAProbar || !probarOperacion) return;
+    probando = true;
+    probarResultado = null;
+    try {
+      const parametros = {};
+      for (const [k, v] of Object.entries(probarParametros)) if (v !== '' && v != null) parametros[k] = v;
+      const res = await fetch(`${apiUrl.base}/fuentes/${encodeURIComponent(fuenteAProbar.id)}/probar`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...adminHeaders() },
+        body: JSON.stringify({ operacion: probarOperacion, parametros }),
+      });
+      if (!res.ok) throw new Error(await leerErrorRespuesta(res));
+      probarResultado = await res.json();
+    } catch (err) {
+      probarResultado = { ok: false, error: err.message, cuerpo: null, status: null, ms: null };
+    } finally {
+      probando = false;
+    }
+  }
+
+  // Fuentes elegidas en el formulario del asistente. Con fuentes, el modelo no
+  // puede ser de Ollama (los locales no llaman herramientas de forma confiable):
+  // se ocultan del selector y, si estaba elegido uno, se cambia a gpt-5-mini.
+  let asistenteFormFuentes = $state(new Set());
+  const asistenteUsaFuentes = $derived(asistenteFormFuentes.size > 0);
+  function alternarFuenteAsistente(id) {
+    const s = new Set(asistenteFormFuentes);
+    s.has(id) ? s.delete(id) : s.add(id);
+    asistenteFormFuentes = s;
+    if (s.size > 0 && MODELOS.includes(asistenteFormModelo)) {
+      asistenteFormModelo = 'gpt-5-mini';
+      sincronizarVariablesAsistente();
+      mensajeAsistente = 'ℹ️ Con fuentes de datos el asistente necesita un modelo de OpenAI, Anthropic o Google: se cambió a gpt-5-mini.';
     }
   }
 
@@ -2363,6 +2638,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     mensajeAsistente = '';
     sincronizarVariablesAsistente();
     variablesTocadasEnEdicion = false;
+    asistenteFormFuentes = new Set(asistente.fuentes ?? []);
     asistenteFormAbierto = true;
     await tick();
     irAlFormularioAsistente();
@@ -2720,9 +2996,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       const contextoPayload = contexto === '' ? null : contexto;
       // Mensaje inicial vacío = usar default del frontend.
       const mensajeInicialPayload = mensaje_inicial === '' ? null : mensaje_inicial;
+      const fuentesPayload = [...asistenteFormFuentes];
       const body = editando
-        ? { nombre, instrucciones, contexto: contextoPayload, modelo_llm, historial_max, mensaje_inicial: mensajeInicialPayload, top_k }
-        : { slug, nombre, instrucciones, contexto: contextoPayload, modelo_llm, historial_max, mensaje_inicial: mensajeInicialPayload, proyecto_id: proyectoActivoId, top_k };
+        ? { nombre, instrucciones, contexto: contextoPayload, modelo_llm, historial_max, mensaje_inicial: mensajeInicialPayload, top_k, fuentes: fuentesPayload }
+        : { slug, nombre, instrucciones, contexto: contextoPayload, modelo_llm, historial_max, mensaje_inicial: mensajeInicialPayload, proyecto_id: proyectoActivoId, top_k, fuentes: fuentesPayload };
 
       const res = await fetch(url, {
         method: editando ? 'PUT' : 'POST',
@@ -4360,11 +4637,20 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           <button
             class="vectorizacion-subtab-btn"
             class:active={vectorizacionTab === 'asistente'}
-            onclick={() => { vectorizacionTab = 'asistente'; cargarAsistentes(); cargarContextos(); }}
+            onclick={() => { vectorizacionTab = 'asistente'; cargarAsistentes(); cargarContextos(); cargarFuentes(); }}
             disabled={!proyectoActivo}
             title={!proyectoActivo ? 'Selecciona un proyecto primero' : ''}
           >
             <Icon name="asistente" size={16} /> Asistentes
+          </button>
+          <button
+            class="vectorizacion-subtab-btn"
+            class:active={vectorizacionTab === 'fuentes'}
+            onclick={() => { vectorizacionTab = 'fuentes'; vinoDeActivarProyecto = false; cargarFuentes(); }}
+            disabled={!proyectoActivo}
+            title={!proyectoActivo ? 'Selecciona un proyecto primero' : ''}
+          >
+            <Icon name="fuente-datos" size={16} /> Fuentes de datos
           </button>
           <button
             class="vectorizacion-subtab-btn"
@@ -4737,6 +5023,37 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   </select>
                 </div>
                 <div class="form-field">
+                  <label style="display: inline-flex; align-items: center; gap: 0.35rem;">
+                    Fuentes de datos
+                    <span
+                      title="APIs externas que el asistente puede consultar mientras conversa (se dan de alta en la subpestaña Fuentes de datos). Requieren un modelo de OpenAI, Anthropic o Google."
+                      style="display: inline-flex; cursor: help; opacity: 0.65;"
+                      aria-label="Información sobre las fuentes de datos"
+                    >
+                      <Icon name="info" size={14} />
+                    </span>
+                  </label>
+                  {#if fuentes.length === 0}
+                    <p style="margin: 0; font-size: 0.82rem; color: var(--fg-muted);">
+                      {errorFuentes ? errorFuentes : 'Este proyecto no tiene fuentes de datos. Se dan de alta en la subpestaña Fuentes de datos.'}
+                    </p>
+                  {:else}
+                    <ul class="fuente-ops" style="margin: 0;">
+                      {#each fuentes as f (f.id)}
+                        <li class="fuente-op" class:elegida={asistenteFormFuentes.has(f.id)}>
+                          <label class="fuente-op-label">
+                            <input type="checkbox" checked={asistenteFormFuentes.has(f.id)} onchange={() => alternarFuenteAsistente(f.id)} disabled={cargandoGuardarAsistente} />
+                            <span class="fuente-op-cuerpo">
+                              <span class="fuente-op-ruta"><strong>{f.nombre}</strong>{#if f.descripcion} <span class="fuente-op-resumen">{f.descripcion}</span>{/if}</span>
+                              <span class="fuente-op-params"><span class="bc-id-real">{f.operaciones.length} consulta{f.operaciones.length === 1 ? '' : 's'}</span></span>
+                            </span>
+                          </label>
+                        </li>
+                      {/each}
+                    </ul>
+                  {/if}
+                </div>
+                <div class="form-field">
                   <label for="asistente-modelo" style="display: inline-flex; align-items: center; gap: 0.35rem;">
                     Modelo LLM
                     <span
@@ -4755,13 +5072,18 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     class="contexto-input"
                     style="display: block; width: 100%;"
                   >
-                    {#each MODELOS as m (m)}
-                      <option value={m}>{m}</option>
-                    {/each}
+                    {#if !asistenteUsaFuentes}
+                      {#each MODELOS as m (m)}
+                        <option value={m}>{m}</option>
+                      {/each}
+                    {/if}
                     {#each MODELOS_OPENAI as m (m)}
                       <option value={m}>{m}</option>
                     {/each}
                   </select>
+                  {#if asistenteUsaFuentes}
+                    <small>Con fuentes de datos no se pueden usar los modelos locales (Ollama): no llaman herramientas de forma confiable.</small>
+                  {/if}
                 </div>
 
                 {#if placeholderVariables.length > 0}
@@ -4964,6 +5286,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                         {/if}
                         <span style="display: inline-flex; align-items: center; gap: 0.3rem;"><Icon name="modelo" size={16} /> {asistente.modelo_llm}</span>
                         <span style="display: inline-flex; align-items: center; gap: 0.3rem;"><Icon name="historial" size={16} /> {asistente.historial_max} turnos</span>
+                        {#if asistente.fuentes?.length}
+                          <span style="display: inline-flex; align-items: center; gap: 0.3rem;" title={asistente.fuentes.map((id) => fuentesPorId.get(id)?.nombre ?? id).join(', ')}>
+                            <Icon name="fuente-datos" size={16} /> {asistente.fuentes.length === 1 ? (fuentesPorId.get(asistente.fuentes[0])?.nombre ?? '1 fuente') : `${asistente.fuentes.length} fuentes`}
+                          </span>
+                        {/if}
                         {#if asistente.contexto}
                           <span title="Profundidad de búsqueda (top_k): chunks recuperados por respuesta" style="display: inline-flex; align-items: center; gap: 0.3rem;">🔎 k={asistente.top_k ?? 1}</span>
                         {/if}
@@ -5451,6 +5778,172 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         {/if}
 
         <!-- Contextos -->
+        <!-- Fuentes de datos externas -->
+        {#if vectorizacionTab === 'fuentes'}
+          {#if proyectoActivo}
+            <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.85rem; background: var(--muted); border-radius: 8px; margin-bottom: 1rem; font-size: 0.85rem; color: var(--fg);">
+              <Icon name="proyecto" size={14} />
+              <span>Trabajando en proyecto: <strong>{proyectoActivo.nombre}</strong></span>
+              <code style="background: var(--muted); padding: 1px 6px; border-radius: 4px; font-size: 0.75rem; color: var(--fg-soft);">{proyectoActivo.slug}</code>
+              <button
+                onclick={() => { vectorizacionTab = 'proyectos'; vinoDeCambiarProyecto = true; cargarProyectos(); }}
+                style="margin-left: auto; background: var(--card); border: 1px solid var(--border); color: var(--fg); cursor: pointer; font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 5px; transition: background 0.15s;"
+                title="Ir a Proyectos para cambiar el proyecto activo"
+              >Cambiar de proyecto</button>
+            </div>
+          {/if}
+          {#if !fuentesClaveConfigurada}
+            <div style="display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.75rem 1rem; background: var(--danger-bg); border: 1px solid var(--danger-border); border-radius: 8px; margin-bottom: 1rem; color: var(--danger-fg); font-size: 0.9rem; line-height: 1.45;">
+              <Icon name="warning" size={16} />
+              <span>El servidor no tiene <code>FUENTES_CLAVE</code> en su <code>.env</code>: las fuentes con credencial no se pueden guardar hasta que se configure (ver <code>.env.example</code> del API).</span>
+            </div>
+          {/if}
+          <div class="crear-contexto-wrap" id="fuente-form-wrap" class:abierto={fuenteFormAbierto}>
+            <button class="crear-contexto-toggle" onclick={() => fuenteFormAbierto ? cerrarFormFuente() : abrirFormCrearFuente()}>
+              <h3>
+                {#if fuenteEditandoId}
+                  <Icon name="editar" size={18} /> Editar fuente de datos
+                {:else}
+                  <Icon name="crear" size={18} /> Dar de alta una fuente de datos
+                {/if}
+              </h3>
+            </button>
+            {#if fuenteFormAbierto}
+              <div class="crear-contexto-form" style="flex-direction: column; align-items: stretch; max-width: 820px;">
+                <p class="fuente-ayuda">
+                  Una fuente es una API externa que el asistente puede consultar mientras conversa (estado de una póliza, un pedido, un saldo).
+                  Pega el spec OpenAPI de la API, elige qué consultas exponer y carga la credencial. Sólo se permiten lecturas (GET).
+                </p>
+                <div class="form-field">
+                  <label for="fuente-nombre">Nombre</label>
+                  <input id="fuente-nombre" type="text" class="contexto-input" bind:value={fuenteFormNombre} maxlength="80" placeholder="ej. Sistema de pólizas" disabled={guardandoFuente} />
+                </div>
+                <div class="form-field">
+                  <label for="fuente-descripcion">Para qué sirve <span style="text-transform: none; font-weight: 400; color: var(--fg-muted);">(el asistente lo lee para decidir cuándo consultarla)</span></label>
+                  <input id="fuente-descripcion" type="text" class="contexto-input" bind:value={fuenteFormDescripcion} maxlength="300" placeholder="ej. Consulta pólizas vigentes y sus coberturas por número o por titular" disabled={guardandoFuente} />
+                </div>
+                <div class="form-field">
+                  <label for="fuente-spec">Spec OpenAPI <span style="text-transform: none; font-weight: 400; color: var(--fg-muted);">(JSON o YAML; en FastAPI es <code>/openapi.json</code>)</span></label>
+                  <textarea id="fuente-spec" class="contexto-input" bind:value={fuenteFormSpec} rows="7" spellcheck="false" placeholder={'{ "openapi": "3.1.0", "paths": { ... } }'} disabled={guardandoFuente} style="font-family: ui-monospace, monospace; font-size: 0.78rem; resize: vertical; line-height: 1.4;"></textarea>
+                  <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-top: 0.4rem;">
+                    <button type="button" class="vectorizacion-action-btn" onclick={() => analizarSpecFuente(false)} disabled={analizandoSpec || guardandoFuente || !fuenteFormSpec.trim()}>
+                      {analizandoSpec ? '⟳ Analizando…' : 'Analizar spec'}
+                    </button>
+                    {#if fuenteFormAnalisis}
+                      <span style="font-size: 0.82rem; color: var(--fg-soft);">
+                        {fuenteFormAnalisis.operaciones.length} consulta{fuenteFormAnalisis.operaciones.length === 1 ? '' : 's'} GET encontrada{fuenteFormAnalisis.operaciones.length === 1 ? '' : 's'}{fuenteFormAnalisis.titulo ? ` en “${fuenteFormAnalisis.titulo}”` : ''}
+                      </span>
+                    {/if}
+                  </div>
+                </div>
+                {#if fuenteFormAnalisis}
+                  <div class="form-field">
+                    <label>Consultas que el asistente podrá hacer <span style="text-transform: none; font-weight: 400; color: var(--fg-muted);">({fuenteFormOperaciones.size} de {fuenteFormAnalisis.operaciones.length})</span></label>
+                    <ul class="fuente-ops">
+                      {#each fuenteFormAnalisis.operaciones as op (op.id)}
+                        <li class="fuente-op" class:elegida={fuenteFormOperaciones.has(op.id)}>
+                          <label class="fuente-op-label">
+                            <input type="checkbox" checked={fuenteFormOperaciones.has(op.id)} onchange={() => alternarOperacionFuente(op.id)} disabled={guardandoFuente} />
+                            <span class="fuente-op-cuerpo">
+                              <span class="fuente-op-ruta"><code>GET {op.ruta}</code>{#if op.resumen} <span class="fuente-op-resumen">{op.resumen}</span>{/if}</span>
+                              {#if parametrosVisibles(op, fuenteFormAuthTipo, fuenteFormAuthNombre).length}
+                                <span class="fuente-op-params">
+                                  {#each parametrosVisibles(op, fuenteFormAuthTipo, fuenteFormAuthNombre) as p (p.en + p.nombre)}
+                                    <code class="bc-id-real" title={p.descripcion || `${p.en}, ${p.tipo}`}>{p.nombre}{p.requerido ? '' : '?'}</code>
+                                  {/each}
+                                </span>
+                              {/if}
+                            </span>
+                          </label>
+                        </li>
+                      {/each}
+                    </ul>
+                  </div>
+                  <div class="form-field">
+                    <label for="fuente-url">URL base</label>
+                    <input id="fuente-url" type="url" class="contexto-input" bind:value={fuenteFormUrlBase} placeholder="https://api.ejemplo.com" disabled={guardandoFuente} />
+                  </div>
+                  <div class="form-field">
+                    <label for="fuente-auth-tipo">Autenticación</label>
+                    <select id="fuente-auth-tipo" class="contexto-input" style="display: block; width: 100%;" bind:value={fuenteFormAuthTipo} disabled={guardandoFuente}>
+                      {#each AUTH_TIPOS_FUENTE as a (a.valor)}
+                        <option value={a.valor}>{a.etiqueta}</option>
+                      {/each}
+                    </select>
+                  </div>
+                  {#if fuenteFormAuthTipo !== 'ninguna'}
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem;">
+                      <div class="form-field" style="margin: 0;">
+                        <label for="fuente-auth-nombre">{authTipoFuente.nombre}</label>
+                        <input id="fuente-auth-nombre" type="text" class="contexto-input" bind:value={fuenteFormAuthNombre} autocomplete="off" disabled={guardandoFuente} />
+                      </div>
+                      <div class="form-field" style="margin: 0;">
+                        <label for="fuente-auth-secreto">{authTipoFuente.secreto}</label>
+                        <input id="fuente-auth-secreto" type="password" class="contexto-input" bind:value={fuenteFormAuthSecreto} autocomplete="new-password"
+                          placeholder={fuenteFormAuthConfigurada ? 'Guardada; déjalo vacío para conservarla' : ''} disabled={guardandoFuente} />
+                        <small>Se guarda cifrada en el servidor y no se vuelve a mostrar.</small>
+                      </div>
+                    </div>
+                  {/if}
+                {/if}
+                {#if mensajeFuente}
+                  <p class="mensaje-contexto" role="status" class:success={mensajeFuente.startsWith('✅')} style="margin: 0;">{mensajeFuente}</p>
+                {/if}
+                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                  <button type="button" class="crear-contexto-btn" onclick={guardarFuente} disabled={guardandoFuente || !fuenteFormAnalisis}>
+                    {guardandoFuente ? '⟳ Guardando…' : (fuenteEditandoId ? '✓ Actualizar' : '✓ Dar de alta')}
+                  </button>
+                  <button type="button" class="vectorizacion-action-btn" onclick={cerrarFormFuente} disabled={guardandoFuente}>Cancelar</button>
+                </div>
+              </div>
+            {/if}
+          </div>
+
+          <div class="contextos-table-wrap">
+            <div class="seccion-header">
+              <h3><Icon name="fuente-datos" size={18} /> Fuentes de datos del proyecto</h3>
+              <button onclick={cargarFuentes} class="vectorizacion-action-btn contextos-recargar-btn" disabled={cargandoFuentes} aria-label="Recargar fuentes de datos" title="Recargar fuentes de datos">
+                <Icon name="recargar" size={16} />
+              </button>
+            </div>
+            {#if errorFuentes}
+              <p class="mensaje-contexto" role="alert" style="margin-top: 0.5rem;">❌ {errorFuentes}</p>
+            {/if}
+            {#if cargandoFuentes}
+              <p style="color: var(--fg-muted); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando fuentes…</p>
+            {:else if fuentes.length === 0 && !errorFuentes}
+              <p style="color: var(--fg-muted); font-size: 0.9rem; padding: 1rem 0;">Este proyecto todavía no tiene fuentes de datos. Da de alta la primera arriba.</p>
+            {:else}
+              <div class="contextos-table">
+                {#each fuentes as f (f.id)}
+                  <div class="contexto-row fuente-row">
+                    <div class="fuente-info">
+                      <span class="contexto-nombre">{f.nombre}</span>
+                      {#if f.descripcion}<span class="fuente-descripcion">{f.descripcion}</span>{/if}
+                      <span class="fuente-meta">
+                        <code class="bc-id-real" title="URL base">{f.url_base}</code>
+                        <span class="bc-id-real">{f.operaciones.length} consulta{f.operaciones.length === 1 ? '' : 's'}</span>
+                        <span class="bc-id-real">{AUTH_TIPOS_FUENTE.find((a) => a.valor === f.auth_tipo)?.etiqueta ?? f.auth_tipo}{f.auth_tipo !== 'ninguna' ? (f.auth_configurada ? ' ✓' : ' (sin credencial)') : ''}</span>
+                      </span>
+                    </div>
+                    <div class="contexto-acciones">
+                      <button class="contexto-editar-btn" title="Probar una consulta" aria-label="Probar {f.nombre}" onclick={() => abrirProbarFuente(f)}>
+                        <Icon name="probar" size={22} label="Probar" />
+                      </button>
+                      <button class="contexto-editar-btn" title="Editar fuente" aria-label="Editar {f.nombre}" onclick={() => abrirFormEditarFuente(f)}>
+                        <Icon name="editar" size={22} label="Editar" />
+                      </button>
+                      <button class="contexto-borrar-btn" title="Borrar fuente" aria-label="Borrar {f.nombre}" disabled={borrandoFuente} onclick={() => pedirBorrarFuente(f)}>
+                        <Icon name="borrar" size={22} label="Borrar" />
+                      </button>
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {/if}
+
         {#if vectorizacionTab === 'contextos'}
           {#if proyectoActivo}
             <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.85rem; background: var(--muted); border-radius: 8px; margin-bottom: 1rem; font-size: 0.85rem; color: var(--fg);">
@@ -6610,6 +7103,77 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             >Cerrar</button>
           {/if}
         </div>
+      </div>
+    </div>
+  {/if}
+
+  <!-- Modal: borrar fuente de datos (segunda confirmación si la usan asistentes) -->
+  {#if fuenteABorrar}
+    <div class="modal-overlay" onclick={() => { if (!borrandoFuente) { fuenteABorrar = null; fuenteBorrarUsos = null; } }} role="presentation">
+      <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 480px;" use:modal>
+        <h3>Borrar fuente de datos</h3>
+        {#if fuenteBorrarUsos}
+          <p>
+            <strong>{fuenteABorrar.nombre}</strong> la usa{fuenteBorrarUsos.length === 1 ? '' : 'n'}
+            {fuenteBorrarUsos.length} asistente{fuenteBorrarUsos.length === 1 ? '' : 's'}:
+            {fuenteBorrarUsos.map((a) => a.nombre).join(', ')}.
+          </p>
+          <p style="font-size: 0.85rem; color: var(--fg-muted);">Si la borras, esos asistentes dejan de poder consultarla desde la siguiente pregunta.</p>
+        {:else}
+          <p>¿Borrar la fuente <strong>{fuenteABorrar.nombre}</strong>?</p>
+          <p style="font-size: 0.85rem; color: var(--fg-muted);">Se borra también su credencial. Esta acción no se puede deshacer.</p>
+        {/if}
+        <div class="modal-buttons">
+          <button type="button" class="modal-btn cancel" onclick={() => { fuenteABorrar = null; fuenteBorrarUsos = null; }} disabled={borrandoFuente}>Cancelar</button>
+          <button type="button" class="modal-btn danger" onclick={() => confirmarBorrarFuente(!!fuenteBorrarUsos)} disabled={borrandoFuente}>
+            {borrandoFuente ? '⟳ Borrando…' : (fuenteBorrarUsos ? 'Borrar de todas formas' : 'Sí, borrar')}
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  <!-- Modal: probar una consulta de una fuente de datos -->
+  {#if fuenteAProbar}
+    <div class="modal-overlay" onclick={() => { if (!probando) fuenteAProbar = null; }} role="presentation">
+      <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 560px; width: 92%;" use:modal>
+        <h3><Icon name="probar" size={18} /> Probar {fuenteAProbar.nombre}</h3>
+        <p style="font-size: 0.85rem; color: var(--fg-soft); margin: 0 0 0.75rem;">Hace la consulta real con la credencial guardada, igual que la haría el asistente.</p>
+        <form onsubmit={(e) => { e.preventDefault(); ejecutarPruebaFuente(); }} style="display: flex; flex-direction: column; gap: 0.75rem;">
+          <div class="form-field" style="margin: 0;">
+            <label for="probar-operacion">Consulta</label>
+            <select id="probar-operacion" class="contexto-input" style="display: block; width: 100%;" bind:value={probarOperacion} onchange={() => { probarParametros = {}; probarResultado = null; }} disabled={probando}>
+              {#each fuenteAProbar.operaciones as op (op.id)}
+                <option value={op.id}>GET {op.ruta}{op.resumen ? ` — ${op.resumen}` : ''}</option>
+              {/each}
+            </select>
+          </div>
+          {#if operacionAProbar}
+            {#each parametrosVisibles(operacionAProbar, fuenteAProbar.auth_tipo, fuenteAProbar.auth_nombre) as p (p.en + p.nombre)}
+              <div class="form-field" style="margin: 0;">
+                <label for={`probar-param-${p.nombre}`}>{p.nombre}{p.requerido ? '' : ' (opcional)'}{p.descripcion ? ` — ${p.descripcion}` : ''}</label>
+                <input id={`probar-param-${p.nombre}`} type="text" class="contexto-input" bind:value={probarParametros[p.nombre]} disabled={probando} autocomplete="off" />
+              </div>
+            {/each}
+          {/if}
+          {#if probarResultado}
+            <div class="probar-resultado" class:ok={probarResultado.ok} role="status">
+              <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; font-size: 0.82rem; margin-bottom: 0.4rem;">
+                <strong>{probarResultado.ok ? '✅ Respondió' : '❌ Falló'}</strong>
+                {#if probarResultado.status}<span>HTTP {probarResultado.status}</span>{/if}
+                {#if probarResultado.ms != null}<span>{formatMs(probarResultado.ms)}</span>{/if}
+                {#if probarResultado.error}<span style="color: var(--danger-fg);">{probarResultado.error}</span>{/if}
+              </div>
+              {#if probarResultado.cuerpo}
+                <pre class="probar-cuerpo">{probarResultado.cuerpo}{probarResultado.truncado ? '\n… (truncado)' : ''}</pre>
+              {/if}
+            </div>
+          {/if}
+          <div class="modal-buttons" style="margin-top: 0.25rem;">
+            <button type="button" class="modal-btn cancel" onclick={() => fuenteAProbar = null} disabled={probando}>Cerrar</button>
+            <button type="submit" class="modal-btn confirm" disabled={probando || !probarOperacion}>{probando ? '⟳ Consultando…' : 'Probar'}</button>
+          </div>
+        </form>
       </div>
     </div>
   {/if}
@@ -8107,6 +8671,24 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                               <div><strong>ID:</strong> <code>{r.id}</code></div>
                             {/if}
                           </div>
+                          {#if r.herramientas?.length}
+                            <div>
+                              <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--fg-muted); margin-bottom: 0.3rem;">Consultas a fuentes de datos</div>
+                              <ul class="registro-herramientas">
+                                {#each r.herramientas as h, i (i)}
+                                  <li>
+                                    <span class="bc-id-real" style={h.ok ? '' : 'color: var(--danger-fg); background: var(--danger-bg);'}>{h.status ?? '—'}</span>
+                                    <strong>{h.fuente}</strong> · <code>{h.herramienta}</code>
+                                    {#if h.parametros && Object.keys(h.parametros).length}
+                                      <code style="color: var(--fg-soft);">{JSON.stringify(h.parametros)}</code>
+                                    {/if}
+                                    <span style="color: var(--fg-muted);">{formatMs(h.ms)}</span>
+                                    {#if h.error}<span style="color: var(--danger-fg);">{h.error}</span>{/if}
+                                  </li>
+                                {/each}
+                              </ul>
+                            </div>
+                          {/if}
                           {#if tieneError}
                             <div>
                               <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--danger-fg); margin-bottom: 0.3rem;">Error</div>
@@ -11553,6 +12135,82 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     gap: 0.75rem 1rem;
   }
   #asistente-form-wrap { scroll-margin-top: 1rem; }
+
+  /* ── Fuentes de datos externas ───────────────────────────── */
+  #fuente-form-wrap { scroll-margin-top: 1rem; }
+  .fuente-ayuda { margin: 0 0 0.25rem; font-size: 0.85rem; color: var(--fg-soft); line-height: 1.5; }
+  .fuente-ops {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  .fuente-op {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--card);
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+  .fuente-op.elegida { border-color: var(--primary); background: var(--primary-bg); }
+  /* `.form-field label` pone mayúsculas y tracking a las etiquetas del formulario;
+     estas filas son contenido, no etiquetas, y necesitan ganarle en especificidad. */
+  .form-field .fuente-op-label,
+  .fuente-op-label {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    margin: 0;
+    padding: 0.55rem 0.75rem;
+    cursor: pointer;
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 0.85rem;
+    font-weight: 400;
+    line-height: 1.4;
+    color: var(--fg);
+  }
+  .fuente-op-label input { margin-top: 0.2rem; accent-color: var(--primary); flex-shrink: 0; }
+  .fuente-op-cuerpo { display: flex; flex-direction: column; gap: 0.3rem; min-width: 0; }
+  .fuente-op-ruta { overflow-wrap: anywhere; }
+  .fuente-op-ruta code { font-size: 0.8rem; }
+  .fuente-op-ruta code + .fuente-op-resumen,
+  .fuente-op-ruta strong + .fuente-op-resumen { margin-left: 0.45rem; }
+  .fuente-op-resumen { color: var(--fg-soft); }
+  .fuente-op-params { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+  .fuente-row { align-items: flex-start; gap: 0.75rem; }
+  .fuente-info { flex: 1 1 12rem; min-width: 0; display: flex; flex-direction: column; gap: 0.3rem; }
+  .fuente-descripcion { font-size: 0.82rem; color: var(--fg-soft); line-height: 1.4; }
+  .fuente-meta { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+  .fuente-meta code { overflow-wrap: anywhere; white-space: normal; }
+  .probar-resultado {
+    border: 1px solid var(--danger-border);
+    background: var(--danger-bg);
+    border-radius: 8px;
+    padding: 0.6rem 0.75rem;
+  }
+  .probar-resultado.ok { border-color: var(--border); background: var(--muted); }
+  .probar-cuerpo {
+    margin: 0;
+    max-height: 240px;
+    overflow: auto;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    color: var(--fg);
+  }
+  .registro-herramientas {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    font-size: 0.82rem;
+  }
+  .registro-herramientas li { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
   .asistente-instr-toggle {
     display: inline-flex;
     align-items: center;
