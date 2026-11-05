@@ -5003,18 +5003,23 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           </div>
 
           {#if mostrarConfirmacionBorrarAsistente && asistenteABorrar}
-            <div class="confirmacion-borrar">
-              <h3><Icon name="warning" size={18} /> Confirmar Borrado de Asistente</h3>
-              <p style="color: var(--fg);">
-                ¿Estás seguro de borrar el asistente <strong>{asistenteABorrar.nombre}</strong> (<code>{asistenteABorrar.slug}</code>)? Esta acción no se puede deshacer.
-              </p>
-              <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
-                <button onclick={borrarAsistenteConfirmado} disabled={cargandoBorrarAsistente} class="crear-contexto-btn" style="background: var(--danger);">
-                  {cargandoBorrarAsistente ? '⟳ Borrando...' : '🗑️ Sí, borrar'}
-                </button>
-                <button onclick={() => { mostrarConfirmacionBorrarAsistente = false; asistenteABorrar = null; }} disabled={cargandoBorrarAsistente} class="crear-contexto-btn" style="background: var(--muted); color: var(--fg);">
-                  Cancelar
-                </button>
+            <div class="modal-overlay" onclick={() => { if (!cargandoBorrarAsistente) { mostrarConfirmacionBorrarAsistente = false; asistenteABorrar = null; } }} role="presentation">
+              <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 480px;" use:modal>
+                <h3>Borrar asistente</h3>
+                <p>
+                  ¿Estás seguro de borrar el asistente <strong>{asistenteABorrar.nombre}</strong> (<code>{asistenteABorrar.slug}</code>)?
+                </p>
+                <p style="font-size: 0.85rem; color: var(--fg-muted);">
+                  Esta acción no se puede deshacer.
+                </p>
+                <div class="modal-buttons">
+                  <button onclick={() => { mostrarConfirmacionBorrarAsistente = false; asistenteABorrar = null; }} disabled={cargandoBorrarAsistente} class="modal-btn cancel">
+                    Cancelar
+                  </button>
+                  <button onclick={borrarAsistenteConfirmado} disabled={cargandoBorrarAsistente} class="modal-btn danger">
+                    {cargandoBorrarAsistente ? '⟳ Borrando...' : 'Sí, borrar'}
+                  </button>
+                </div>
               </div>
             </div>
           {/if}
