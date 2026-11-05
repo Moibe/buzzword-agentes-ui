@@ -4941,11 +4941,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   <div class="asistente-fila">
                     <div class="asistente-info">
                       <div style="display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap;">
-                        {#if asistente.slug === lightbotAsistenteSlug}
-                          <span title="Default del Lightbot" style="color: var(--warn); display: inline-flex; align-items: center;">
-                            <Icon name="estrella" size={16} label="Default" />
-                          </span>
-                        {/if}
                         <strong style="color: var(--fg); font-size: 1rem;">{asistente.nombre}</strong>
                         <code style="background: var(--muted); padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; color: var(--fg-soft);">{asistente.slug}</code>
                       </div>
