@@ -2567,11 +2567,77 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     }
   }
 
+  // Un valor del spec (ejemplo, default, opción de un enum) como texto de campo.
+  // Las listas van separadas por comas, que es como el backend las recibe.
+  function textoParametro(v) {
+    if (v == null) return '';
+    if (Array.isArray(v)) return v.map(textoParametro).join(',');
+    if (typeof v === 'object') return JSON.stringify(v);
+    return String(v);
+  }
+
+  // Opciones cerradas de un parámetro de un solo valor (enum o booleano): van en
+  // una lista desplegable. Los arreglos con enum se eligen con los chips.
+  function opcionesParametro(p) {
+    if (p.lista) return null;
+    if (Array.isArray(p.enum) && p.enum.length) return p.enum.map(textoParametro);
+    if (p.tipo === 'boolean') return ['true', 'false'];
+    return null;
+  }
+
+  function pistaParametro(p) {
+    if (p.ejemplo != null) return `ej. ${textoParametro(p.ejemplo)}`;
+    if (p.default != null) return `por defecto: ${textoParametro(p.default)}`;
+    if (p.lista) return 'varios valores separados por coma';
+    return '';
+  }
+
+  function tituloParametro(p) {
+    const partes = [p.descripcion || `${p.en}, ${p.tipo}${p.lista ? ', lista' : ''}`];
+    if (p.ejemplo != null) partes.push(`ej. ${textoParametro(p.ejemplo)}`);
+    else if (p.default != null) partes.push(`por defecto: ${textoParametro(p.default)}`);
+    return partes.join(' · ');
+  }
+
+  // Prellenado de la prueba: el ejemplo del spec si lo trae; en los obligatorios
+  // sin ejemplo, su default o la primera opción válida. Los opcionales sin ejemplo
+  // se quedan vacíos (la API aplica su propio default) y lo muestran como pista.
+  function valoresInicialesPrueba(op, fuente) {
+    const valores = {};
+    for (const p of parametrosVisibles(op, fuente.auth_tipo, fuente.auth_nombre)) {
+      let v = '';
+      if (p.ejemplo != null) v = textoParametro(p.ejemplo);
+      else if (p.requerido && p.default != null) v = textoParametro(p.default);
+      else if (p.requerido) v = (opcionesParametro(p) ?? (p.enum ?? []).map(textoParametro))[0] ?? '';
+      if (v !== '') valores[p.nombre] = v;
+    }
+    return valores;
+  }
+
+  let probarPrellenados = $state(0);
+  function reiniciarPrueba() {
+    const op = fuenteAProbar?.operaciones?.find((o) => o.id === probarOperacion);
+    probarParametros = op ? valoresInicialesPrueba(op, fuenteAProbar) : {};
+    probarPrellenados = Object.keys(probarParametros).length;
+    probarResultado = null;
+  }
+
   function abrirProbarFuente(f) {
     fuenteAProbar = f;
     probarOperacion = f.operaciones?.[0]?.id ?? '';
-    probarParametros = {};
-    probarResultado = null;
+    reiniciarPrueba();
+  }
+
+  function valoresDeLista(texto) {
+    return String(texto ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  }
+
+  function alternarValorLista(nombre, valor) {
+    const actuales = valoresDeLista(probarParametros[nombre]);
+    const i = actuales.indexOf(valor);
+    if (i >= 0) actuales.splice(i, 1);
+    else actuales.push(valor);
+    probarParametros[nombre] = actuales.join(',');
   }
 
   const operacionAProbar = $derived(fuenteAProbar?.operaciones?.find((o) => o.id === probarOperacion) ?? null);
@@ -5851,7 +5917,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                               {#if parametrosVisibles(op, fuenteFormAuthTipo, fuenteFormAuthNombre).length}
                                 <span class="fuente-op-params">
                                   {#each parametrosVisibles(op, fuenteFormAuthTipo, fuenteFormAuthNombre) as p (p.en + p.nombre)}
-                                    <code class="bc-id-real" title={p.descripcion || `${p.en}, ${p.tipo}`}>{p.nombre}{p.requerido ? '' : '?'}</code>
+                                    <code class="bc-id-real" title={tituloParametro(p)}>{p.nombre}{p.requerido ? '' : '?'}</code>
                                   {/each}
                                 </span>
                               {/if}
@@ -7144,17 +7210,41 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         <form onsubmit={(e) => { e.preventDefault(); ejecutarPruebaFuente(); }} style="display: flex; flex-direction: column; gap: 0.75rem;">
           <div class="form-field" style="margin: 0;">
             <label for="probar-operacion">Consulta</label>
-            <select id="probar-operacion" class="contexto-input" style="display: block; width: 100%;" bind:value={probarOperacion} onchange={() => { probarParametros = {}; probarResultado = null; }} disabled={probando}>
+            <select id="probar-operacion" class="contexto-input" style="display: block; width: 100%;" bind:value={probarOperacion} onchange={reiniciarPrueba} disabled={probando}>
               {#each fuenteAProbar.operaciones as op (op.id)}
                 <option value={op.id}>GET {op.ruta}{op.resumen ? ` — ${op.resumen}` : ''}</option>
               {/each}
             </select>
           </div>
           {#if operacionAProbar}
+            {#if probarPrellenados > 0}
+              <p class="probar-nota">Los campos traen los ejemplos y valores por defecto del spec; cámbialos si quieres.</p>
+            {/if}
             {#each parametrosVisibles(operacionAProbar, fuenteAProbar.auth_tipo, fuenteAProbar.auth_nombre) as p (p.en + p.nombre)}
+              {@const opciones = opcionesParametro(p)}
               <div class="form-field" style="margin: 0;">
                 <label for={`probar-param-${p.nombre}`}>{p.nombre}{p.requerido ? '' : ' (opcional)'}{p.descripcion ? ` — ${p.descripcion}` : ''}</label>
-                <input id={`probar-param-${p.nombre}`} type="text" class="contexto-input" bind:value={probarParametros[p.nombre]} disabled={probando} autocomplete="off" />
+                {#if opciones}
+                  <select id={`probar-param-${p.nombre}`} class="contexto-input" style="display: block; width: 100%;" bind:value={probarParametros[p.nombre]} disabled={probando}>
+                    <option value="">{p.requerido ? '— elige —' : (p.default != null ? `— no enviar (por defecto: ${textoParametro(p.default)}) —` : '— no enviar —')}</option>
+                    {#each opciones as o, i (i)}
+                      <option value={o}>{o}</option>
+                    {/each}
+                  </select>
+                {:else}
+                  <input id={`probar-param-${p.nombre}`} type="text" class="contexto-input" bind:value={probarParametros[p.nombre]} placeholder={pistaParametro(p)} disabled={probando} autocomplete="off" />
+                  {#if p.lista && p.enum?.length}
+                    <details class="probar-valores">
+                      <summary>Elegir entre {p.enum.length} valores posibles</summary>
+                      <div class="probar-valores-lista">
+                        {#each p.enum as v, i (i)}
+                          {@const t = textoParametro(v)}
+                          <button type="button" class="probar-valor" aria-pressed={valoresDeLista(probarParametros[p.nombre]).includes(t)} onclick={() => alternarValorLista(p.nombre, t)} disabled={probando}>{t}</button>
+                        {/each}
+                      </div>
+                    </details>
+                  {/if}
+                {/if}
               </div>
             {/each}
           {/if}
@@ -10142,13 +10232,18 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     right: 0;
     bottom: 0;
     background: rgba(15, 23, 42, 0.45);
+    /* Centrado seguro: el margin:auto del modal lo centra cuando cabe; cuando es
+       más alto que la pantalla (Probar con muchos parámetros) arranca arriba y
+       el fondo se desplaza, en vez de quedar cortado por los dos lados. */
     display: flex;
-    align-items: center;
-    justify-content: center;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 1.25rem 0.5rem;
     z-index: 1000;
   }
 
   .modal-content {
+    margin: auto;
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: 14px;
@@ -12193,6 +12288,37 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     padding: 0.6rem 0.75rem;
   }
   .probar-resultado.ok { border-color: var(--border); background: var(--muted); }
+  .modal-content .probar-nota { margin: 0; font-size: 0.8rem; color: var(--fg-muted); line-height: 1.4; }
+  .probar-valores { margin-top: 0.35rem; font-size: 0.8rem; }
+  .probar-valores summary { cursor: pointer; width: fit-content; color: var(--primary); }
+  .probar-valores summary:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 4px; }
+  .probar-valores-lista {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    max-height: 9.5rem;
+    overflow: auto;
+    margin-top: 0.4rem;
+    padding: 0.45rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--muted);
+  }
+  .probar-valor {
+    font: inherit;
+    font-family: ui-monospace, monospace;
+    font-size: 0.74rem;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border-strong);
+    background: var(--card);
+    color: var(--fg-soft);
+    cursor: pointer;
+  }
+  .probar-valor:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+  .probar-valor[aria-pressed='true'] { background: var(--primary-bg); border-color: var(--primary-border); color: var(--primary); font-weight: 600; }
+  .probar-valor:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+  .probar-valor:disabled { cursor: default; opacity: 0.6; }
   .probar-cuerpo {
     margin: 0;
     max-height: 240px;
