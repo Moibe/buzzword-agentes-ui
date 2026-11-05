@@ -70,10 +70,12 @@
   // visual de qué build está corriendo. Se muestra debajo del título del header.
   const APP_VERSION = '0.7.0';
 
-  // Sin concepto de "ambiente". El host-asistentes (embeds públicos) vive en
-  // el mismo host en :4176. Esto hace que local y server sean idénticos sin
-  // build-mode flags ni .env files.
-  const HOST_ASISTENTES_PORT = 4176;
+  // El host-asistentes (embeds públicos) vive en el mismo host que este admin.
+  // Prod: :4176 (default). La instancia dev del server pone
+  // VITE_HOST_ASISTENTES_PORT=4179 en su .env para que Sandbox, MiniAdmin y el
+  // chip "embebido" abran los widgets DEV (que hablan con el API dev) y no los
+  // de producción. Se fija al compilar, como cualquier variable VITE_.
+  const HOST_ASISTENTES_PORT = Number(import.meta.env.VITE_HOST_ASISTENTES_PORT) || 4176;
 
   // El API se llama por ruta relativa (/api/...): quien sirve este admin
   // (Vite dev/preview local, o el reverse proxy en el servidor real) reenvía
