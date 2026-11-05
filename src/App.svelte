@@ -4979,7 +4979,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                           class="asistente-link-chip"
                         >
                           <Icon name="link" size={16} />
-                          {urlCopiada === asistenteEmbedUrl ? '✓ copiado' : 'link'}
+                          {urlCopiada === asistenteEmbedUrl ? '✓ copiado' : 'embebido'}
                         </button>
                       </div>
                     </div>
