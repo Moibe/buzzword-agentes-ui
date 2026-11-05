@@ -2329,7 +2329,20 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     asistenteFormAbierto = true;
   }
 
-  function abrirFormEditarAsistente(asistente) {
+  // Con muchos asistentes la lista es larga y el formulario queda arriba, fuera de pantalla: sin
+  // llevarlo a la vista parece que el clic en Editar no hizo nada. El foco al campo Nombre sólo en
+  // dispositivos con puntero fino, para no abrir el teclado del teléfono sin que lo pidan.
+  function irAlFormularioAsistente() {
+    const wrap = document.getElementById('asistente-form-wrap');
+    if (!wrap) return;
+    const reducido = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    wrap.scrollIntoView({ block: 'start', behavior: reducido ? 'auto' : 'smooth' });
+    if (window.matchMedia('(pointer: fine)').matches) {
+      document.getElementById('asistente-nombre')?.focus({ preventScroll: true });
+    }
+  }
+
+  async function abrirFormEditarAsistente(asistente) {
     asistenteEditandoId = asistente.id;
     asistenteFormSlug = asistente.slug;
     asistenteFormNombre = asistente.nombre;
@@ -2343,6 +2356,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     sincronizarVariablesAsistente();
     variablesTocadasEnEdicion = false;
     asistenteFormAbierto = true;
+    await tick();
+    irAlFormularioAsistente();
   }
 
   function cerrarFormAsistente() {
@@ -4623,7 +4638,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               <span>No hay proyecto activo. Crea o selecciona uno en <strong>📁 Proyectos</strong> antes de crear asistentes.</span>
             </div>
           {/if}
-          <div class="crear-contexto-wrap" class:abierto={asistenteFormAbierto}>
+          <div class="crear-contexto-wrap" id="asistente-form-wrap" class:abierto={asistenteFormAbierto}>
             <button class="crear-contexto-toggle" onclick={() => asistenteFormAbierto ? cerrarFormAsistente() : abrirFormCrearAsistente()}>
               <h3>
                 {#if asistenteEditandoId}
@@ -11520,6 +11535,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     flex-wrap: wrap;
     gap: 0.75rem 1rem;
   }
+  #asistente-form-wrap { scroll-margin-top: 1rem; }
   .asistente-info { flex: 1 1 14rem; min-width: 0; }
   .asistente-acciones { display: flex; gap: 0.4rem; flex-shrink: 0; margin-left: auto; }
   .contexto-acciones { display: flex; align-items: center; flex-shrink: 0; margin-left: auto; }
