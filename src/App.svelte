@@ -77,6 +77,28 @@
   // de producción. Se fija al compilar, como cualquier variable VITE_.
   const HOST_ASISTENTES_PORT = Number(import.meta.env.VITE_HOST_ASISTENTES_PORT) || 4176;
 
+  // Etiqueta de ambiente del header. VITE_AMBIENTE la fuerza si está en el .env;
+  // si no, con `vite` (servidor de desarrollo) es LOCAL y en un build sale de la
+  // rama de git con la que se construyó (ver vite.config.js). Colores iguales a
+  // las pestañas de webhook-central: dev azul, staging ámbar, prod verde.
+  const AMBIENTES = {
+    prod: { etiqueta: 'PROD', titulo: 'Producción' },
+    staging: { etiqueta: 'STAGING', titulo: 'Staging' },
+    dev: { etiqueta: 'DEV', titulo: 'Desarrollo' },
+    local: { etiqueta: 'LOCAL', titulo: 'Tu máquina (servidor de desarrollo de Vite)' },
+  };
+  const RAMA_GIT = typeof __RAMA_GIT__ === 'string' ? __RAMA_GIT__ : '';
+  const AMBIENTE = (() => {
+    const forzado = (import.meta.env.VITE_AMBIENTE || '').trim().toLowerCase();
+    if (forzado) return forzado;
+    if (import.meta.env.DEV) return 'local';
+    return { main: 'prod', master: 'prod', staging: 'staging', dev: 'dev', develop: 'dev' }[RAMA_GIT] ?? '';
+  })();
+  const ambienteInfo = AMBIENTES[AMBIENTE] ?? (AMBIENTE ? { etiqueta: AMBIENTE.toUpperCase(), titulo: AMBIENTE } : null);
+  if (ambienteInfo && typeof document !== 'undefined' && !document.title.startsWith(ambienteInfo.etiqueta + ' · ')) {
+    document.title = `${ambienteInfo.etiqueta} · ${document.title}`;
+  }
+
   // El API se llama por ruta relativa (/api/...): quien sirve este admin
   // (Vite dev/preview local, o el reverse proxy en el servidor real) reenvía
   // /api/* al backend en 127.0.0.1:8077 — ver vite.config.js. Esto evita que
@@ -4432,18 +4454,30 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       </div>
       <div class="header-info">
         <h1 class="header-title">Constructor de Asistentes Buzzword</h1>
-        <span class="header-version">versión {APP_VERSION}</span>
+        <span class="header-version"><span class="header-version-larga">{'versión '}</span><span class="header-version-corta">v</span>{APP_VERSION}</span>
         <span class="header-status" onclick={verificarSalud} onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && verificarSalud()} title="Click para verificar conexión" role="button" tabindex="0">
           <span class="status-dot" class:online={estadoSalud === 'online'} class:offline={estadoSalud === 'offline'} class:checking={estadoSalud === 'checking'}></span>
-          {#if estadoSalud === 'online'}
-            API en línea
-          {:else if estadoSalud === 'offline'}
-            Sin conexion
-          {:else}
-            Verificando...
-          {/if}
+          <span class="header-status-texto">
+            {#if estadoSalud === 'online'}
+              API en línea
+            {:else if estadoSalud === 'offline'}
+              Sin conexion
+            {:else}
+              Verificando...
+            {/if}
+          </span>
         </span>
       </div>
+      {#if ambienteInfo}
+        <span
+          class="ambiente-etiqueta ambiente-etiqueta--{AMBIENTES[AMBIENTE] ? AMBIENTE : 'otro'}"
+          title={`Ambiente: ${ambienteInfo.titulo}${RAMA_GIT && AMBIENTE !== 'local' ? ` (rama ${RAMA_GIT})` : ''}`}
+        >
+          <span class="ambiente-etiqueta-punto" aria-hidden="true"></span>
+          <span class="sr-only">Ambiente:</span>
+          {ambienteInfo.etiqueta}
+        </span>
+      {/if}
       <button
         type="button"
         class="ambiente-indicador ambiente-indicador--btn"
@@ -9203,6 +9237,19 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     background: var(--card);
   }
 
+  /* La versión y el estado nunca se parten en dos renglones: si no caben
+     (teléfono angosto con la etiqueta de ambiente al lado) se cortan con "…". */
+  .header-version { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .header-version-corta { display: none; }
+  .header-status { min-width: 0; max-width: 100%; }
+  .status-dot { flex-shrink: 0; }
+  .header-status-texto {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .status-dot {
     width: 7px;
     height: 7px;
@@ -9286,6 +9333,53 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     letter-spacing: 0.01em;
     color: var(--fg);
     font-family: 'Consolas', 'Courier New', monospace;
+  }
+
+  /* Etiqueta de ambiente (PROD / DEV / ...): sólida y con el color del ambiente
+     para distinguir de un vistazo en qué panel se está. Mismos tonos que las
+     pestañas de webhook-central, en su versión oscura para que el texto blanco
+     tenga contraste AA (≥ 4.5:1). */
+  .ambiente-etiqueta {
+    --ambiente: #475569;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex-shrink: 0;
+    padding: 0.4rem 0.75rem;
+    border-radius: 8px;
+    background: var(--ambiente);
+    color: #fff;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    line-height: 1;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.15);
+    user-select: none;
+  }
+
+  .ambiente-etiqueta-punto {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  .ambiente-etiqueta--prod { --ambiente: #047857; }
+  .ambiente-etiqueta--staging { --ambiente: #b45309; }
+  .ambiente-etiqueta--dev { --ambiente: var(--primary-hover); }
+  .ambiente-etiqueta--local { --ambiente: #475569; }
+  .ambiente-etiqueta--otro { --ambiente: #6d28d9; }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
 
   .ambiente-btn {
@@ -12227,6 +12321,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     .header { padding: 0 0.75rem; gap: 0.75rem; }
     .header-left { gap: 0.6rem; min-width: 0; }
     .ambiente-indicador { display: none; }
+    /* la etiqueta de ambiente se queda, más compacta */
+    .ambiente-etiqueta { padding: 0.35rem 0.55rem; font-size: 0.72rem; letter-spacing: 0.06em; gap: 0.35rem; }
     .header-info { min-width: 0; }
     .header-title {
       font-size: 0.85rem;
@@ -12238,6 +12334,15 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     .tab-btn { font-size: 0; gap: 0; padding: 0.55rem; }
     /* el ojo de "vista usuario" es un emoji de texto, no un <Icon>: sin esto desaparece */
     .tab-btn.vista-usuario-toggle { font-size: 1rem; }
+  }
+
+  /* Teléfonos muy angostos: la etiqueta pierde el punto para dejarle algo de
+     ancho al título y al estado. */
+  @media (max-width: 400px) {
+    .ambiente-etiqueta { padding: 0.35rem 0.45rem; letter-spacing: 0.04em; }
+    .ambiente-etiqueta-punto { display: none; }
+    .header-version-larga { display: none; }
+    .header-version-corta { display: inline; }
   }
 
   /* ── Teléfono: filas y encabezados que no caben ────────────────────────
