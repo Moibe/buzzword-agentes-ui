@@ -12,6 +12,8 @@
 //  - Esc lo cierra. Si el overlay cierra con clic (role="presentation") Esc hace ese mismo clic, así
 //    se respetan las guardas de cada modal (p. ej. "no cerrar mientras guarda"). Para los que no
 //    cierran con clic se pasa la función: use:modal={{ cerrar: () => ... }}
+//  - el clic en el fondo sólo cuenta si se presionó Y se soltó sobre el fondo: arrastrar desde
+//    adentro (p. ej. al seleccionar texto) y soltar afuera ya no cierra el modal
 //
 // Con varios modales abiertos a la vez (p. ej. una confirmación sobre otro modal) sólo responde el de arriba.
 
@@ -90,8 +92,28 @@ export function modal(nodo, opciones = {}) {
     }
   };
 
+  // Clic en el fondo. Si se presiona dentro del modal y se suelta sobre el fondo, el navegador
+  // manda el click al ancestro común de los dos puntos, que es el fondo, y el modal se cerraba sin
+  // querer. Se intercepta en window y en captura, antes que los listeners delegados de Svelte (que
+  // están en el contenedor y en document, en burbuja). Los clics sintéticos, como el overlay.click()
+  // del Esc, no son isTrusted y pasan sin tocarse.
+  let bajoEnFondo = false;
+  let subioEnFondo = false;
+  const alBajar = (e) => { bajoEnFondo = e.target === overlay; };
+  const alSubir = (e) => { subioEnFondo = e.target === overlay; };
+  const alClic = (e) => {
+    if (!overlay || !e.isTrusted || e.target !== overlay) return;
+    const valido = bajoEnFondo && subioEnFondo;
+    bajoEnFondo = false;
+    subioEnFondo = false;
+    if (!valido) e.stopPropagation();
+  };
+
   pila.push(nodo);
   document.addEventListener('keydown', alTeclear, true);
+  window.addEventListener('pointerdown', alBajar, true);
+  window.addEventListener('pointerup', alSubir, true);
+  window.addEventListener('click', alClic, true);
 
   // Foco inicial: el campo marcado con autofocus, si no el primer control, si no el diálogo mismo.
   const inicial = nodo.querySelector('[autofocus]') || controles()[0] || nodo;
@@ -103,6 +125,9 @@ export function modal(nodo, opciones = {}) {
     },
     destroy() {
       document.removeEventListener('keydown', alTeclear, true);
+      window.removeEventListener('pointerdown', alBajar, true);
+      window.removeEventListener('pointerup', alSubir, true);
+      window.removeEventListener('click', alClic, true);
       observador.disconnect();
       const i = pila.indexOf(nodo);
       if (i >= 0) pila.splice(i, 1);
