@@ -2342,6 +2342,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     }
   }
 
+  // Instrucciones de cada asistente en la lista: plegadas por default para ahorrar espacio.
+  let instruccionesAbiertas = $state(new Set());
+  function alternarInstrucciones(id) {
+    const s = new Set(instruccionesAbiertas);
+    s.has(id) ? s.delete(id) : s.add(id);
+    instruccionesAbiertas = s;
+  }
+
   async function abrirFormEditarAsistente(asistente) {
     asistenteEditandoId = asistente.id;
     asistenteFormSlug = asistente.slug;
@@ -4941,9 +4949,18 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                         <strong style="color: var(--fg); font-size: 1rem;">{asistente.nombre}</strong>
                         <code style="background: var(--muted); padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; color: var(--fg-soft);">{asistente.slug}</code>
                       </div>
-                      <p style="color: var(--fg-soft); font-size: 0.85rem; margin: 0.5rem 0 0 0; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
-                        {asistente.instrucciones}
-                      </p>
+                      <button
+                        type="button"
+                        class="asistente-instr-toggle"
+                        aria-expanded={instruccionesAbiertas.has(asistente.id)}
+                        onclick={() => alternarInstrucciones(asistente.id)}
+                      >
+                        <span class="asistente-instr-flecha" class:abierta={instruccionesAbiertas.has(asistente.id)} aria-hidden="true">›</span>
+                        Instrucciones
+                      </button>
+                      {#if instruccionesAbiertas.has(asistente.id)}
+                        <p class="asistente-instr-texto">{asistente.instrucciones}</p>
+                      {/if}
                       <div style="display: flex; gap: 1.1rem; margin-top: 0.6rem; font-size: 0.9rem; color: var(--fg-soft); align-items: center; flex-wrap: wrap;">
                         {#if asistente.contexto}
                           <span style="display: inline-flex; align-items: center; gap: 0.3rem;"><Icon name="base-conocimiento" size={16} /> {asistente.contexto}</span>
@@ -11536,6 +11553,31 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     gap: 0.75rem 1rem;
   }
   #asistente-form-wrap { scroll-margin-top: 1rem; }
+  .asistente-instr-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin: 0.45rem 0 0;
+    padding: 0.15rem 0.1rem;
+    background: none;
+    border: none;
+    color: var(--fg-soft);
+    font: inherit;
+    font-size: 0.82rem;
+    cursor: pointer;
+    border-radius: 4px;
+  }
+  .asistente-instr-toggle:hover { color: var(--fg); }
+  .asistente-instr-flecha { display: inline-block; transition: transform 0.15s ease; font-size: 1rem; line-height: 1; }
+  .asistente-instr-flecha.abierta { transform: rotate(90deg); }
+  .asistente-instr-texto {
+    color: var(--fg-soft);
+    font-size: 0.85rem;
+    line-height: 1.45;
+    margin: 0.3rem 0 0;
+    white-space: pre-wrap;
+  }
+  @media (prefers-reduced-motion: reduce) { .asistente-instr-flecha { transition: none; } }
   .asistente-info { flex: 1 1 14rem; min-width: 0; }
   .asistente-acciones { display: flex; gap: 0.4rem; flex-shrink: 0; margin-left: auto; }
   .contexto-acciones { display: flex; align-items: center; flex-shrink: 0; margin-left: auto; }
