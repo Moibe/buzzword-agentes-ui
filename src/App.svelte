@@ -3,69 +3,6 @@
   import Icon from './lib/Icon.svelte';
   import { modal } from './lib/modal.js';
 
-  // ─── Sesión & Logs ───────────────────────────────────────────────
-  function generateSessionId() {
-    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-      return crypto.randomUUID();
-    }
-
-    // getRandomValues suele seguir disponible aun sin secure context.
-    if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
-      const bytes = new Uint8Array(16);
-      crypto.getRandomValues(bytes);
-      bytes[6] = (bytes[6] & 0x0f) | 0x40;
-      bytes[8] = (bytes[8] & 0x3f) | 0x80;
-      const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
-      return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-    }
-
-    return `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  }
-
-  const SESSION_ID = generateSessionId();
-  let logs = $state([]);
-
-  async function registrarLog({ pregunta, historial, respuesta, ms, error, contexto, modelo }) {
-    const entry = {
-      fecha: new Date().toISOString(),
-      sesion: SESSION_ID,
-      host: location.hostname,
-      modelo: modelo ?? '',
-      contexto: contexto ?? '',
-      pregunta,
-      historial: JSON.stringify(historial),
-      respuesta: respuesta ?? '',
-      ms: ms ?? 0,
-      error: error ?? '',
-    };
-    logs = [...logs, entry];
-    console.groupCollapsed(
-      `%c📋 Log #${logs.length}  ·  ${entry.host}  ·  ${entry.ms || '—'}ms`,
-      'color:#7c3aed;font-weight:bold;font-size:12px'
-    );
-    console.table({ ...entry, historial: `(${historial.length} msgs)` });
-    console.log('Historial completo:', historial);
-    console.groupEnd();
-
-    // Guardar en SQLite vía API
-    try {
-      const res = await fetch(`${apiUrl.base}/registrarLog`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...adminHeaders() },
-        body: JSON.stringify(entry),
-      });
-      if (res.ok) {
-        console.log('%c💾 Log guardado en BD', 'color:#16a34a;font-weight:bold');
-      } else {
-        console.warn('%c⚠️ Error al guardar log en BD:', 'color:orange;font-weight:bold', res.status);
-      }
-    } catch (err) {
-      console.warn('%c⚠️ No se pudo guardar log en BD:', 'color:orange;font-weight:bold', err.message);
-    }
-
-    return entry;
-  }
-
   // Subir esta versión manualmente con cada despliegue para llevar control
   // visual de qué build está corriendo. Se muestra debajo del título del header.
   const APP_VERSION = '0.7.0';
@@ -108,21 +45,9 @@
   const apiUrl = { base: '/api', real: `${location.origin}/api` };
   const hostAsistentesBase = `${location.protocol}//${location.hostname}:${HOST_ASISTENTES_PORT}`;
 
-  // Exponer helpers de log en consola para depuración
-  if (typeof window !== 'undefined') {
-    window.__mideLogs = () => logs;
-    window.__mideSession = SESSION_ID;
-  }
-
   $effect(() => {
     // Sin sesión no hay nada que cargar: el API exige credencial.
     if (!identidad) return;
-    console.groupCollapsed('%c🌐 MIDE Chat — Configuración', 'color:#c8102e;font-weight:bold;font-size:13px');
-    console.log('Sesión     :', SESSION_ID);
-    console.log('Host       :', location.hostname);
-    console.log('API URL    :', apiUrl.real);
-    console.log('Endpoint   :', `${apiUrl.real}/chatbot`);
-    console.groupEnd();
     // Carga inicial de proyectos y contextos al montar.
     // Proyectos primero porque el resto filtra por proyecto activo.
     cargarProyectos();
@@ -152,15 +77,6 @@
       });
     }
   });
-
-  let messages = $state([
-    {
-      id: 1,
-      role: 'bot',
-      text: '¡Hola! Soy el asistente. ¿En qué puedo ayudarte hoy?',
-      time: formatTime(new Date()),
-    },
-  ]);
 
   const MODELOS = ['mistral', 'llama3.1'];
   const MODELOS_OPENAI = ['gpt-5.5', 'gpt-5.5-pro', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano', 'gpt-4o', 'gpt-4o-mini'];
@@ -217,20 +133,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   let contextos = $state([]);
   let cargandoContextos = $state(false);
-  let inputText = $state('');
-  let isLoading = $state(false);
-  let chatContainer = $state(null);
-  let chatTextareaEl = $state(null);
   let activeTab = $state('vectorizacion');
-
-  // Autocrece el textarea del chat con el contenido para que nunca se vea una
-  // línea cortada a la mitad — o se ve la línea completa, o el textarea crece.
-  $effect(() => {
-    inputText;
-    if (!chatTextareaEl) return;
-    chatTextareaEl.style.height = 'auto';
-    chatTextareaEl.style.height = `${chatTextareaEl.scrollHeight}px`;
-  });
 
   // ─── Admin gate ────────────────────────────────────────────
   // El panel entero exige sesión: sin `identidad` solo se muestra la pantalla de
@@ -2788,11 +2691,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       if (contextlightAsistenteSlug && !asistentes.some((a) => a.slug === contextlightAsistenteSlug)) {
         contextlightAsistenteSlug = '';
       }
-      // Mismo caso para el tab Chatbot: si el asistente seleccionado ya no
-      // pertenece al proyecto activo, limpiarlo.
-      if (asistenteSeleccionadoId && !asistentes.some((a) => a.id === asistenteSeleccionadoId)) {
-        asistenteSeleccionadoId = '';
-      }
     } catch (err) {
       errorCargarAsistentes = `No se pudieron cargar los asistentes: ${err.message}`;
       asistentes = [];
@@ -3098,8 +2996,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   async function verificarSalud() {
-    // No interferir con peticiones de chat activas
-    if (isLoading) return;
     const estadoPrevio = estadoSalud;
     estadoSalud = 'checking';
     try {
@@ -4117,244 +4013,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     }
   }
 
-  // Asistente seleccionado en el Chatbot tab. Persiste en localStorage.
-  let asistenteSeleccionadoId = $state(
-    typeof localStorage !== 'undefined' ? localStorage.getItem('mide_agente_id') || '' : ''
-  );
-  const asistenteSeleccionado = $derived(
-    asistentes.find((a) => a.id === asistenteSeleccionadoId) ?? null
-  );
-  const maxTurnos = $derived(asistenteSeleccionado?.historial_max ?? 5);
-
-  $effect(() => {
-    if (typeof localStorage === 'undefined') return;
-    if (asistenteSeleccionadoId) localStorage.setItem('mide_agente_id', asistenteSeleccionadoId);
-    else localStorage.removeItem('mide_agente_id');
-  });
-
-  // Construye el historial en formato role/content (últimos N turnos)
-  function buildHistorial() {
-    if (maxTurnos === 0) return [];
-    const historial = [];
-    const convo = messages.filter((m) => m.role === 'user' || m.role === 'bot');
-    let i = 0;
-    while (i < convo.length) {
-      if (convo[i]?.role === 'user' && convo[i + 1]?.role === 'bot') {
-        historial.push({ role: 'user', content: convo[i].text });
-        historial.push({ role: 'assistant', content: convo[i + 1].text });
-        i += 2;
-      } else {
-        i += 1;
-      }
-    }
-    // Cada turno = 2 entradas (user + assistant), conservar últimos N turnos
-    return historial.slice(-maxTurnos * 2);
-  }
-
-  function formatTime(date) {
-    return date.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
-  }
-
-  async function scrollToBottom() {
-    await tick();
-    if (chatContainer) {
-      chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' });
-    }
-  }
-
-  const MENSAJE_INICIAL_DEFAULT = '¡Hola! Soy el asistente. ¿En qué puedo ayudarte hoy?';
-
-  function buildMensajeInicial() {
-    return {
-      id: 1,
-      role: 'bot',
-      text: asistenteSeleccionado?.mensaje_inicial?.trim() || MENSAJE_INICIAL_DEFAULT,
-      time: formatTime(new Date()),
-    };
-  }
-
-  function parseLinks(text) {
-    if (!text) return [{ type: 'text', value: '' }];
-    const re = /(https?:\/\/[^\s]+)/g;
-    const parts = [];
-    let last = 0;
-    let m;
-    while ((m = re.exec(text)) !== null) {
-      if (m.index > last) parts.push({ type: 'text', value: text.slice(last, m.index) });
-      let url = m[0];
-      const trail = url.match(/[.,;!?)\]]+$/);
-      let trailingText = '';
-      if (trail) {
-        trailingText = trail[0];
-        url = url.slice(0, -trail[0].length);
-      }
-      parts.push({ type: 'link', value: url });
-      if (trailingText) parts.push({ type: 'text', value: trailingText });
-      last = m.index + m[0].length;
-    }
-    if (last < text.length) parts.push({ type: 'text', value: text.slice(last) });
-    return parts;
-  }
-
-  function resetChat() {
-    messages = [buildMensajeInicial()];
-    inputText = '';
-  }
-
-  // Cuando cambia el asistente seleccionado (incluido el caso en que deja de
-  // ser válido, p.ej. al cambiar de proyecto) y aún no hay conversación
-  // activa, sincroniza el saludo de bienvenida con el mensaje_inicial del
-  // asistente actual (o el genérico si ya no hay ninguno). Usamos untrack al
-  // leer messages para evitar un loop reactivo (el effect se gatilla solo
-  // por asistenteSeleccionado, no por su propia escritura).
-  $effect(() => {
-    asistenteSeleccionado; // dependencia explícita (no operación, solo tracking)
-    untrack(() => {
-      if (messages.length === 1 && messages[0]?.role === 'bot') {
-        messages = [buildMensajeInicial()];
-      }
-    });
-  });
-
-  async function sendMessage() {
-    const text = inputText.trim();
-    if (!text || isLoading) return;
-
-    if (!asistenteSeleccionado) {
-      messages = [
-        ...messages,
-        {
-          id: Date.now() + 1,
-          role: 'bot',
-          text: '⚠️ Selecciona un asistente primero (o créalo en Construcción → Asistente).',
-          time: formatTime(new Date()),
-          isError: true,
-        },
-      ];
-      return;
-    }
-
-    inputText = '';
-
-    messages = [
-      ...messages,
-      { id: Date.now(), role: 'user', text, time: formatTime(new Date()) },
-    ];
-    await scrollToBottom();
-
-    isLoading = true;
-
-    try {
-      const payload = {
-        agente_id: asistenteSeleccionado.id,
-        pregunta: text,
-        historial: buildHistorial(),
-      };
-
-      console.groupCollapsed(`%c📤 POST /chatbot`, 'color:#c8102e;font-weight:bold;font-size:12px');
-      console.log('URL enviada :', `${apiUrl.real}/chatbot`);
-      console.log('Host        :', location.hostname);
-      console.log('Payload     :', JSON.parse(JSON.stringify(payload)));
-      console.log('Body JSON   :', JSON.stringify(payload, null, 2));
-      console.groupEnd();
-
-      const t0 = performance.now();
-
-      const response = await fetch(`${apiUrl.base}/chatbot`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        const errorBody = await response.text().catch(() => '(sin body)');
-        console.error(`%c❌ HTTP ${response.status}`, 'color:#red;font-weight:bold');
-        console.error('Response body:', errorBody);
-        throw new Error(`HTTP ${response.status}: ${errorBody}`);
-      }
-
-      const data = await response.json();
-
-      const elapsed = Math.round(performance.now() - t0);
-
-      console.groupCollapsed(`%c📥 Respuesta /chatbot (${elapsed}ms)`, 'color:#16a34a;font-weight:bold;font-size:12px');
-      console.log('Status      :', response.status);
-      console.log('Tiempo      :', `${elapsed}ms`);
-      console.log('JSON        :', data);
-      console.log('Keys        :', Object.keys(data));
-      console.groupEnd();
-
-      // Extraer texto: recorre claves conocidas; si el valor es objeto, lo serializa.
-      // Para modelos GPT-5/GPT-5.5 que vienen vía Responses API, el `content` es
-      // un array de items {type, text, ...}. Aplanamos extrayendo solo los de tipo text.
-      let candidato =
-        data.Mensaje ?? data.respuesta ?? data.answer ?? data.response ?? data.message ?? data.content ?? data;
-      if (Array.isArray(candidato)) {
-        const textItems = candidato
-          .filter((it) => it && typeof it === 'object' && it.type === 'text' && typeof it.text === 'string')
-          .map((it) => it.text);
-        if (textItems.length > 0) candidato = textItems.join('\n').trim();
-      }
-      const botText = typeof candidato === 'string'
-        ? candidato
-        : JSON.stringify(candidato, null, 2);
-
-      registrarLog({
-        pregunta: text,
-        historial: payload.historial,
-        respuesta: botText,
-        ms: elapsed,
-        contexto: asistenteSeleccionado.contexto,
-        modelo: asistenteSeleccionado.modelo_llm,
-      });
-
-      messages = [
-        ...messages,
-        {
-          id: Date.now() + 1,
-          role: 'bot',
-          text: botText,
-          // `elapsed` se sigue calculando y aparece en consola/logs pero no
-          // se renderiza junto al timestamp. Para mostrarlo: cambia a
-          // `${formatTime(new Date())} · ${elapsed}ms`
-          time: formatTime(new Date()),
-        },
-      ];
-    } catch (err) {
-      console.error('%c❌ Error al llamar /chatbot', 'color:red;font-weight:bold', err);
-
-      registrarLog({
-        pregunta: text,
-        historial: payload?.historial ?? [],
-        respuesta: null,
-        ms: null,
-        error: err.message,
-        contexto: asistenteSeleccionado?.contexto,
-        modelo: asistenteSeleccionado?.modelo_llm,
-      });
-
-      messages = [
-        ...messages,
-        {
-          id: Date.now() + 1,
-          role: 'bot',
-          text: 'Lo siento, ocurrió un error al procesar tu mensaje. Por favor intenta de nuevo.',
-          time: formatTime(new Date()),
-          isError: true,
-        },
-      ];
-    } finally {
-      isLoading = false;
-      await scrollToBottom();
-    }
-  }
-
-  function handleKeydown(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
-  }
 </script>
 
 <div class="app" class:vectorizacion={activeTab === 'vectorizacion'} class:admin={activeTab === 'admin'}>
@@ -4527,122 +4185,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       </button>
     </div>
   </header>
-
-  <!-- Sub-nav de chatbot -->
-  {#if activeTab === 'chat'}
-  <nav class="chat-subnav">
-    <div class="context-select-wrap">
-      <label for="asistente-chat-select">Asistente</label>
-      {#if cargandoAsistentes}
-        <span class="ctx-loading">cargando...</span>
-      {:else if asistentes.length === 0}
-        <span class="ctx-loading">sin asistentes — créalo en Construcción</span>
-      {:else}
-        <select id="asistente-chat-select" bind:value={asistenteSeleccionadoId}>
-          <option value="">-- Selecciona Asistente --</option>
-          {#each asistentes as a (a.id)}
-            <option value={a.id}>{a.nombre}</option>
-          {/each}
-        </select>
-      {/if}
-    </div>
-    {#if asistenteSeleccionado}
-      <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; font-size: 0.78rem; color: var(--fg-soft);">
-        {#if asistenteSeleccionado.contexto}
-          <span title="Base de Conocimiento"><Icon name="base-conocimiento" size={14} /> {asistenteSeleccionado.contexto}</span>
-        {:else}
-          <span title="Sin base de conocimiento — asistente conversacional puro" style="opacity:0.7;"><Icon name="sin-rag" size={14} /> sin RAG</span>
-        {/if}
-        <span title="Modelo LLM"><Icon name="modelo" size={14} /> {asistenteSeleccionado.modelo_llm}</span>
-        <span title="Historial"><Icon name="historial" size={14} /> {asistenteSeleccionado.historial_max} turnos</span>
-      </div>
-    {/if}
-    <div class="context-select-wrap" style="margin-left: auto;">
-      <button
-        class="clear-chat-btn"
-        onclick={resetChat}
-        disabled={messages.length <= 1}
-        title="Limpiar conversación"
-        aria-label="Limpiar conversación"
-      >&#x1F5D1;</button>
-    </div>
-  </nav>
-  {/if}
-
-  <!-- Chat body -->
-  {#if activeTab === 'chat'}
-    <main class="chat-body" bind:this={chatContainer}>
-      <div class="messages">
-      {#each messages as msg (msg.id)}
-        <div class="message-row {msg.role}" class:error={msg.isError}>
-          {#if msg.role === 'bot'}
-            <div class="bot-avatar">
-              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM8 17.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5zM9.5 8c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5S9.5 9.38 9.5 8zm6.5 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="currentColor"/>
-              </svg>
-            </div>
-          {/if}
-          <div class="bubble-wrap">
-            <div class="bubble">{#each parseLinks(msg.text) as part}{#if part.type === 'link'}<a href={part.value} target="_blank" rel="noopener noreferrer" class="bubble-link">{part.value}</a>{:else}{part.value}{/if}{/each}</div>
-            <span class="time">{msg.time}</span>
-          </div>
-        </div>
-      {/each}
-
-      {#if isLoading}
-        <div class="message-row bot">
-          <div class="bot-avatar">
-            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM8 17.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5zM9.5 8c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5S9.5 9.38 9.5 8zm6.5 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="currentColor"/>
-            </svg>
-          </div>
-          <div class="bubble-wrap">
-            <div class="bubble typing">
-              <span></span><span></span><span></span>
-            </div>
-          </div>
-        </div>
-      {/if}
-      </div>
-    </main>
-  {/if}
-
-  <!-- Input area -->
-  {#if activeTab === 'chat'}
-  <footer class="input-area">
-    <div class="input-container">
-      <button
-        onclick={resetChat}
-        disabled={isLoading || messages.length === 0}
-        aria-label="Limpiar chat"
-        class="reset-btn"
-        title="Limpiar conversación"
-      >
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" fill="currentColor"/>
-        </svg>
-      </button>
-      <textarea
-        bind:this={chatTextareaEl}
-        bind:value={inputText}
-        onkeydown={handleKeydown}
-        placeholder={asistenteSeleccionado ? "Escribe tu mensaje..." : "Selecciona un asistente primero"}
-        rows="1"
-        disabled={isLoading || !asistenteSeleccionado}
-      ></textarea>
-      <button
-        onclick={sendMessage}
-        disabled={!inputText.trim() || isLoading || !asistenteSeleccionado}
-        aria-label="Enviar mensaje"
-      >
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" fill="currentColor"/>
-        </svg>
-      </button>
-    </div>
-    <p class="disclaimer">Constructor de Asistentes</p>
-  </footer>
-  {/if}
 
   <!-- Vectorización section -->
   {#if activeTab === 'vectorizacion'}
@@ -8808,24 +8350,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   .subtab-arrow-indicator {
     display: inline-flex;
     align-items: center;
@@ -8887,38 +8411,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
 
-
-
-
-
-
-
-
-
-
   /* Construcción tab - navy blue text throughout */
 
 
-
-
-
   /* Documentos subtab - same color scheme as Contextos */
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
   /* ── Header ─────────────────────────────────────── */
@@ -9168,155 +8664,25 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   /* ── Chat body ───────────────────────────────────── */
-  .chat-body {
-    flex: 1;
-    overflow-y: auto;
-    padding: 1.5rem 1rem;
-    scroll-behavior: smooth;
-  }
 
-  .chat-body::-webkit-scrollbar {
-    width: 5px;
-  }
-
-  .chat-body::-webkit-scrollbar-thumb {
-    background: var(--muted);
-    border-radius: 10px;
-  }
-
-  .messages {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    max-width: 780px;
-    margin: 0 auto;
-  }
 
   /* ── Message rows ────────────────────────────────── */
-  .message-row {
-    display: flex;
-    align-items: flex-end;
-    gap: 0.5rem;
-    animation: fadeUp 0.3s ease;
-  }
+
 
   @keyframes fadeUp {
     from { opacity: 0; transform: translateY(10px); }
     to   { opacity: 1; transform: translateY(0); }
   }
 
-  .message-row.user {
-    flex-direction: row-reverse;
-  }
-
-  .bot-avatar {
-    width: 34px;
-    height: 34px;
-    border-radius: 50%;
-    background: var(--muted);
-    border: 1.5px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    color: var(--fg);
-  }
-
-  .bot-avatar svg {
-    width: 18px;
-    height: 18px;
-  }
-
-  .bubble-wrap {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    max-width: 72%;
-  }
-
-  .message-row.user .bubble-wrap {
-    align-items: flex-end;
-  }
-
-  .bubble {
-    padding: 0.75rem 1rem;
-    border-radius: 18px;
-    font-size: 0.9375rem;
-    line-height: 1.55;
-    word-break: break-word;
-    white-space: pre-wrap;
-  }
 
   /* Bot bubble */
-  .message-row.bot .bubble {
-    background: var(--muted);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    color: var(--fg);
-    border-bottom-left-radius: 4px;
-    border: 1px solid var(--border);
-  }
+
 
   /* User bubble */
-  .message-row.user .bubble {
-    background: var(--card);
-    color: var(--danger-fg);
-    font-weight: 500;
-    border-bottom-right-radius: 4px;
-    box-shadow: 0 2px 12px rgba(15, 23, 42, 0.05);
-  }
 
-  .message-row.error .bubble {
-    background: var(--muted);
-    border-color: var(--danger-border);
-    color: var(--danger-fg);
-  }
-
-  .bubble-link {
-    color: var(--primary);
-    text-decoration: underline;
-    word-break: break-all;
-  }
-  .bubble-link:hover {
-    color: var(--primary);
-  }
-  .message-row.user .bubble-link {
-    color: var(--primary);
-  }
-  .message-row.user .bubble-link:hover {
-    color: var(--primary);
-  }
-  .message-row.error .bubble-link {
-    color: var(--danger-fg);
-  }
-
-  .time {
-    font-size: 0.7rem;
-    color: var(--fg-muted);
-    padding: 0 4px;
-  }
 
   /* ── Typing indicator ─────────────────────────────── */
-  .bubble.typing {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    padding: 0.9rem 1.1rem;
-    min-width: 60px;
-  }
 
-  .bubble.typing span {
-    display: block;
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--muted);
-    animation: bounce 1.2s ease-in-out infinite;
-  }
-
-  .bubble.typing span:nth-child(1) { animation-delay: 0s; }
-  .bubble.typing span:nth-child(2) { animation-delay: 0.2s; }
-  .bubble.typing span:nth-child(3) { animation-delay: 0.4s; }
 
   @keyframes bounce {
     0%, 60%, 100% { transform: translateY(0); }
@@ -9324,64 +8690,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   /* ── Input area ──────────────────────────────────── */
-  .input-container button {
-    width: 38px;
-    height: 38px;
-    border-radius: 50%;
-    border: none;
-    background: var(--muted);
-    color: var(--fg);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    transition: background 0.2s ease, opacity 0.2s;
-  }
 
-  .input-container button:disabled {
-    opacity: 0.35;
-    cursor: not-allowed;
-  }
-
-  .input-container button:not(:disabled):hover {
-    background: var(--muted);
-  }
-
-  .reset-btn {
-    background: var(--card) !important;
-  }
-
-  .reset-btn:not(:disabled):hover {
-    background: var(--danger-bg) !important;
-  }
-
-  .input-area {
-    padding: 1rem 1rem 1.25rem;
-    background: var(--muted);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-top: 1px solid var(--border);
-    flex-shrink: 0;
-  }
-
-  .input-container {
-    display: flex;
-    align-items: flex-end;
-    gap: 0.625rem;
-    max-width: 780px;
-    margin: 0 auto;
-    background: var(--card);
-    border: 1.5px solid var(--border);
-    border-radius: 24px;
-    padding: 0.5rem 0.5rem 0.5rem 1.25rem;
-    transition: border-color 0.2s, background 0.2s;
-  }
-
-  .input-container:focus-within {
-    border-color: var(--border-strong);
-    background: var(--muted);
-  }
 
   textarea {
     flex: 1;
@@ -9411,35 +8720,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     cursor: not-allowed;
   }
 
-  .input-container button {
-    width: 42px;
-    height: 42px;
-    border-radius: 50%;
-    border: none;
-    background: var(--card);
-    color: var(--danger-fg);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    transition: transform 0.15s, opacity 0.15s, background 0.15s;
-    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.07);
-  }
-
-  .input-container button svg {
-    width: 20px;
-    height: 20px;
-  }
-
-  .input-container button:hover:not(:disabled) {
-    transform: scale(1.08);
-    background: var(--card);
-  }
-
-  .input-container button:active:not(:disabled) {
-    transform: scale(0.95);
-  }
 
   button:disabled {
     opacity: 0.4;
@@ -9455,84 +8735,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   /* ── Footer controls (contexto + disclaimer) ─────── */
-  .context-select-wrap {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
 
-  .context-select-wrap label {
-    font-size: 0.65rem;
-    font-weight: 700;
-    color: var(--fg-muted);
-    letter-spacing: 0.05em;
-    white-space: nowrap;
-    text-transform: uppercase;
-  }
-
-  .context-select-wrap select {
-    background: var(--muted);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    color: var(--fg);
-    font-family: inherit;
-    font-size: 0.75rem;
-    font-weight: 500;
-    padding: 4px 24px 4px 10px;
-    cursor: pointer;
-    outline: none;
-    appearance: none;
-    -webkit-appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M6 9l6 6 6-6' stroke='rgba(255,255,255,0.5)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 8px center;
-    transition: border-color 0.2s, background 0.2s;
-    max-width: 180px;
-  }
-
-  .context-select-wrap select:hover {
-    background-color: var(--card);
-    border-color: var(--border);
-  }
-
-  .context-select-wrap select:focus {
-    border-color: var(--border-strong);
-    background-color: var(--muted);
-  }
-
-  .context-select-wrap select option {
-    background: var(--danger);
-    color: #fff;
-  }
-
-  .ctx-loading {
-    font-size: 0.75rem;
-    color: var(--fg-muted);
-    font-style: italic;
-  }
-
-  .clear-chat-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 0.9rem;
-    line-height: 1;
-    padding: 2px 4px;
-    border-radius: 6px;
-    opacity: 0.5;
-    transition: opacity 0.2s, background 0.2s;
-    color: var(--fg);
-  }
-
-  .clear-chat-btn:not(:disabled):hover {
-    opacity: 1;
-    background: var(--danger-bg);
-  }
-
-  .clear-chat-btn:disabled {
-    opacity: 0.2;
-    cursor: not-allowed;
-  }
 
   /* ── Tabs toggle ────────────────────────────────── */
   .tabs-toggle {
@@ -9579,17 +8782,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   /* ── Chat sub-nav ───────────────────────────────── */
-  .chat-subnav {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 1.25rem;
-    flex-wrap: wrap;
-    padding: 0.5rem 1.5rem;
-    background: var(--muted);
-    border-bottom: 1px solid var(--border);
-    backdrop-filter: blur(8px);
-  }
+
 
   /* ── Admin Body ──────────────────────────────────── */
   .vectorizacion-body {
@@ -11700,8 +10893,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   /* ── Responsive ──────────────────────────────────── */
   @media (max-width: 480px) {
     .header { padding: 0.875rem 1rem; }
-    .chat-body { padding: 1rem 0.75rem; }
-    .bubble-wrap { max-width: 85%; }
+
+
     .header-logo { display: none; }
   }
 
@@ -11793,9 +10986,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   .url-action-btn,
   .contextos-recargar-btn,
   .banner-dismiss-btn,
-  .bc-detalle-volver-btn,
-  .reset-btn,
-  .clear-chat-btn {
+  .bc-detalle-volver-btn {
     background: var(--card);
     color: var(--fg);
     border: 1px solid var(--border);
@@ -11811,9 +11002,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   .url-action-btn:hover:not(:disabled),
   .contextos-recargar-btn:hover:not(:disabled),
   .banner-dismiss-btn:hover,
-  .bc-detalle-volver-btn:hover,
-  .reset-btn:hover:not(:disabled),
-  .clear-chat-btn:hover:not(:disabled) {
+  .bc-detalle-volver-btn:hover {
     background: var(--muted);
     border-color: var(--border-strong);
     color: var(--fg);
@@ -12035,40 +11224,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   /* Chat: burbuja del usuario en el acento, la del asistente neutra;
      Enviar es el botón primario y Reiniciar el secundario. */
-  .message-row.user .bubble {
-    background: var(--primary);
-    color: var(--primary-fg);
-    box-shadow: var(--shadow-sm);
-  }
-  .message-row.user .bubble-link,
-  .message-row.user .bubble-link:hover {
-    color: var(--primary-fg);
-  }
-  .message-row.error .bubble {
-    background: var(--danger-bg);
-    border: 1px solid var(--danger-border);
-    color: var(--danger-fg);
-  }
-  .input-container button:not(.reset-btn) {
-    background: var(--primary);
-    color: var(--primary-fg);
-  }
-  .input-container button:not(.reset-btn):hover:not(:disabled) {
-    background: var(--primary-hover);
-  }
-  .input-container button:not(.reset-btn):disabled {
-    background: var(--muted);
-    color: var(--fg-muted);
-  }
-  .input-container .reset-btn {
-    background: var(--card);
-    color: var(--fg-soft);
-    border: 1px solid var(--border);
-  }
-  .input-container .reset-btn:not(:disabled):hover {
-    background: var(--muted) !important;
-    color: var(--fg);
-  }
+
 
   /* Pantallas angostas: el encabezado no cabe completo. Se esconde el
      indicador de host y las pestañas principales quedan sólo con ícono
