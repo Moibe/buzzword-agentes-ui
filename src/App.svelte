@@ -115,6 +115,8 @@
   }
 
   $effect(() => {
+    // Sin sesión no hay nada que cargar: el API exige credencial.
+    if (!identidad) return;
     console.groupCollapsed('%c🌐 MIDE Chat — Configuración', 'color:#c8102e;font-weight:bold;font-size:13px');
     console.log('Sesión     :', SESSION_ID);
     console.log('Host       :', location.hostname);
@@ -130,6 +132,7 @@
   // Cuando cambia el proyecto activo, recargar listas filtradas.
   $effect(() => {
     proyectoActivoId; // dependencia explícita (no operación, solo tracking)
+    if (!identidad) return;
     untrack(() => {
       cargarContextos();
       cargarAsistentes();
@@ -142,6 +145,7 @@
 
   // Carga contextos en vectorización cuando cambia el tab
   $effect(() => {
+    if (!identidad) return;
     if (activeTab === 'vectorizacion') {
       untrack(() => {
         cargarContextosVectorizacion();
@@ -229,26 +233,40 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   });
 
   // ─── Admin gate ────────────────────────────────────────────
-  // Modo admin: visible solo si el usuario entró alguna vez con la URL
-  // mágica ?admin=<token>. El token se guarda en localStorage. Endpoints
-  // sensibles del backend validan el mismo token vía Authorization Bearer.
+  // El panel entero exige sesión: sin `identidad` solo se muestra la pantalla de
+  // login. La credencial (token de sesión de un operador, o el ADMIN_PASSWORD
+  // legacy que entra por la URL ?admin=<token>) se guarda en localStorage y
+  // viaja como Authorization Bearer en todas las llamadas al API.
   const ADMIN_TOKEN_STORAGE_KEY = 'bzz_admin_token';
   let adminToken = $state(
     typeof localStorage !== 'undefined' ? (localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) || '') : ''
   );
   let adminMensaje = $state('');
-  // Toggle de "vista usuario": cuando es true, isAdmin se comporta como false
-  // sin borrar el token. Permite previsualizar la UI tal como la ven los no-admin
-  // sin tener que volver a pegar el query param. No persiste — cada recarga
-  // arranca con admin completo si hay token.
+  // Toggle de "vista cliente": cuando es true, isAdmin se comporta como false
+  // sin cerrar la sesión. Permite previsualizar el panel tal como lo ve una
+  // cuenta de cliente. No persiste: cada recarga arranca con la vista completa.
   let vistaUsuario = $state(false);
-  // `tieneTokenAdmin` = hay token guardado (independiente del toggle).
-  // `isAdmin` = privilegios efectivos en este momento (respeta el toggle).
-  const tieneTokenAdmin = $derived(!!adminToken);
-  const isAdmin = $derived(!!adminToken && !vistaUsuario);
 
   function adminHeaders() {
     return adminToken ? { 'Authorization': `Bearer ${adminToken}` } : {};
+  }
+
+  // Todas las llamadas del panel al API llevan la credencial sin depender de
+  // que cada fetch se acuerde de mandarla: con el login obligatorio casi todos
+  // los endpoints la exigen. Y si el API responde 401 a media sesión (venció o
+  // la cerraron desde otro lado), se revisa y se regresa al login.
+  if (typeof window !== 'undefined') {
+    if (!window.__bzzFetchOriginal) window.__bzzFetchOriginal = window.fetch.bind(window);
+    const fetchOriginal = window.__bzzFetchOriginal;
+    window.fetch = async (input, init) => {
+      const url = typeof input === 'string' ? input : (input?.url ?? String(input));
+      if (!url.startsWith(`${apiUrl.base}/`)) return fetchOriginal(input, init);
+      const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+      if (adminToken && !headers.has('Authorization')) headers.set('Authorization', `Bearer ${adminToken}`);
+      const res = await fetchOriginal(input, { ...init, headers });
+      if (res.status === 401 && adminToken && !url.includes('/auth/') && !url.includes('/admin/verify')) revisarSesion();
+      return res;
+    };
   }
 
   // ─── Login de operadores ────────────────────────────────────
@@ -260,7 +278,15 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   // `identidad` = lo que responde GET /auth/yo: `tipo` es 'operador' (cuenta
   // propia) o 'legacy' (el token compartido, que no identifica a nadie).
   let identidad = $state(null);
-  let loginAbierto = $state(false);
+  // `esCliente` = cuenta limitada a sus proyectos (sin Administración ni fuentes).
+  // `isAdmin` = privilegios efectivos de admin en este momento (respeta el toggle
+  // de vista cliente). El token legacy cuenta como superadmin.
+  const esCliente = $derived(identidad?.rol === 'cliente');
+  const isAdmin = $derived(!!identidad && !esCliente && !vistaUsuario);
+  // true mientras se confirma con el API si el token guardado sigue vivo: evita
+  // que la pantalla de login parpadee al recargar con una sesión válida.
+  let sesionVerificando = $state(!!adminToken);
+  let errorConexionSesion = $state(false);
   let loginEmail = $state('');
   let loginPassword = $state('');
   let loginCargando = $state(false);
@@ -270,26 +296,58 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     identidad?.tipo === 'operador' ? (identidad.operador?.nombre || identidad.operador?.email) : null
   );
 
+  const AVISO_LOGIN_KEY = 'bzz_aviso_login';
+
   async function cargarIdentidad() {
-    if (!adminToken) { identidad = null; return; }
+    if (!adminToken) { identidad = null; sesionVerificando = false; return; }
+    errorConexionSesion = false;
     try {
       const res = await fetch(`${apiUrl.base}/auth/yo`, { headers: adminHeaders() });
-      identidad = res.ok ? await res.json() : null;
+      if (res.ok) {
+        identidad = await res.json();
+      } else if (res.status === 401 || res.status === 403) {
+        // El token ya no vale (venció, cerraron la sesión o desactivaron la cuenta).
+        adminToken = '';
+        identidad = null;
+        if (typeof localStorage !== 'undefined') localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+      } else {
+        identidad = null;
+        errorConexionSesion = true;
+      }
     } catch {
+      // API caída: no se tira el token, se ofrece reintentar.
       identidad = null;
+      errorConexionSesion = true;
+    } finally {
+      sesionVerificando = false;
     }
   }
 
-  function abrirLogin() {
-    loginEmail = '';
-    loginPassword = '';
-    loginError = '';
-    loginAbierto = true;
+  // Sale al login recargando la página: así no queda en memoria nada de lo que
+  // había cargado la cuenta anterior (proyectos, asistentes, registros).
+  function salirAlLogin(aviso = '') {
+    adminToken = '';
+    if (typeof localStorage !== 'undefined') localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+    try {
+      if (aviso) sessionStorage.setItem(AVISO_LOGIN_KEY, aviso);
+    } catch { /* sin sessionStorage solo se pierde el aviso */ }
+    if (typeof window !== 'undefined') window.location.reload();
   }
 
-  function cerrarLogin() {
-    loginAbierto = false;
-    loginPassword = '';
+  // Un 401 a media sesión no basta para echar a nadie (hay endpoints que lo usan
+  // para otra cosa): se confirma contra /auth/yo y solo entonces se sale.
+  let revisandoSesion = false;
+  async function revisarSesion() {
+    if (revisandoSesion || !adminToken) return;
+    revisandoSesion = true;
+    try {
+      const res = await fetch(`${apiUrl.base}/auth/yo`, { headers: adminHeaders() });
+      if (res.status === 401) salirAlLogin('Tu sesión terminó. Vuelve a entrar.');
+    } catch {
+      // Sin conexión no se concluye nada.
+    } finally {
+      revisandoSesion = false;
+    }
   }
 
   async function iniciarSesion() {
@@ -313,7 +371,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       if (typeof localStorage !== 'undefined') localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, data.token);
       vistaUsuario = false;
       await cargarIdentidad();
-      cerrarLogin();
+      loginPassword = '';
       adminMensaje = `👋 Hola, ${data.operador?.nombre || data.operador?.email}`;
       setTimeout(() => { adminMensaje = ''; }, 3000);
     } catch (err) {
@@ -334,13 +392,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       // Si la API no responde igual limpiamos local: quedarse "dentro" de un
       // panel que no puede hablar con el backend no le sirve a nadie.
     }
-    adminToken = '';
-    identidad = null;
-    vistaUsuario = false;
-    if (typeof localStorage !== 'undefined') localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
-    if (activeTab === 'admin') activeTab = 'vectorizacion';
-    adminMensaje = '🔒 Sesión cerrada';
-    setTimeout(() => { adminMensaje = ''; }, 2500);
+    salirAlLogin();
   }
 
   function entrarVistaUsuario() {
@@ -418,6 +470,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     const params = new URLSearchParams(window.location.search);
     const tokenParam = params.get('admin');
     if (!tokenParam) return;
+    sesionVerificando = true;
     // Limpia la URL inmediatamente para no dejar el token a la vista.
     params.delete('admin');
     const cleanUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '') + window.location.hash;
@@ -442,6 +495,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       // Si la API no responde, no guardamos nada. El usuario reintenta.
       adminMensaje = '❌ No se pudo verificar token admin (API offline)';
       setTimeout(() => { adminMensaje = ''; }, 4000);
+    } finally {
+      sesionVerificando = false;
     }
   }
   let vectorizacionTab = $state('proyectos');
@@ -640,8 +695,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       }
       const data = await res.json();
       operadores = data.operadores ?? [];
-      // La lista de roles la manda el backend para no duplicarla aquí: hoy
-      // 'cliente' no se puede asignar hasta que exista el filtrado por proyecto.
+      // La lista de roles la manda el backend para no duplicarla aquí.
       if (data.roles_asignables?.length) rolesAsignables = data.roles_asignables;
     } catch (err) {
       errorOperadores = err.message;
@@ -657,8 +711,18 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     operadorFormNombre = '';
     operadorFormPassword = '';
     operadorFormRol = 'admin';
+    operadorFormProyectos = new Set();
     errorFormOperador = '';
     operadorFormAbierto = true;
+    if (proyectos.length === 0) cargarProyectos();
+  }
+
+  // Proyectos a los que entra una cuenta con rol 'cliente'.
+  let operadorFormProyectos = $state(new Set());
+  function alternarProyectoOperador(id) {
+    const elegidos = new Set(operadorFormProyectos);
+    elegidos.has(id) ? elegidos.delete(id) : elegidos.add(id);
+    operadorFormProyectos = elegidos;
   }
 
   function abrirEditarOperador(o) {
@@ -667,8 +731,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     operadorFormNombre = o.nombre;
     operadorFormPassword = '';
     operadorFormRol = o.rol;
+    operadorFormProyectos = new Set(o.proyectos ?? []);
     errorFormOperador = '';
     operadorFormAbierto = true;
+    if (proyectos.length === 0) cargarProyectos();
   }
 
   function cerrarFormOperador() {
@@ -684,13 +750,19 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       const url = editando
         ? `${apiUrl.base}/operadores/${encodeURIComponent(operadorEditandoId)}`
         : `${apiUrl.base}/operadores`;
+      // Los proyectos solo significan algo para 'cliente'; con otro rol se limpian.
+      const proyectosElegidos = operadorFormRol === 'cliente' ? [...operadorFormProyectos] : [];
+      if (operadorFormRol === 'cliente' && proyectosElegidos.length === 0) {
+        throw new Error('Elige al menos un proyecto: sin proyectos, la cuenta de cliente entra y no ve nada.');
+      }
       const body = editando
-        ? { nombre: operadorFormNombre, rol: operadorFormRol }
+        ? { nombre: operadorFormNombre, rol: operadorFormRol, proyectos: proyectosElegidos }
         : {
             email: operadorFormEmail.trim(),
             nombre: operadorFormNombre.trim(),
             password: operadorFormPassword,
             rol: operadorFormRol,
+            proyectos: proyectosElegidos,
           };
       const res = await fetch(url, {
         method: editando ? 'PUT' : 'POST',
@@ -854,7 +926,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   // === Registros ===
   // Bitácora de interacciones /chatbot. Consume GET /registros con filtros y
-  // paginación. El "user" del sistema es el proyecto (quien tiene su password).
+  // paginación. El "user" del sistema es el proyecto.
   let registrosDesde = $state('');
   let registrosHasta = $state('');
   let registrosProyectoFiltro = $state('');
@@ -1364,8 +1436,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let proyectoFormSlug = $state('');
   let proyectoFormNombre = $state('');
   let proyectoFormDescripcion = $state('');
-  let proyectoFormPassword = $state('');
-  let proyectoFormPasswordVisible = $state(false);
   let cargandoGuardarProyecto = $state(false);
   let mensajeProyecto = $state('');
   let proyectoABorrar = $state(null);
@@ -1380,58 +1450,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let proyectoActivoId = $state('');
   const proyectoActivo = $derived(proyectos.find((p) => p.id === proyectoActivoId) ?? null);
 
-  // ─── Activación con password ──────────────────────────────────────
-  // Cada proyecto puede tener su propio password (gestionado por admin).
-  // Al hacer click en ⚡:
-  //   - Admin (con token) → activa sin password.
-  //   - Proyecto sin password → activa directo.
-  //   - Proyecto con password ya desbloqueado en esta sesión → activa.
-  //   - Proyecto con password no desbloqueado → modal pide password.
-  let proyectoParaDesbloquear = $state(null); // {id, nombre, slug} mientras el modal está abierto
-  let passwordIntento = $state('');
-  let cargandoVerificarPassword = $state(false);
-  let errorPasswordProyecto = $state('');
-
-  function proyectoUnlockKey(id) { return `bzz_proyecto_unlock_${id}`; }
-
-  function proyectoYaDesbloqueado(id) {
-    if (typeof sessionStorage === 'undefined') return false;
-    return sessionStorage.getItem(proyectoUnlockKey(id)) === '1';
-  }
-
-  function marcarProyectoDesbloqueado(id) {
-    if (typeof sessionStorage !== 'undefined') {
-      sessionStorage.setItem(proyectoUnlockKey(id), '1');
-    }
-  }
-
+  // Activar un proyecto = elegirlo como contexto de trabajo. El API ya solo
+  // lista los proyectos a los que la cuenta tiene acceso, así que no hay nada
+  // más que verificar aquí.
   function activarProyectoPorClick(p) {
     if (p.id === proyectoActivoId) return; // ya activo
-    // Admin bypass total.
-    if (isAdmin) {
-      proyectoActivoId = p.id;
-      vinoDeCambiarProyecto = false;
-      irABasesDeConocimiento();
-      return;
-    }
-    // Sin password → activa directo.
-    if (!p.requires_password) {
-      proyectoActivoId = p.id;
-      vinoDeCambiarProyecto = false;
-      irABasesDeConocimiento();
-      return;
-    }
-    // Ya desbloqueado en esta sesión → activa.
-    if (proyectoYaDesbloqueado(p.id)) {
-      proyectoActivoId = p.id;
-      vinoDeCambiarProyecto = false;
-      irABasesDeConocimiento();
-      return;
-    }
-    // Pedir password.
-    proyectoParaDesbloquear = { id: p.id, nombre: p.nombre, slug: p.slug };
-    passwordIntento = '';
-    errorPasswordProyecto = '';
+    proyectoActivoId = p.id;
+    vinoDeCambiarProyecto = false;
+    irABasesDeConocimiento();
   }
 
   // Elegir un proyecto lleva directo al siguiente paso del flujo: sus Bases
@@ -1442,108 +1468,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     vectorizacionTab = 'contextos';
   }
 
-  function cerrarPromptPassword() {
-    proyectoParaDesbloquear = null;
-    passwordIntento = '';
-    errorPasswordProyecto = '';
-  }
-
-  async function verificarPasswordProyecto() {
-    if (!proyectoParaDesbloquear) return;
-    const intento = passwordIntento;
-    if (!intento) {
-      errorPasswordProyecto = 'Tipea un password.';
-      return;
-    }
-    cargandoVerificarPassword = true;
-    errorPasswordProyecto = '';
-    try {
-      const res = await fetch(`${apiUrl.base}/proyectos/${encodeURIComponent(proyectoParaDesbloquear.id)}/verificar-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: intento }),
-      });
-      if (res.status === 401) {
-        errorPasswordProyecto = '❌ Password incorrecto';
-        return;
-      }
-      if (!res.ok) {
-        const txt = await res.text().catch(() => '');
-        throw new Error(`HTTP ${res.status}${txt ? ': ' + txt : ''}`);
-      }
-      // OK
-      marcarProyectoDesbloqueado(proyectoParaDesbloquear.id);
-      proyectoActivoId = proyectoParaDesbloquear.id;
-      vinoDeCambiarProyecto = false;
-      irABasesDeConocimiento();
-      cerrarPromptPassword();
-    } catch (err) {
-      errorPasswordProyecto = `❌ ${err.message}`;
-    } finally {
-      cargandoVerificarPassword = false;
-    }
-  }
-
-  // ─── Admin: gestión centralizada de passwords por proyecto ────────
-  // Edición inline desde el subtab "🔑 Accesos" del engrane. Cada fila
-  // mantiene su propio borrador y mensaje.
-  let accesosBorrador = $state({}); // { [proyectoId]: 'password tipeado' }
-  let accesosVisible = $state({});  // { [proyectoId]: bool } — toggle mostrar/ocultar
-  let accesosMensaje = $state({});  // { [proyectoId]: '✅ Guardado' | '❌ Error...' }
-  let accesosCargando = $state({}); // { [proyectoId]: bool }
-
-  async function patchPasswordProyecto(p, payload) {
-    // payload es { password: 'x' } o { password: null } (quitar) — ya
-    // pre-formateado por el caller.
-    accesosCargando[p.id] = true;
-    accesosMensaje[p.id] = '';
-    try {
-      const res = await fetch(`${apiUrl.base}/proyectos/${encodeURIComponent(p.id)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', ...adminHeaders() },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        const txt = await res.text().catch(() => '');
-        throw new Error(`HTTP ${res.status}${txt ? ': ' + txt : ''}`);
-      }
-      accesosMensaje[p.id] = payload.password === null ? '✅ Password removido' : '✅ Password actualizado';
-      accesosBorrador[p.id] = '';
-      accesosVisible[p.id] = false;
-      // Refresca para actualizar `requires_password`.
-      await cargarProyectos();
-      const msgSnap = accesosMensaje[p.id];
-      setTimeout(() => {
-        if (accesosMensaje[p.id] === msgSnap) accesosMensaje[p.id] = '';
-      }, 2500);
-    } catch (err) {
-      accesosMensaje[p.id] = `❌ ${err.message}`;
-    } finally {
-      accesosCargando[p.id] = false;
-    }
-  }
-
-  function guardarPasswordAcceso(p) {
-    const valor = (accesosBorrador[p.id] ?? '').trim();
-    if (!valor) {
-      accesosMensaje[p.id] = '⚠️ Tipea un password antes de guardar';
-      setTimeout(() => { if (accesosMensaje[p.id]?.includes('Tipea')) accesosMensaje[p.id] = ''; }, 2500);
-      return;
-    }
-    patchPasswordProyecto(p, { password: valor });
-  }
-
-  function quitarPasswordAcceso(p) {
-    patchPasswordProyecto(p, { password: null });
-  }
-
   function resetProyectoForm() {
     proyectoEditandoId = null;
     proyectoFormSlug = '';
     proyectoFormNombre = '';
     proyectoFormDescripcion = '';
-    proyectoFormPassword = '';
-    proyectoFormPasswordVisible = false;
     mensajeProyecto = '';
   }
   function abrirFormCrearProyecto() {
@@ -1555,11 +1484,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     proyectoFormSlug = p.slug;
     proyectoFormNombre = p.nombre;
     proyectoFormDescripcion = p.descripcion ?? '';
-    // Al editar, NO precargamos el password (la API no lo devuelve por
-    // seguridad). Si el usuario deja vacío = mantener el password actual.
-    // Si tipea algo nuevo = reemplazar.
-    proyectoFormPassword = '';
-    proyectoFormPasswordVisible = false;
     mensajeProyecto = '';
     proyectoFormAbierto = true;
   }
@@ -1615,13 +1539,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       const url = editando
         ? `${apiUrl.base}/proyectos/${encodeURIComponent(proyectoEditandoId)}`
         : `${apiUrl.base}/proyectos`;
-      // Password: en CREATE, vacío = sin password; en EDIT, vacío = no tocar el
-      // password existente (no se manda en el body). Solo se manda si el usuario
-      // tipea algo.
-      const passwordInput = proyectoFormPassword.trim();
-      const body = editando
-        ? (passwordInput ? { nombre, descripcion, password: passwordInput } : { nombre, descripcion })
-        : { slug, nombre, descripcion, password: passwordInput || null };
+      const body = editando ? { nombre, descripcion } : { slug, nombre, descripcion };
 
       const res = await fetch(url, {
         method: editando ? 'PUT' : 'POST',
@@ -2423,7 +2341,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   async function cargarFuentes() {
-    if (!proyectoActivoId) { fuentes = []; return; }
+    // Las fuentes de datos son cosa de admins: a un cliente el API le responde 403.
+    if (!proyectoActivoId || !isAdmin) { fuentes = []; return; }
     cargandoFuentes = true;
     errorFuentes = '';
     try {
@@ -3225,10 +3144,17 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   onMount(() => {
     verificarSalud(); // incluye reprogramarTimer() al terminar
-    procesarParamAdmin();
-    // Con un token ya guardado de una sesión anterior, saber de quién es (y si
-    // sigue vivo) sin esperar a que el usuario haga algo.
-    if (adminToken) cargarIdentidad();
+    try {
+      const aviso = sessionStorage.getItem(AVISO_LOGIN_KEY);
+      if (aviso) { loginError = aviso; sessionStorage.removeItem(AVISO_LOGIN_KEY); }
+    } catch { /* sin sessionStorage no hay aviso que mostrar */ }
+    // Primero la URL ?admin=<token> (si viene); después, con el token que haya
+    // quedado guardado, confirmar de quién es y si sigue vivo.
+    procesarParamAdmin().then(() => {
+      if (identidad) return;
+      if (adminToken) cargarIdentidad();
+      else sesionVerificando = false;
+    });
     return () => clearInterval(timerVerificacion);
   });
 
@@ -4436,9 +4362,76 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 {#if adminMensaje}
   <div class="admin-toast">{adminMensaje}</div>
 {/if}
+{#if !identidad}
+  <main class="login-pantalla">
+    <div class="login-tarjeta">
+      <div class="login-marca">
+        <div class="avatar" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM8 17.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5zM9.5 8c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5S9.5 9.38 9.5 8zm6.5 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="white"/>
+        </svg>
+        </div>
+        <div>
+          <h1 class="login-titulo">Constructor de Asistentes Buzzword</h1>
+          {#if ambienteInfo}
+            <span class="ambiente-etiqueta ambiente-etiqueta--{AMBIENTES[AMBIENTE] ? AMBIENTE : 'otro'}">
+              <span class="ambiente-etiqueta-punto" aria-hidden="true"></span>
+              <span class="sr-only">Ambiente:</span>
+              {ambienteInfo.etiqueta}
+            </span>
+          {/if}
+        </div>
+      </div>
+
+      {#if sesionVerificando}
+        <p class="login-estado" role="status">⟳ Verificando tu sesión…</p>
+      {:else if errorConexionSesion}
+        <p class="login-error" role="alert">❌ No se pudo conectar con el servidor para verificar tu sesión.</p>
+        <button type="button" class="modal-btn confirm login-enviar" onclick={() => { sesionVerificando = true; cargarIdentidad(); }}>
+          Reintentar
+        </button>
+      {:else}
+        <form class="login-form" onsubmit={(e) => { e.preventDefault(); iniciarSesion(); }}>
+          <label class="login-label" for="login-email">Email</label>
+          <!-- svelte-ignore a11y_autofocus -->
+          <input
+            id="login-email"
+            type="email"
+            class="contexto-input"
+            autocomplete="username"
+            bind:value={loginEmail}
+            disabled={loginCargando}
+            placeholder="tu@correo.com"
+            autofocus
+          />
+
+          <label class="login-label" for="login-password">Contraseña</label>
+          <input
+            id="login-password"
+            type="password"
+            class="contexto-input"
+            autocomplete="current-password"
+            bind:value={loginPassword}
+            disabled={loginCargando}
+            placeholder="••••••••"
+          />
+
+          {#if loginError}
+            <p class="login-error" role="alert">❌ {loginError}</p>
+          {/if}
+
+          <button type="submit" class="modal-btn confirm login-enviar" disabled={loginCargando}>
+            {loginCargando ? '⟳ Entrando...' : 'Entrar'}
+          </button>
+        </form>
+        <p class="login-nota">¿No tienes cuenta o olvidaste tu contraseña? Pídesela a quien administra el panel.</p>
+      {/if}
+    </div>
+  </main>
+{:else}
   {#if vistaUsuario}
     <div class="vista-usuario-banner" role="status" aria-live="polite">
-      <span>👁 <strong>Vista usuario</strong> — eres admin pero los controles privilegiados están ocultos. Así ve la UI alguien sin tu token.</span>
+      <span>👁 <strong>Vista cliente</strong> — eres admin, pero el panel se muestra como lo ve una cuenta de cliente: sin Administración, sin fuentes de datos y sin crear proyectos.</span>
       <button type="button" class="vista-usuario-banner__btn" onclick={salirVistaUsuario}>
         ← Volver a admin
       </button>
@@ -4515,74 +4508,28 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         <button
           class="tab-btn vista-usuario-toggle"
           onclick={entrarVistaUsuario}
-          title="Vista usuario — previsualiza la UI como la verían los no-admin (no cierra sesión)"
-          aria-label="Activar vista usuario"
+          title="Vista cliente — previsualiza el panel como lo ve una cuenta de cliente (no cierra sesión)"
+          aria-label="Activar vista cliente"
         >👁</button>
       {/if}
-      {#if !tieneTokenAdmin}
-        <button
-          class="tab-btn login-btn"
-          onclick={abrirLogin}
-          title="Entrar con tu cuenta de operador"
-        ><Icon name="admin" size={16} /> Entrar</button>
-      {/if}
+      <span
+        class="operador-chip header-cuenta"
+        class:operador-chip--legacy={identidad?.tipo === 'legacy'}
+        title={identidad?.tipo === 'legacy'
+          ? 'Entraste con el token compartido del .env: no identifica a nadie.'
+          : `${identidad?.operador?.email ?? ''} · rol ${identidad?.rol ?? ''}`}
+      >
+        <Icon name="cuenta" size={15} />
+        <span class="header-cuenta-nombre">{nombreOperador ?? 'token compartido'}</span>
+      </span>
+      <button
+        class="tab-btn header-salir-btn"
+        onclick={cerrarSesionAdmin}
+        title="Cerrar sesión"
+        aria-label="Cerrar sesión"
+      ><Icon name="cerrar-sesion" size={16} /></button>
     </div>
   </header>
-
-  <!-- Login de operador -->
-  {#if loginAbierto}
-    <div class="modal-overlay" onclick={() => { if (!loginCargando) cerrarLogin(); }} role="presentation">
-      <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 420px;" use:modal>
-        <h3><Icon name="api-keys" size={18} /> Entrar</h3>
-        <form
-          onsubmit={(e) => { e.preventDefault(); iniciarSesion(); }}
-          style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.75rem;"
-        >
-          <label class="login-label" for="login-email">Email</label>
-          <!-- svelte-ignore a11y_autofocus -->
-          <input
-            id="login-email"
-            type="email"
-            class="contexto-input"
-            autocomplete="username"
-            bind:value={loginEmail}
-            disabled={loginCargando}
-            placeholder="tu@correo.com"
-            autofocus
-          />
-
-          <label class="login-label" for="login-password">Contraseña</label>
-          <input
-            id="login-password"
-            type="password"
-            class="contexto-input"
-            autocomplete="current-password"
-            bind:value={loginPassword}
-            disabled={loginCargando}
-            placeholder="••••••••"
-          />
-
-          {#if loginError}
-            <p class="login-error" role="alert">❌ {loginError}</p>
-          {/if}
-
-          <div class="modal-buttons" style="margin-top: 0.25rem;">
-            <button type="button" class="modal-btn cancel" onclick={cerrarLogin} disabled={loginCargando}>
-              Cancelar
-            </button>
-            <button type="submit" class="modal-btn confirm" disabled={loginCargando}>
-              {loginCargando ? '⟳ Entrando...' : 'Entrar'}
-            </button>
-          </div>
-        </form>
-
-        <p class="login-nota">
-          ¿No tienes cuenta todavía? Se sigue pudiendo entrar con el enlace de siempre,
-          <code>?admin=&lt;token&gt;</code>.
-        </p>
-      </div>
-    </div>
-  {/if}
 
   <!-- Sub-nav de chatbot -->
   {#if activeTab === 'chat'}
@@ -4757,6 +4704,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           >
             <Icon name="asistente" size={16} /> Asistentes
           </button>
+          {#if isAdmin}
           <button
             class="vectorizacion-subtab-btn"
             class:active={vectorizacionTab === 'fuentes'}
@@ -4766,6 +4714,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           >
             <Icon name="fuente-datos" size={16} /> Fuentes de datos
           </button>
+          {/if}
           <button
             class="vectorizacion-subtab-btn"
             class:active={vectorizacionTab === 'usuarios'}
@@ -4864,39 +4813,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     placeholder="Para qué sirve este proyecto, qué agrupa..."
                   ></textarea>
                 </div>
-                <div class="form-field">
-                  <label for="proyecto-password" style="display: inline-flex; align-items: center; gap: 0.35rem;">
-                    Password de activación (opcional)
-                    <span
-                      title="Si lo seteas, los usuarios no-admin necesitarán este password para activar el proyecto con ⚡. Déjalo vacío al editar para mantener el password actual sin cambios."
-                      style="display: inline-flex; cursor: help; opacity: 0.65;"
-                      aria-label="Info sobre password de activación"
-                    >
-                      <Icon name="info" size={14} />
-                    </span>
-                  </label>
-                  <div style="display: flex; gap: 0.4rem;">
-                    <input
-                      id="proyecto-password"
-                      type={proyectoFormPasswordVisible ? 'text' : 'password'}
-                      bind:value={proyectoFormPassword}
-                      disabled={cargandoGuardarProyecto}
-                      maxlength="80"
-                      class="contexto-input"
-                      style="flex: 1;"
-                      placeholder={proyectoEditandoId ? 'Vacío = mantener actual; escribe algo nuevo para cambiarlo' : 'Vacío = sin password (cualquiera activa)'}
-                    />
-                    <button
-                      type="button"
-                      onclick={() => proyectoFormPasswordVisible = !proyectoFormPasswordVisible}
-                      class="vectorizacion-action-btn"
-                      title={proyectoFormPasswordVisible ? 'Ocultar' : 'Mostrar'}
-                      style="flex-shrink: 0;"
-                    >
-                      {proyectoFormPasswordVisible ? '🙈' : '👁'}
-                    </button>
-                  </div>
-                </div>
                 <div style="display: flex; gap: 0.5rem;">
                   <button
                     onclick={guardarProyecto}
@@ -4948,14 +4864,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                       disabled={esActivo}
                       class="proyecto-activar-btn"
                       class:proyecto-activar-btn--activo={esActivo}
-                      class:proyecto-activar-btn--locked={p.requires_password && !isAdmin && !proyectoYaDesbloqueado(p.id) && !esActivo}
-                      title={esActivo ? 'Proyecto ya activo' : (p.requires_password && !isAdmin && !proyectoYaDesbloqueado(p.id) ? `Activar (requiere password) — ${p.nombre}` : `Activar ${p.nombre}`)}
+                      title={esActivo ? 'Proyecto ya activo' : `Activar ${p.nombre}`}
                       aria-label={esActivo ? `Proyecto ${p.nombre} ya activo` : `Activar proyecto ${p.nombre}`}
                     >
                       <Icon name="activar" size={20} />
-                      {#if p.requires_password && !isAdmin && !proyectoYaDesbloqueado(p.id) && !esActivo}
-                        <span class="proyecto-activar-lock" aria-hidden="true">🔒</span>
-                      {/if}
                     </button>
                     <div style="flex: 1; min-width: 0;">
                       <div style="display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap;">
@@ -5136,6 +5048,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     {/each}
                   </select>
                 </div>
+                {#if isAdmin}
                 <div class="form-field">
                   <label style="display: inline-flex; align-items: center; gap: 0.35rem;">
                     Fuentes de datos
@@ -5167,6 +5080,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     </ul>
                   {/if}
                 </div>
+                {/if}
                 <div class="form-field">
                   <label for="asistente-modelo" style="display: inline-flex; align-items: center; gap: 0.35rem;">
                     Modelo LLM
@@ -5722,7 +5636,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             volver a usar la URL universal sin el query param.
           </p>
 
-          {#if isAdmin}
+          {#if identidad}
           <div class="crear-contexto-wrap" class:abierto={usuarioFormAbierto}>
             <button class="crear-contexto-toggle" onclick={() => usuarioFormAbierto ? cerrarFormUsuario() : abrirFormCrearUsuario()}>
               <h3>
@@ -5850,7 +5764,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                         </div>
                       {/if}
                     </div>
-                    {#if isAdmin}
+                    {#if identidad}
                       <div style="display: flex; gap: 0.4rem; flex-shrink: 0; align-items: center;">
                         <button onclick={() => toggleActivoUsuario(u)} class="vectorizacion-action-btn" title={u.activo ? 'Desactivar' : 'Activar'}>
                           <Icon name={u.activo ? 'reset' : 'check'} size={16} label={u.activo ? 'Desactivar' : 'Activar'} />
@@ -5893,7 +5807,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
         <!-- Contextos -->
         <!-- Fuentes de datos externas -->
-        {#if vectorizacionTab === 'fuentes'}
+        {#if vectorizacionTab === 'fuentes' && isAdmin}
           {#if proyectoActivo}
             <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.85rem; background: var(--muted); border-radius: 8px; margin-bottom: 1rem; font-size: 0.85rem; color: var(--fg);">
               <Icon name="proyecto" size={14} />
@@ -7063,56 +6977,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     </div>
   {/if}
 
-  <!-- Modal: pedir password para activar proyecto -->
-  {#if proyectoParaDesbloquear}
-    <div class="modal-overlay" onclick={cerrarPromptPassword} role="presentation">
-      <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 440px;" use:modal>
-        <h3><Icon name="accesos" size={16} /> Activar proyecto</h3>
-        <p>
-          Para activar <strong>{proyectoParaDesbloquear.nombre}</strong> (<code>{proyectoParaDesbloquear.slug}</code>) necesitas su password.
-        </p>
-        <form
-          onsubmit={(e) => { e.preventDefault(); verificarPasswordProyecto(); }}
-          style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.75rem;"
-        >
-          <input
-            type="password"
-            bind:value={passwordIntento}
-            disabled={cargandoVerificarPassword}
-            placeholder="Password del proyecto"
-            class="contexto-input"
-            autocomplete="off"
-            autofocus
-          />
-          {#if errorPasswordProyecto}
-            <p style="font-size: 0.85rem; color: var(--danger-fg); margin: 0;">{errorPasswordProyecto}</p>
-          {/if}
-          <p style="font-size: 0.75rem; color: var(--fg-muted); margin: 0;">
-            Si lo tipeas bien, queda desbloqueado en este navegador hasta que cierres la pestaña.
-          </p>
-          <div class="modal-buttons" style="margin-top: 0.25rem;">
-            <button
-              type="button"
-              onclick={cerrarPromptPassword}
-              disabled={cargandoVerificarPassword}
-              class="modal-btn cancel"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={cargandoVerificarPassword}
-              class="modal-btn danger"
-              style="background: var(--ok-solid); border-color: rgba(34,197,94,0.85);"
-            >
-              {cargandoVerificarPassword ? '⟳ Verificando...' : '⚡ Activar'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  {/if}
-
   <!-- Modal: visualizar / editar contenido de un documento de texto (snippet) -->
   {#if documentoVisualizar}
     <div class="modal-overlay" onclick={cerrarModalDocumento} role="presentation">
@@ -7423,13 +7287,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           </button>
           <button
             class="vectorizacion-subtab-btn"
-            class:active={adminTab === 'accesos'}
-            onclick={() => { adminTab = 'accesos'; cargarProyectos(); }}
-          >
-            <Icon name="accesos" size={15} /> Accesos
-          </button>
-          <button
-            class="vectorizacion-subtab-btn"
             class:active={adminTab === 'registros'}
             onclick={() => { adminTab = 'registros'; if (!registrosData) cargarRegistros(); if (proyectos.length === 0) cargarProyectos(); if (hitos.length === 0) cargarHitos(); if (usuariosGlobal.length === 0) cargarUsuariosGlobal(); if (asistentesGlobal.length === 0) cargarAsistentesGlobal(); }}
           >
@@ -7734,9 +7591,35 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   {/each}
                 </select>
                 <small style="font-size: 0.75rem; color: var(--fg-muted); display: block; margin-top: 0.25rem;">
-                  <strong>admin</strong> opera el panel. <strong>superadmin</strong> además administra operadores.
+                  <strong>admin</strong> opera el panel completo. <strong>superadmin</strong> además administra operadores.
+                  <strong>cliente</strong> solo ve y trabaja los proyectos que le asignes.
                 </small>
               </div>
+              {#if operadorFormRol === 'cliente'}
+                <div class="form-field">
+                  <span class="operador-proyectos-titulo">Proyectos a los que puede entrar</span>
+                  {#if proyectos.length === 0}
+                    <p style="margin: 0; font-size: 0.82rem; color: var(--fg-muted);">Todavía no hay proyectos. Crea uno en Construcción.</p>
+                  {:else}
+                    <ul class="fuente-ops" style="margin: 0;">
+                      {#each proyectos as p (p.id)}
+                        <li class="fuente-op" class:elegida={operadorFormProyectos.has(p.id)}>
+                          <label class="fuente-op-label">
+                            <input type="checkbox" checked={operadorFormProyectos.has(p.id)} onchange={() => alternarProyectoOperador(p.id)} disabled={guardandoOperador} />
+                            <span class="fuente-op-cuerpo">
+                              <span class="fuente-op-ruta"><strong>{p.nombre}</strong> <span class="fuente-op-resumen">{p.slug}</span></span>
+                            </span>
+                          </label>
+                        </li>
+                      {/each}
+                    </ul>
+                  {/if}
+                  <small style="font-size: 0.75rem; color: var(--fg-muted); display: block; margin-top: 0.25rem;">
+                    Dentro de ellos arma bases de conocimiento, asistentes y usuarios finales. No entra a Administración,
+                    no crea proyectos y no toca fuentes de datos.
+                  </small>
+                </div>
+              {/if}
 
               {#if errorFormOperador}
                 <p class="mensaje-contexto">❌ {errorFormOperador}</p>
@@ -7783,6 +7666,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     <td><code style="font-size: 0.78rem;">{o.email}</code></td>
                     <td>
                       <span class="rol-badge" class:rol-badge--super={o.rol === 'superadmin'}>{o.rol}</span>
+                      {#if o.rol === 'cliente'}
+                        <div style="font-size: 0.75rem; color: var(--fg-muted); margin-top: 0.2rem;">
+                          {(o.proyectos ?? []).length ? o.proyectos.map(nombreProyectoPorId).join(', ') : 'sin proyectos'}
+                        </div>
+                      {/if}
                     </td>
                     <td>
                       {#if o.activo}
@@ -8291,117 +8179,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         </div>
         {/if}
 
-        <!-- Accesos -->
-        {#if adminTab === 'accesos'}
-        <div class="modelos-wrap">
-          <div class="seccion-header">
-            <h3><Icon name="accesos" size={16} /> Accesos</h3>
-            <button onclick={cargarProyectos} class="vectorizacion-action-btn" disabled={cargandoProyectos}>
-              ↻ Recargar
-            </button>
-          </div>
-
-          <p style="color: var(--fg-soft); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
-            Administra los passwords de activación de cada proyecto. Tú (admin) puedes activar cualquier proyecto sin password; los demás usuarios deberán tipear el password cuando hagan clic en el ⚡ del proyecto.
-          </p>
-
-          {#if cargandoProyectos}
-            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando proyectos...</p>
-          {:else if proyectos.length === 0}
-            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">No hay proyectos creados todavía.</p>
-          {:else}
-            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-              {#each proyectos as p (p.id)}
-                {@const tienePass = p.requires_password === true}
-                {@const visible = !!accesosVisible[p.id]}
-                {@const cargando = !!accesosCargando[p.id]}
-                {@const mensaje = accesosMensaje[p.id] || ''}
-                <div style="background: var(--muted); border-radius: 8px; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem;">
-                  <!-- Encabezado de la fila -->
-                  <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
-                    <strong style="color: var(--fg); font-size: 1rem;">{p.nombre}</strong>
-                    <code style="background: var(--muted); padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; color: var(--fg-soft);">{p.slug}</code>
-                    {#if tienePass}
-                      <span style="display: inline-flex; align-items: center; gap: 0.3rem; color: var(--ok); font-size: 0.8rem; font-weight: 600;">
-                        🔒 Con password
-                      </span>
-                    {:else}
-                      <span style="display: inline-flex; align-items: center; gap: 0.3rem; color: var(--fg-muted); font-size: 0.8rem;">
-                        🔓 Sin password (abierto)
-                      </span>
-                    {/if}
-                  </div>
-
-                  <!-- Zona de acción -->
-                  {#if !visible}
-                    <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-                      <button
-                        onclick={() => { accesosVisible[p.id] = true; if (accesosBorrador[p.id] == null) accesosBorrador[p.id] = ''; accesosMensaje[p.id] = ''; }}
-                        class="vectorizacion-action-btn"
-                        disabled={cargando}
-                      >
-                        {tienePass ? '✏️ Cambiar password' : '➕ Agregar password'}
-                      </button>
-                      {#if tienePass}
-                        <button
-                          onclick={() => quitarPasswordAcceso(p)}
-                          class="vectorizacion-action-btn"
-                          disabled={cargando}
-                          style="background: var(--danger); border-color: rgba(200,40,40,0.7);"
-                          title="Eliminar el password (el proyecto quedará abierto a cualquier usuario)"
-                        >
-                          🗑️ Quitar password
-                        </button>
-                      {/if}
-                    </div>
-                  {:else}
-                    <form
-                      onsubmit={(e) => { e.preventDefault(); guardarPasswordAcceso(p); }}
-                      style="display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center;"
-                    >
-                      <input
-                        type="text"
-                        bind:value={accesosBorrador[p.id]}
-                        placeholder={tienePass ? 'Nuevo password (reemplaza el actual)' : 'Password de activación'}
-                        disabled={cargando}
-                        style="flex: 1; min-width: 220px; padding: 0.55rem 0.75rem; font-size: 0.95rem; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--fg);"
-                      />
-                      <button
-                        type="submit"
-                        class="crear-contexto-btn"
-                        disabled={cargando}
-                        style="padding: 0.55rem 0.95rem;"
-                      >
-                        {cargando ? '⟳ Guardando...' : '💾 Guardar'}
-                      </button>
-                      <button
-                        type="button"
-                        onclick={() => { accesosVisible[p.id] = false; accesosBorrador[p.id] = ''; accesosMensaje[p.id] = ''; }}
-                        class="vectorizacion-action-btn"
-                        disabled={cargando}
-                      >
-                        Cancelar
-                      </button>
-                    </form>
-                  {/if}
-
-                  <!-- Mensaje de feedback -->
-                  {#if mensaje}
-                    <p style="margin: 0; font-size: 0.85rem; color: {mensaje.startsWith('❌') ? 'var(--danger-fg)' : (mensaje.startsWith('⚠️') ? 'var(--warn)' : 'var(--ok)')};">
-                      {mensaje}
-                    </p>
-                  {/if}
-                </div>
-              {/each}
-            </div>
-
-            <p style="color: var(--fg-muted); font-size: 0.75rem; margin-top: 1rem; line-height: 1.4;">
-              💡 El password se almacena en el servidor por proyecto. Quitar el password deja el proyecto abierto — cualquier usuario podrá activarlo con ⚡ sin prompt.
-            </p>
-          {/if}
-        </div>
-        {/if}
-
         <!-- Registros -->
         {#if adminTab === 'registros'}
         <div class="modelos-wrap">
@@ -8420,7 +8197,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           </div>
 
           <p style="color: var(--fg-soft); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
-            Bitácora de interacciones con los asistentes. El proyecto identifica quién opera el asistente (quien tiene su password); la columna Usuario, cuando existe, identifica a la persona final que escribió — ver subtab Usuarios de cada proyecto.
+            Bitácora de interacciones con los asistentes. El proyecto identifica quién opera el asistente; la columna Usuario, cuando existe, identifica a la persona final que escribió — ver subtab Usuarios de cada proyecto.
             Los hitos (🏁) marcan cuándo entró en vigor un cambio que buscaba ahorrar tiempo o tokens — solo se ven cuando la tabla está ordenada por Timestamp.
             La etiqueta <span class="registro-badge-respaldo">respaldo</span> junto a los tokens marca las consultas que respondió la key de respaldo de OpenAI (ver subtab API keys).
           </p>
@@ -8982,6 +8759,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       </div>
     </main>
   {/if}
+{/if}
 </div>
 
 <style>
@@ -12525,6 +12303,93 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       display: inline-flex;
       align-items: center;
       justify-content: center;
+    }
+  }
+
+  /* ─── Pantalla de login ─── */
+  .login-pantalla {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem 1rem;
+    background: var(--surface-2);
+    overflow-y: auto;
+  }
+
+  .login-tarjeta {
+    width: 100%;
+    max-width: 400px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-md);
+    padding: 1.75rem 1.5rem 1.5rem;
+  }
+
+  .login-marca {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .login-titulo {
+    margin: 0 0 0.3rem;
+    font-size: 1.05rem;
+    font-weight: 700;
+    line-height: 1.25;
+    color: var(--fg);
+  }
+
+  .login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+
+  .login-form .contexto-input {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .login-enviar {
+    width: 100%;
+    margin-top: 0.5rem;
+    padding: 0.65rem 1rem;
+  }
+
+  .login-estado {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--fg-muted);
+  }
+
+  .header-cuenta {
+    max-width: 220px;
+    flex-shrink: 1;
+    min-width: 0;
+  }
+
+  .header-cuenta-nombre {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .operador-proyectos-titulo {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--fg-muted);
+    margin-bottom: 0.4rem;
+  }
+
+  @media (max-width: 760px) {
+    .header-cuenta-nombre {
+      display: none;
     }
   }
 </style>
