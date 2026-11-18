@@ -8054,7 +8054,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   class="contexto-input"
                   bind:value={operadorFormEmail}
                   disabled={guardandoOperador}
-                  placeholder="persona@buzzword.mx"
+                  placeholder="usuario@grupocsi.com"
                   autocomplete="off"
                 />
                 {#if operadorEditandoId}
