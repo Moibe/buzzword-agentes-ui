@@ -4512,22 +4512,25 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           aria-label="Activar vista cliente"
         >👁</button>
       {/if}
-      <span
-        class="operador-chip header-cuenta"
-        class:operador-chip--legacy={identidad?.tipo === 'legacy'}
-        title={identidad?.tipo === 'legacy'
-          ? 'Entraste con el token compartido del .env: no identifica a nadie.'
-          : `${identidad?.operador?.email ?? ''} · rol ${identidad?.rol ?? ''}`}
-      >
-        <Icon name="cuenta" size={15} />
-        <span class="header-cuenta-nombre">{nombreOperador ?? 'token compartido'}</span>
-      </span>
+      {#if identidad?.tipo === 'operador'}
+        <span class="operador-chip header-cuenta" title="Entraste con tu cuenta ({identidad.operador?.email}) — rol {identidad.rol}">
+          <Icon name="cuenta" size={15} />
+          <span class="header-cuenta-nombre">{nombreOperador} · {identidad.rol}</span>
+        </span>
+      {:else}
+        <span class="operador-chip operador-chip--legacy header-cuenta" title="Entraste con el token compartido del .env: no identifica a nadie. Entra con tu cuenta para que quede registro de quién hace qué.">
+          ⚠ <span class="header-cuenta-nombre">token compartido</span>
+        </span>
+      {/if}
       <button
-        class="tab-btn header-salir-btn"
         onclick={cerrarSesionAdmin}
-        title="Cerrar sesión"
+        class="vectorizacion-action-btn header-salir-btn"
+        title="Cierra la sesión en el servidor y borra el token de este navegador"
         aria-label="Cerrar sesión"
-      ><Icon name="cerrar-sesion" size={16} /></button>
+        style="background: var(--danger-bg); border-color: var(--danger-border); color: var(--fg);"
+      >
+        <Icon name="cerrar-sesion" size={15} /> <span class="header-salir-texto">Cerrar sesión</span>
+      </button>
     </div>
   </header>
 
@@ -7211,25 +7214,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       <div class="vectorizacion-container">
         <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
           <h2 style="color: var(--fg); margin: 0;"><Icon name="cuenta" size={20} /> Administración</h2>
-          <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
-            {#if identidad?.tipo === 'operador'}
-              <span class="operador-chip" title="Entraste con tu cuenta — rol {identidad.rol}">
-                <Icon name="cuenta" size={15} /> {nombreOperador} · {identidad.rol}
-              </span>
-            {:else if identidad?.tipo === 'legacy'}
-              <span class="operador-chip operador-chip--legacy" title="Entraste con el token compartido del .env: no identifica a nadie. Entra con tu cuenta para que quede registro de quién hace qué.">
-                ⚠ token compartido
-              </span>
-            {/if}
-            <button
-              onclick={cerrarSesionAdmin}
-              class="vectorizacion-action-btn"
-              title="Cierra la sesión en el servidor y borra el token de este navegador"
-              style="background: var(--danger-bg); border-color: var(--danger-border); color: var(--fg);"
-            >
-              <Icon name="cerrar-sesion" size={15} /> Cerrar sesión
-            </button>
-          </div>
         </div>
 
         <!-- Sub-tab bar -->
@@ -12365,8 +12349,13 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     color: var(--fg-muted);
   }
 
+  .header-salir-btn {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
   .header-cuenta {
-    max-width: 220px;
+    max-width: 260px;
     flex-shrink: 1;
     min-width: 0;
   }
@@ -12388,7 +12377,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   @media (max-width: 760px) {
-    .header-cuenta-nombre {
+    .header-cuenta-nombre,
+    .header-salir-texto {
       display: none;
     }
   }
