@@ -7994,9 +7994,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         <div class="superadmin-encabezado">
           <h2><Icon name="superadmin" size={20} /> Superadmin</h2>
           <p>
-            Esta sección solo la ven las cuentas con rol <strong>superadmin</strong>. Reúne lo único que un
-            <strong>admin</strong> no puede hacer: decidir quién entra al panel y revisar la bitácora. Todo lo demás
-            (modelos, API keys, consumo, registros) está en <strong>Configuración</strong>, el engrane, y lo comparten los dos roles.
+            Solo la ven las cuentas con rol <strong>superadmin</strong>. Aquí está lo único que un <strong>admin</strong> no puede hacer:
+            decidir quién entra al panel y revisar la bitácora. Lo demás está en <strong>Configuración</strong>.
           </p>
         </div>
 
@@ -8025,7 +8024,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             <h3><Icon name="operadores" size={16} /> Operadores</h3>
             <div style="display: flex; gap: 0.4rem;">
               <button onclick={abrirCrearOperador} class="vectorizacion-action-btn">➕ Nuevo operador</button>
-              <button onclick={cargarOperadores} class="vectorizacion-action-btn" disabled={cargandoOperadores}>↻ Recargar</button>
             </div>
           </div>
 
@@ -8220,7 +8218,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         <div class="modelos-wrap">
           <div class="seccion-header">
             <h3><Icon name="bitacora" size={16} /> Bitácora</h3>
-            <button onclick={cargarAuditoria} class="vectorizacion-action-btn" disabled={cargandoAuditoria}>↻ Recargar</button>
           </div>
 
           <p style="color: var(--fg-soft); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
@@ -11647,7 +11644,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   .superadmin-encabezado p {
     margin: 0;
-    max-width: 72ch;
     font-size: 0.88rem;
     line-height: 1.5;
     color: var(--fg-soft);
