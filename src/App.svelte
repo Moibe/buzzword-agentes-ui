@@ -300,7 +300,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   function entrarVistaUsuario() {
     vistaUsuario = true;
-    if (activeTab === 'admin') activeTab = 'vectorizacion';
+    if (activeTab === 'admin' || activeTab === 'superadmin') activeTab = 'vectorizacion';
   }
 
   function salirVistaUsuario() {
@@ -558,6 +558,17 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   // ─── CRUD de operadores (solo superadmin) ──────────────────
   const esSuperadmin = $derived(identidad?.rol === 'superadmin');
+  // La sección "Superadmin" del header junta lo ÚNICO que un admin no puede
+  // hacer: administrar las cuentas del panel y leer la bitácora. Vive aparte de
+  // Administración (el engrane) para que la diferencia entre los dos roles se
+  // vea sin tener que explicarla. Se esconde en la vista cliente, como el engrane.
+  const verSuperadmin = $derived(esSuperadmin && isAdmin);
+  let superTab = $state('operadores');
+  function abrirSuperadmin() {
+    activeTab = 'superadmin';
+    if (superTab === 'auditoria') cargarAuditoria();
+    else cargarOperadores();
+  }
 
   let operadores = $state([]);
   let rolesAsignables = $state(['superadmin', 'admin']);
@@ -4157,6 +4168,15 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           aria-pressed={activeTab === 'admin'}
           title="Administración"
         ><Icon name="admin" size={18} label="Administración" /></button>
+        {#if esSuperadmin}
+          <button
+            class="tab-btn superadmin-btn"
+            class:active={activeTab === 'superadmin'}
+            onclick={abrirSuperadmin}
+            aria-pressed={activeTab === 'superadmin'}
+            title="Solo superadmin: cuentas que entran al panel y bitácora"
+          ><Icon name="superadmin" size={16} label="Superadmin" /> Superadmin</button>
+        {/if}
         <button
           class="tab-btn vista-usuario-toggle"
           onclick={entrarVistaUsuario}
@@ -6768,22 +6788,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           >
             <Icon name="api-keys" size={15} /> API keys
           </button>
-          {#if esSuperadmin}
-            <button
-              class="vectorizacion-subtab-btn"
-              class:active={adminTab === 'operadores'}
-              onclick={() => { adminTab = 'operadores'; cargarOperadores(); }}
-            >
-              <Icon name="operadores" size={15} /> Operadores
-            </button>
-            <button
-              class="vectorizacion-subtab-btn"
-              class:active={adminTab === 'auditoria'}
-              onclick={() => { adminTab = 'auditoria'; cargarAuditoria(); }}
-            >
-              <Icon name="bitacora" size={15} /> Bitácora
-            </button>
-          {/if}
           <button
             class="vectorizacion-subtab-btn"
             class:active={adminTab === 'alias'}
@@ -7026,332 +7030,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               Cambiar el modo borra las pausas, y el backend las olvida al reiniciarse. En Registros y Consumo se ve qué key respondió cada consulta.
             </p>
           {/if}
-        </div>
-        {/if}
-
-        <!-- Operadores -->
-        {#if adminTab === 'operadores' && esSuperadmin}
-        <div class="modelos-wrap">
-          <div class="seccion-header">
-            <h3><Icon name="operadores" size={16} /> Operadores</h3>
-            <div style="display: flex; gap: 0.4rem;">
-              <button onclick={abrirCrearOperador} class="vectorizacion-action-btn">➕ Nuevo operador</button>
-              <button onclick={cargarOperadores} class="vectorizacion-action-btn" disabled={cargandoOperadores}>↻ Recargar</button>
-            </div>
-          </div>
-
-          <p style="color: var(--fg-soft); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
-            Quienes entran a este panel con su propia cuenta. No confundir con el subtab <strong>Usuarios</strong> de cada proyecto:
-            esos son los usuarios finales de los widgets, que no tienen login y solo sirven para atribuir consultas.
-            El <strong>email es la credencial</strong> y no se puede cambiar; si alguien necesita otro, se crea una cuenta nueva.
-          </p>
-
-          {#if mensajeOperadores}
-            <p style="margin: 0 0 1rem; font-size: 0.88rem; color: {mensajeOperadores.startsWith('❌') ? 'var(--danger-fg)' : 'var(--ok)'};">
-              {mensajeOperadores}
-            </p>
-          {/if}
-
-          {#if operadorFormAbierto}
-            <div class="crear-contexto-form" style="flex-direction: column; align-items: stretch; max-width: 560px; margin-bottom: 1.25rem;">
-              <h4 style="margin: 0 0 0.25rem 0; color: var(--fg);">
-                {operadorEditandoId ? 'Editar operador' : 'Nuevo operador'}
-              </h4>
-              <div class="form-field">
-                <label for="op-email">Email</label>
-                <input
-                  id="op-email"
-                  type="email"
-                  class="contexto-input"
-                  bind:value={operadorFormEmail}
-                  disabled={guardandoOperador || !!operadorEditandoId}
-                  placeholder="persona@buzzword.mx"
-                  autocomplete="off"
-                />
-                {#if operadorEditandoId}
-                  <small style="font-size: 0.75rem; color: var(--fg-muted); display: block; margin-top: 0.25rem;">
-                    El email no se puede cambiar: es la credencial con la que entra.
-                  </small>
-                {/if}
-              </div>
-              <div class="form-field">
-                <label for="op-nombre">Nombre</label>
-                <input
-                  id="op-nombre"
-                  type="text"
-                  class="contexto-input"
-                  bind:value={operadorFormNombre}
-                  disabled={guardandoOperador}
-                  maxlength="120"
-                  placeholder="Nombre y apellido"
-                />
-              </div>
-              {#if !operadorEditandoId}
-                <div class="form-field">
-                  <label for="op-password">Contraseña inicial</label>
-                  <input
-                    id="op-password"
-                    type="password"
-                    class="contexto-input"
-                    bind:value={operadorFormPassword}
-                    disabled={guardandoOperador}
-                    autocomplete="new-password"
-                    placeholder="Mínimo 8 caracteres"
-                  />
-                  <small style="font-size: 0.75rem; color: var(--fg-muted); display: block; margin-top: 0.25rem;">
-                    Se la pasas tú por un canal seguro. Quien entre puede cambiarla después.
-                  </small>
-                </div>
-              {/if}
-              <div class="form-field">
-                <label for="op-rol">Rol</label>
-                <select id="op-rol" class="contexto-select" bind:value={operadorFormRol} disabled={guardandoOperador}>
-                  {#each rolesAsignables as r (r)}
-                    <option value={r}>{r}</option>
-                  {/each}
-                </select>
-                <small style="font-size: 0.75rem; color: var(--fg-muted); display: block; margin-top: 0.25rem;">
-                  <strong>admin</strong> opera el panel completo. <strong>superadmin</strong> además administra operadores.
-                  <strong>cliente</strong> solo ve y trabaja los proyectos que le asignes.
-                </small>
-              </div>
-              {#if operadorFormRol === 'cliente'}
-                <div class="form-field">
-                  <span class="operador-proyectos-titulo">Proyectos a los que puede entrar</span>
-                  {#if proyectos.length === 0}
-                    <p style="margin: 0; font-size: 0.82rem; color: var(--fg-muted);">Todavía no hay proyectos. Crea uno en Construcción.</p>
-                  {:else}
-                    <ul class="fuente-ops" style="margin: 0;">
-                      {#each proyectos as p (p.id)}
-                        <li class="fuente-op" class:elegida={operadorFormProyectos.has(p.id)}>
-                          <label class="fuente-op-label">
-                            <input type="checkbox" checked={operadorFormProyectos.has(p.id)} onchange={() => alternarProyectoOperador(p.id)} disabled={guardandoOperador} />
-                            <span class="fuente-op-cuerpo">
-                              <span class="fuente-op-ruta"><strong>{p.nombre}</strong> <span class="fuente-op-resumen">{p.slug}</span></span>
-                            </span>
-                          </label>
-                        </li>
-                      {/each}
-                    </ul>
-                  {/if}
-                  <small style="font-size: 0.75rem; color: var(--fg-muted); display: block; margin-top: 0.25rem;">
-                    Dentro de ellos arma bases de conocimiento, asistentes y usuarios finales. No entra a Administración,
-                    no crea proyectos y no toca fuentes de datos.
-                  </small>
-                </div>
-              {/if}
-
-              {#if errorFormOperador}
-                <p class="mensaje-contexto">❌ {errorFormOperador}</p>
-              {/if}
-
-              <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
-                <button onclick={cerrarFormOperador} disabled={guardandoOperador} class="crear-contexto-btn" style="background: var(--muted); color: var(--fg);">
-                  Cancelar
-                </button>
-                <button onclick={guardarOperador} disabled={guardandoOperador} class="crear-contexto-btn">
-                  {guardandoOperador ? '⟳ Guardando...' : '✓ Guardar'}
-                </button>
-              </div>
-            </div>
-          {/if}
-
-          {#if cargandoOperadores && operadores.length === 0}
-            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando operadores...</p>
-          {:else if errorOperadores}
-            <p style="color: var(--danger-fg); font-size: 0.9rem; padding: 1rem; background: var(--danger-bg); border: 1px solid var(--danger-border); border-radius: 8px; line-height: 1.5;">
-              ❌ {errorOperadores}
-            </p>
-          {:else if operadores.length === 0}
-            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">No hay operadores todavía.</p>
-          {:else}
-            <table class="consumo-tabla">
-              <thead>
-                <tr>
-                  <th>Nombre</th>
-                  <th>Email</th>
-                  <th>Rol</th>
-                  <th>Estado</th>
-                  <th style="text-align: right;">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {#each operadores as o (o.id)}
-                  {@const soyYo = identidad?.operador?.id === o.id}
-                  <tr style="opacity: {o.activo ? 1 : 0.55};">
-                    <td>
-                      <strong>{o.nombre}</strong>
-                      {#if soyYo}<span class="operador-yo">tú</span>{/if}
-                    </td>
-                    <td><code style="font-size: 0.78rem;">{o.email}</code></td>
-                    <td>
-                      <span class="rol-badge" class:rol-badge--super={o.rol === 'superadmin'}>{o.rol}</span>
-                      {#if o.rol === 'cliente'}
-                        <div style="font-size: 0.75rem; color: var(--fg-muted); margin-top: 0.2rem;">
-                          {(o.proyectos ?? []).length ? o.proyectos.map(nombreProyectoPorId).join(', ') : 'sin proyectos'}
-                        </div>
-                      {/if}
-                    </td>
-                    <td>
-                      {#if o.activo}
-                        <span style="color: var(--ok);">● activo</span>
-                      {:else}
-                        <span style="color: var(--fg-muted);">○ inactivo</span>
-                      {/if}
-                    </td>
-                    <td style="text-align: right; white-space: nowrap;">
-                      <button class="op-btn" title="Editar nombre y rol" onclick={() => abrirEditarOperador(o)}><Icon name="editar" size={15} /></button>
-                      <button class="op-btn" title="Restablecer su contraseña" onclick={() => abrirPasswordOperador(o)}><Icon name="accesos" size={15} /></button>
-                      {#if !soyYo}
-                        <button
-                          class="op-btn"
-                          title={o.activo ? 'Desactivar (cierra sus sesiones)' : 'Reactivar'}
-                          onclick={() => alternarActivoOperador(o)}
-                        ><Icon name={o.activo ? 'desactivar' : 'reactivar'} size={15} /></button>
-                        <button class="op-btn op-btn--danger" title="Borrar" onclick={() => { operadorABorrar = o; }}><Icon name="borrar" size={15} /></button>
-                      {/if}
-                    </td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-
-            <p style="color: var(--fg-muted); font-size: 0.75rem; margin-top: 1rem; line-height: 1.45;">
-              💡 Sobre tu propia fila solo puedes editar nombre y contraseña: desactivarte o borrarte te dejaría fuera.
-              Tampoco se puede quitar al último superadmin activo.
-              Desactivar o restablecer una contraseña cierra las sesiones de esa persona al instante.
-            </p>
-          {/if}
-        </div>
-        {/if}
-
-        <!-- Bitácora de administración -->
-        {#if adminTab === 'auditoria' && esSuperadmin}
-        <div class="modelos-wrap">
-          <div class="seccion-header">
-            <h3><Icon name="bitacora" size={16} /> Bitácora</h3>
-            <button onclick={cargarAuditoria} class="vectorizacion-action-btn" disabled={cargandoAuditoria}>↻ Recargar</button>
-          </div>
-
-          <p style="color: var(--fg-soft); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
-            Quién hizo qué y cuándo. Se escribe sola con cada cambio hecho desde el panel y <strong>no se puede editar ni borrar</strong>.
-            Esto no son las consultas al chatbot — esas viven en <strong>Registros</strong>.
-          </p>
-
-          <!-- Filtros -->
-          <div style="display: flex; gap: 0.75rem; align-items: end; margin-bottom: 1.25rem; flex-wrap: wrap;">
-            <div class="lightbot-field" style="margin: 0;">
-              <label for="audit-desde" style="display: block;">Desde</label>
-              <input id="audit-desde" type="date" bind:value={auditDesde} onchange={filtrarAuditoria} disabled={cargandoAuditoria} style="font-size: 1rem; padding: 0.6rem; min-width: 150px;" />
-            </div>
-            <div class="lightbot-field" style="margin: 0;">
-              <label for="audit-hasta" style="display: block;">Hasta</label>
-              <input id="audit-hasta" type="date" bind:value={auditHasta} onchange={filtrarAuditoria} disabled={cargandoAuditoria} style="font-size: 1rem; padding: 0.6rem; min-width: 150px;" />
-            </div>
-            <div class="lightbot-field" style="margin: 0;">
-              <label for="audit-operador" style="display: block;">Quién</label>
-              <select id="audit-operador" class="contexto-select" bind:value={auditOperador} onchange={filtrarAuditoria} disabled={cargandoAuditoria} style="padding: 0.55rem 0.75rem; min-width: 200px;">
-                <option value="">(todos)</option>
-                {#each auditOperadores as o (o)}
-                  <option value={o}>{o}</option>
-                {/each}
-              </select>
-            </div>
-            <div class="lightbot-field" style="margin: 0;">
-              <label for="audit-entidad" style="display: block;">Sobre qué</label>
-              <select id="audit-entidad" class="contexto-select" bind:value={auditEntidad} onchange={filtrarAuditoria} disabled={cargandoAuditoria} style="padding: 0.55rem 0.75rem; min-width: 150px;">
-                <option value="">(todo)</option>
-                {#each auditEntidades as e (e)}
-                  <option value={e}>{e}</option>
-                {/each}
-              </select>
-            </div>
-            <div class="lightbot-field" style="margin: 0;">
-              <label for="audit-accion" style="display: block;">Acción</label>
-              <select id="audit-accion" class="contexto-select" bind:value={auditAccion} onchange={filtrarAuditoria} disabled={cargandoAuditoria} style="padding: 0.55rem 0.75rem; min-width: 150px;">
-                <option value="">(todas)</option>
-                {#each auditAcciones as a (a)}
-                  <option value={a}>{a}</option>
-                {/each}
-              </select>
-            </div>
-            <button onclick={limpiarFiltrosAuditoria} class="vectorizacion-action-btn" disabled={cargandoAuditoria}>Limpiar</button>
-          </div>
-
-          {#if cargandoAuditoria && !auditoria}
-            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando bitácora...</p>
-          {:else if errorAuditoria}
-            <p style="color: var(--danger-fg); font-size: 0.9rem; padding: 1rem; background: var(--danger-bg); border: 1px solid var(--danger-border); border-radius: 8px; line-height: 1.5;">
-              ❌ {errorAuditoria}
-            </p>
-          {:else if !auditoria || auditoria.items.length === 0}
-            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">
-              Sin movimientos para estos filtros.
-            </p>
-          {:else}
-            <table class="consumo-tabla">
-              <thead>
-                <tr>
-                  <th>Cuándo</th>
-                  <th>Quién</th>
-                  <th>Qué hizo</th>
-                  <th>Sobre</th>
-                </tr>
-              </thead>
-              <tbody>
-                {#each auditoria.items as a (a.id)}
-                  {@const det = detalleLegible(a.detalle)}
-                  <tr>
-                    <td><code style="font-size: 0.78rem;">{formatTimestamp(a.fecha)}</code></td>
-                    <td>
-                      {#if a.credencial === 'legacy'}
-                        <span class="registro-badge-respaldo" title="Se usó el ADMIN_PASSWORD compartido: el servidor no puede saber quién fue">token compartido</span>
-                      {:else}
-                        {a.operador_nombre || a.operador_email || '—'}
-                        {#if a.operador_nombre}
-                          <div style="font-size: 0.72rem; color: var(--fg-muted);">{a.operador_email}</div>
-                        {/if}
-                      {/if}
-                    </td>
-                    <td>
-                      <span class="audit-icono"><Icon name={ICONO_ACCION[a.accion] ?? 'info'} size={14} /></span> {a.resumen}
-                      {#if det}
-                        <div style="font-size: 0.72rem; color: var(--fg-muted);">{det}</div>
-                      {/if}
-                    </td>
-                    <td><span class="rol-badge">{a.entidad}</span></td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-
-            <!-- Paginación -->
-            {@const hasta = Math.min(auditOffset + auditoria.items.length, auditoria.total)}
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; flex-wrap: wrap; gap: 0.75rem;">
-              <span style="color: var(--fg-soft); font-size: 0.85rem;">
-                Mostrando {formatNumero(auditOffset + 1)}–{formatNumero(hasta)} de {formatNumero(auditoria.total)}
-              </span>
-              <div style="display: flex; gap: 0.4rem;">
-                <button
-                  onclick={() => { auditOffset = Math.max(0, auditOffset - AUDIT_LIMIT); cargarAuditoria(); }}
-                  class="vectorizacion-action-btn"
-                  disabled={cargandoAuditoria || auditOffset === 0}
-                >← Anterior</button>
-                <button
-                  onclick={() => { auditOffset += AUDIT_LIMIT; cargarAuditoria(); }}
-                  class="vectorizacion-action-btn"
-                  disabled={cargandoAuditoria || hasta >= auditoria.total}
-                >Siguiente →</button>
-              </div>
-            </div>
-          {/if}
-
-          <p style="color: var(--fg-muted); font-size: 0.75rem; margin-top: 1rem; line-height: 1.45;">
-            💡 Solo aparece lo que pasa por un endpoint con credencial. Crear o borrar <strong>asistentes</strong> y
-            <strong>bases de conocimiento</strong> hoy es público, así que esas acciones no se registran — no porque nadie
-            las haga, sino porque el servidor no sabe quién fue. Las contraseñas nunca se guardan aquí: en una edición solo
-            se anota <em>qué campos</em> cambiaron.
-          </p>
         </div>
         {/if}
 
@@ -8274,6 +7952,366 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               💡 Los binarios se conservan en disco aunque se borre el doc de Chroma o se elimine la BC completa — son <em>fantasmas</em> auditables solo desde esta vista. Docs subidos antes de la feature de archivos no aparecen aquí (vivían solo como vectores).
             </p>
           {/if}
+        </div>
+        {/if}
+      </div>
+    </main>
+  {/if}
+
+  <!-- Superadmin section: lo que SOLO puede hacer un superadmin -->
+  {#if activeTab === 'superadmin' && verSuperadmin}
+    <main class="vectorizacion-body">
+      <div class="vectorizacion-container">
+        <div class="superadmin-encabezado">
+          <h2><Icon name="superadmin" size={20} /> Superadmin</h2>
+          <p>
+            Esta sección solo la ven las cuentas con rol <strong>superadmin</strong>. Reúne lo único que un
+            <strong>admin</strong> no puede hacer: decidir quién entra al panel y revisar la bitácora. Todo lo demás
+            (modelos, API keys, consumo, registros) está en <strong>Administración</strong>, el engrane, y lo comparten los dos roles.
+          </p>
+        </div>
+
+        <!-- Sub-tab bar -->
+        <div class="vectorizacion-subtabs">
+          <button
+            class="vectorizacion-subtab-btn"
+            class:active={superTab === 'operadores'}
+            onclick={() => { superTab = 'operadores'; cargarOperadores(); }}
+          >
+            <Icon name="operadores" size={15} /> Operadores
+          </button>
+          <button
+            class="vectorizacion-subtab-btn"
+            class:active={superTab === 'auditoria'}
+            onclick={() => { superTab = 'auditoria'; cargarAuditoria(); }}
+          >
+            <Icon name="bitacora" size={15} /> Bitácora
+          </button>
+        </div>
+
+        <!-- Operadores -->
+        {#if superTab === 'operadores'}
+        <div class="modelos-wrap">
+          <div class="seccion-header">
+            <h3><Icon name="operadores" size={16} /> Operadores</h3>
+            <div style="display: flex; gap: 0.4rem;">
+              <button onclick={abrirCrearOperador} class="vectorizacion-action-btn">➕ Nuevo operador</button>
+              <button onclick={cargarOperadores} class="vectorizacion-action-btn" disabled={cargandoOperadores}>↻ Recargar</button>
+            </div>
+          </div>
+
+          <p style="color: var(--fg-soft); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
+            Quienes entran a este panel con su propia cuenta. No confundir con el subtab <strong>Usuarios</strong> de cada proyecto:
+            esos son los usuarios finales de los widgets, que no tienen login y solo sirven para atribuir consultas.
+            El <strong>email es la credencial</strong> y no se puede cambiar; si alguien necesita otro, se crea una cuenta nueva.
+          </p>
+
+          {#if mensajeOperadores}
+            <p style="margin: 0 0 1rem; font-size: 0.88rem; color: {mensajeOperadores.startsWith('❌') ? 'var(--danger-fg)' : 'var(--ok)'};">
+              {mensajeOperadores}
+            </p>
+          {/if}
+
+          {#if operadorFormAbierto}
+            <div class="crear-contexto-form" style="flex-direction: column; align-items: stretch; max-width: 560px; margin-bottom: 1.25rem;">
+              <h4 style="margin: 0 0 0.25rem 0; color: var(--fg);">
+                {operadorEditandoId ? 'Editar operador' : 'Nuevo operador'}
+              </h4>
+              <div class="form-field">
+                <label for="op-email">Email</label>
+                <input
+                  id="op-email"
+                  type="email"
+                  class="contexto-input"
+                  bind:value={operadorFormEmail}
+                  disabled={guardandoOperador || !!operadorEditandoId}
+                  placeholder="persona@buzzword.mx"
+                  autocomplete="off"
+                />
+                {#if operadorEditandoId}
+                  <small style="font-size: 0.75rem; color: var(--fg-muted); display: block; margin-top: 0.25rem;">
+                    El email no se puede cambiar: es la credencial con la que entra.
+                  </small>
+                {/if}
+              </div>
+              <div class="form-field">
+                <label for="op-nombre">Nombre</label>
+                <input
+                  id="op-nombre"
+                  type="text"
+                  class="contexto-input"
+                  bind:value={operadorFormNombre}
+                  disabled={guardandoOperador}
+                  maxlength="120"
+                  placeholder="Nombre y apellido"
+                />
+              </div>
+              {#if !operadorEditandoId}
+                <div class="form-field">
+                  <label for="op-password">Contraseña inicial</label>
+                  <input
+                    id="op-password"
+                    type="password"
+                    class="contexto-input"
+                    bind:value={operadorFormPassword}
+                    disabled={guardandoOperador}
+                    autocomplete="new-password"
+                    placeholder="Mínimo 8 caracteres"
+                  />
+                  <small style="font-size: 0.75rem; color: var(--fg-muted); display: block; margin-top: 0.25rem;">
+                    Se la pasas tú por un canal seguro. Quien entre puede cambiarla después.
+                  </small>
+                </div>
+              {/if}
+              <div class="form-field">
+                <label for="op-rol">Rol</label>
+                <select id="op-rol" class="contexto-select" bind:value={operadorFormRol} disabled={guardandoOperador}>
+                  {#each rolesAsignables as r (r)}
+                    <option value={r}>{r}</option>
+                  {/each}
+                </select>
+                <small style="font-size: 0.75rem; color: var(--fg-muted); display: block; margin-top: 0.25rem;">
+                  <strong>admin</strong> opera el panel completo. <strong>superadmin</strong> además administra operadores.
+                  <strong>cliente</strong> solo ve y trabaja los proyectos que le asignes.
+                </small>
+              </div>
+              {#if operadorFormRol === 'cliente'}
+                <div class="form-field">
+                  <span class="operador-proyectos-titulo">Proyectos a los que puede entrar</span>
+                  {#if proyectos.length === 0}
+                    <p style="margin: 0; font-size: 0.82rem; color: var(--fg-muted);">Todavía no hay proyectos. Crea uno en Construcción.</p>
+                  {:else}
+                    <ul class="fuente-ops" style="margin: 0;">
+                      {#each proyectos as p (p.id)}
+                        <li class="fuente-op" class:elegida={operadorFormProyectos.has(p.id)}>
+                          <label class="fuente-op-label">
+                            <input type="checkbox" checked={operadorFormProyectos.has(p.id)} onchange={() => alternarProyectoOperador(p.id)} disabled={guardandoOperador} />
+                            <span class="fuente-op-cuerpo">
+                              <span class="fuente-op-ruta"><strong>{p.nombre}</strong> <span class="fuente-op-resumen">{p.slug}</span></span>
+                            </span>
+                          </label>
+                        </li>
+                      {/each}
+                    </ul>
+                  {/if}
+                  <small style="font-size: 0.75rem; color: var(--fg-muted); display: block; margin-top: 0.25rem;">
+                    Dentro de ellos arma bases de conocimiento, asistentes y usuarios finales. No entra a Administración,
+                    no crea proyectos y no toca fuentes de datos.
+                  </small>
+                </div>
+              {/if}
+
+              {#if errorFormOperador}
+                <p class="mensaje-contexto">❌ {errorFormOperador}</p>
+              {/if}
+
+              <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                <button onclick={cerrarFormOperador} disabled={guardandoOperador} class="crear-contexto-btn" style="background: var(--muted); color: var(--fg);">
+                  Cancelar
+                </button>
+                <button onclick={guardarOperador} disabled={guardandoOperador} class="crear-contexto-btn">
+                  {guardandoOperador ? '⟳ Guardando...' : '✓ Guardar'}
+                </button>
+              </div>
+            </div>
+          {/if}
+
+          {#if cargandoOperadores && operadores.length === 0}
+            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando operadores...</p>
+          {:else if errorOperadores}
+            <p style="color: var(--danger-fg); font-size: 0.9rem; padding: 1rem; background: var(--danger-bg); border: 1px solid var(--danger-border); border-radius: 8px; line-height: 1.5;">
+              ❌ {errorOperadores}
+            </p>
+          {:else if operadores.length === 0}
+            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">No hay operadores todavía.</p>
+          {:else}
+            <table class="consumo-tabla">
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Email</th>
+                  <th>Rol</th>
+                  <th>Estado</th>
+                  <th style="text-align: right;">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each operadores as o (o.id)}
+                  {@const soyYo = identidad?.operador?.id === o.id}
+                  <tr style="opacity: {o.activo ? 1 : 0.55};">
+                    <td>
+                      <strong>{o.nombre}</strong>
+                      {#if soyYo}<span class="operador-yo">tú</span>{/if}
+                    </td>
+                    <td><code style="font-size: 0.78rem;">{o.email}</code></td>
+                    <td>
+                      <span class="rol-badge" class:rol-badge--super={o.rol === 'superadmin'}>{o.rol}</span>
+                      {#if o.rol === 'cliente'}
+                        <div style="font-size: 0.75rem; color: var(--fg-muted); margin-top: 0.2rem;">
+                          {(o.proyectos ?? []).length ? o.proyectos.map(nombreProyectoPorId).join(', ') : 'sin proyectos'}
+                        </div>
+                      {/if}
+                    </td>
+                    <td>
+                      {#if o.activo}
+                        <span style="color: var(--ok);">● activo</span>
+                      {:else}
+                        <span style="color: var(--fg-muted);">○ inactivo</span>
+                      {/if}
+                    </td>
+                    <td style="text-align: right; white-space: nowrap;">
+                      <button class="op-btn" title="Editar nombre y rol" onclick={() => abrirEditarOperador(o)}><Icon name="editar" size={15} /></button>
+                      <button class="op-btn" title="Restablecer su contraseña" onclick={() => abrirPasswordOperador(o)}><Icon name="accesos" size={15} /></button>
+                      {#if !soyYo}
+                        <button
+                          class="op-btn"
+                          title={o.activo ? 'Desactivar (cierra sus sesiones)' : 'Reactivar'}
+                          onclick={() => alternarActivoOperador(o)}
+                        ><Icon name={o.activo ? 'desactivar' : 'reactivar'} size={15} /></button>
+                        <button class="op-btn op-btn--danger" title="Borrar" onclick={() => { operadorABorrar = o; }}><Icon name="borrar" size={15} /></button>
+                      {/if}
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+
+            <p style="color: var(--fg-muted); font-size: 0.75rem; margin-top: 1rem; line-height: 1.45;">
+              💡 Sobre tu propia fila solo puedes editar nombre y contraseña: desactivarte o borrarte te dejaría fuera.
+              Tampoco se puede quitar al último superadmin activo.
+              Desactivar o restablecer una contraseña cierra las sesiones de esa persona al instante.
+            </p>
+          {/if}
+        </div>
+        {/if}
+
+        <!-- Bitácora de administración -->
+        {#if superTab === 'auditoria'}
+        <div class="modelos-wrap">
+          <div class="seccion-header">
+            <h3><Icon name="bitacora" size={16} /> Bitácora</h3>
+            <button onclick={cargarAuditoria} class="vectorizacion-action-btn" disabled={cargandoAuditoria}>↻ Recargar</button>
+          </div>
+
+          <p style="color: var(--fg-soft); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
+            Quién hizo qué y cuándo. Se escribe sola con cada cambio hecho desde el panel y <strong>no se puede editar ni borrar</strong>.
+            Esto no son las consultas al chatbot — esas viven en <strong>Registros</strong>.
+          </p>
+
+          <!-- Filtros -->
+          <div style="display: flex; gap: 0.75rem; align-items: end; margin-bottom: 1.25rem; flex-wrap: wrap;">
+            <div class="lightbot-field" style="margin: 0;">
+              <label for="audit-desde" style="display: block;">Desde</label>
+              <input id="audit-desde" type="date" bind:value={auditDesde} onchange={filtrarAuditoria} disabled={cargandoAuditoria} style="font-size: 1rem; padding: 0.6rem; min-width: 150px;" />
+            </div>
+            <div class="lightbot-field" style="margin: 0;">
+              <label for="audit-hasta" style="display: block;">Hasta</label>
+              <input id="audit-hasta" type="date" bind:value={auditHasta} onchange={filtrarAuditoria} disabled={cargandoAuditoria} style="font-size: 1rem; padding: 0.6rem; min-width: 150px;" />
+            </div>
+            <div class="lightbot-field" style="margin: 0;">
+              <label for="audit-operador" style="display: block;">Quién</label>
+              <select id="audit-operador" class="contexto-select" bind:value={auditOperador} onchange={filtrarAuditoria} disabled={cargandoAuditoria} style="padding: 0.55rem 0.75rem; min-width: 200px;">
+                <option value="">(todos)</option>
+                {#each auditOperadores as o (o)}
+                  <option value={o}>{o}</option>
+                {/each}
+              </select>
+            </div>
+            <div class="lightbot-field" style="margin: 0;">
+              <label for="audit-entidad" style="display: block;">Sobre qué</label>
+              <select id="audit-entidad" class="contexto-select" bind:value={auditEntidad} onchange={filtrarAuditoria} disabled={cargandoAuditoria} style="padding: 0.55rem 0.75rem; min-width: 150px;">
+                <option value="">(todo)</option>
+                {#each auditEntidades as e (e)}
+                  <option value={e}>{e}</option>
+                {/each}
+              </select>
+            </div>
+            <div class="lightbot-field" style="margin: 0;">
+              <label for="audit-accion" style="display: block;">Acción</label>
+              <select id="audit-accion" class="contexto-select" bind:value={auditAccion} onchange={filtrarAuditoria} disabled={cargandoAuditoria} style="padding: 0.55rem 0.75rem; min-width: 150px;">
+                <option value="">(todas)</option>
+                {#each auditAcciones as a (a)}
+                  <option value={a}>{a}</option>
+                {/each}
+              </select>
+            </div>
+            <button onclick={limpiarFiltrosAuditoria} class="vectorizacion-action-btn" disabled={cargandoAuditoria}>Limpiar</button>
+          </div>
+
+          {#if cargandoAuditoria && !auditoria}
+            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando bitácora...</p>
+          {:else if errorAuditoria}
+            <p style="color: var(--danger-fg); font-size: 0.9rem; padding: 1rem; background: var(--danger-bg); border: 1px solid var(--danger-border); border-radius: 8px; line-height: 1.5;">
+              ❌ {errorAuditoria}
+            </p>
+          {:else if !auditoria || auditoria.items.length === 0}
+            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">
+              Sin movimientos para estos filtros.
+            </p>
+          {:else}
+            <table class="consumo-tabla">
+              <thead>
+                <tr>
+                  <th>Cuándo</th>
+                  <th>Quién</th>
+                  <th>Qué hizo</th>
+                  <th>Sobre</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each auditoria.items as a (a.id)}
+                  {@const det = detalleLegible(a.detalle)}
+                  <tr>
+                    <td><code style="font-size: 0.78rem;">{formatTimestamp(a.fecha)}</code></td>
+                    <td>
+                      {#if a.credencial === 'legacy'}
+                        <span class="registro-badge-respaldo" title="Se usó el ADMIN_PASSWORD compartido: el servidor no puede saber quién fue">token compartido</span>
+                      {:else}
+                        {a.operador_nombre || a.operador_email || '—'}
+                        {#if a.operador_nombre}
+                          <div style="font-size: 0.72rem; color: var(--fg-muted);">{a.operador_email}</div>
+                        {/if}
+                      {/if}
+                    </td>
+                    <td>
+                      <span class="audit-icono"><Icon name={ICONO_ACCION[a.accion] ?? 'info'} size={14} /></span> {a.resumen}
+                      {#if det}
+                        <div style="font-size: 0.72rem; color: var(--fg-muted);">{det}</div>
+                      {/if}
+                    </td>
+                    <td><span class="rol-badge">{a.entidad}</span></td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+
+            <!-- Paginación -->
+            {@const hasta = Math.min(auditOffset + auditoria.items.length, auditoria.total)}
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; flex-wrap: wrap; gap: 0.75rem;">
+              <span style="color: var(--fg-soft); font-size: 0.85rem;">
+                Mostrando {formatNumero(auditOffset + 1)}–{formatNumero(hasta)} de {formatNumero(auditoria.total)}
+              </span>
+              <div style="display: flex; gap: 0.4rem;">
+                <button
+                  onclick={() => { auditOffset = Math.max(0, auditOffset - AUDIT_LIMIT); cargarAuditoria(); }}
+                  class="vectorizacion-action-btn"
+                  disabled={cargandoAuditoria || auditOffset === 0}
+                >← Anterior</button>
+                <button
+                  onclick={() => { auditOffset += AUDIT_LIMIT; cargarAuditoria(); }}
+                  class="vectorizacion-action-btn"
+                  disabled={cargandoAuditoria || hasta >= auditoria.total}
+                >Siguiente →</button>
+              </div>
+            </div>
+          {/if}
+
+          <p style="color: var(--fg-muted); font-size: 0.75rem; margin-top: 1rem; line-height: 1.45;">
+            💡 Solo aparece lo que pasa por un endpoint con credencial. Subir o quitar <strong>documentos</strong> de una
+            base de conocimiento hoy no la pide (lo usa el widget MiniAdmin sin cuenta), así que esas acciones no se
+            registran — no porque nadie las haga, sino porque el servidor no sabe quién fue. Las contraseñas nunca se
+            guardan aquí: en una edición solo se anota <em>qué campos</em> cambiaron.
+          </p>
         </div>
         {/if}
       </div>
@@ -11531,5 +11569,23 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     .header-salir-texto {
       display: none;
     }
+  }
+
+  /* ─── Sección Superadmin ─── */
+  .superadmin-encabezado {
+    margin-bottom: 1.5rem;
+  }
+
+  .superadmin-encabezado h2 {
+    color: var(--fg);
+    margin: 0 0 0.5rem;
+  }
+
+  .superadmin-encabezado p {
+    margin: 0;
+    max-width: 72ch;
+    font-size: 0.88rem;
+    line-height: 1.5;
+    color: var(--fg-soft);
   }
 </style>
