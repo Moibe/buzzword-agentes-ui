@@ -640,8 +640,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   function abrirEditarOperador(o) {
+    // Con un guardado en curso no se cambia de formulario: al terminar lo cerraría.
+    if (guardandoOperador) return;
     operadorEditandoId = o.id;
-    operadorFormEmail = o.email;   // se muestra, pero es inmutable
+    operadorFormEmail = o.email;
     operadorFormNombre = o.nombre;
     operadorFormPassword = '';
     operadorFormRol = o.rol;
@@ -669,8 +671,22 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       if (operadorFormRol === 'cliente' && proyectosElegidos.length === 0) {
         throw new Error('Elige al menos un proyecto: sin proyectos, la cuenta de cliente entra y no ve nada.');
       }
+      // El email solo viaja si de verdad cambió: así la bitácora anota "cambió el
+      // email" únicamente cuando pasó.
+      const emailNuevo = operadorFormEmail.trim().toLowerCase();
+      const emailPrevio = operadores.find((o) => o.id === operadorEditandoId)?.email ?? '';
+      const cambiaEmail = editando && emailNuevo !== emailPrevio;
+      if (editando && (!emailNuevo || !emailNuevo.includes('@'))) {
+        throw new Error('Escribe un email válido.');
+      }
+      const eraMiCuenta = editando && identidad?.operador?.id === operadorEditandoId;
       const body = editando
-        ? { nombre: operadorFormNombre, rol: operadorFormRol, proyectos: proyectosElegidos }
+        ? {
+            nombre: operadorFormNombre,
+            rol: operadorFormRol,
+            proyectos: proyectosElegidos,
+            ...(cambiaEmail ? { email: emailNuevo } : {}),
+          }
         : {
             email: operadorFormEmail.trim(),
             nombre: operadorFormNombre.trim(),
@@ -686,8 +702,17 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.detail || `HTTP ${res.status}`);
       await cargarOperadores();
+      // Un API anterior a este cambio ignora el campo y responde 200 con el email
+      // de antes: mejor decirlo que anunciar un cambio que no pasó.
+      if (cambiaEmail && data?.email !== emailNuevo) {
+        throw new Error('Lo demás se guardó, pero el servidor todavía no permite cambiar el email: falta actualizar la API.');
+      }
+      // Si era mi propia cuenta, el header muestra mi nombre y mi email: refrescarlos.
+      if (eraMiCuenta) await cargarIdentidad();
       cerrarFormOperador();
-      avisoOperadores(editando ? '✅ Operador actualizado' : '✅ Operador creado');
+      avisoOperadores(!editando ? '✅ Operador creado'
+        : cambiaEmail ? `✅ Email cambiado: ahora entra con ${emailNuevo}`
+        : '✅ Operador actualizado');
     } catch (err) {
       errorFormOperador = err.message;
     } finally {
@@ -779,6 +804,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   // Las listas de filtros las manda el backend (qué entidades y acciones
   // existen, y quiénes aparecen de verdad en la bitácora), para no duplicarlas.
   const auditOperadores = $derived(auditoria?.operadores ?? []);
+  // Una entrada por CUENTA (id), con su nombre y email de hoy: así el filtro junta
+  // todo lo que hizo una persona aunque le hayan cambiado el email. `null` = el
+  // API es anterior a esto y solo manda la lista de emails de arriba.
+  const auditCuentas = $derived(auditoria?.cuentas ?? null);
   const auditEntidades = $derived(auditoria?.entidades ?? []);
   const auditAcciones = $derived(auditoria?.acciones ?? []);
 
@@ -8003,7 +8032,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           <p style="color: var(--fg-soft); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
             Quienes entran a este panel con su propia cuenta. No confundir con el subtab <strong>Usuarios</strong> de cada proyecto:
             esos son los usuarios finales de los widgets, que no tienen login y solo sirven para atribuir consultas.
-            El <strong>email es la credencial</strong> y no se puede cambiar; si alguien necesita otro, se crea una cuenta nueva.
+            El <strong>email es la credencial</strong> con la que entran; si alguien necesita otro, se le cambia al editar su cuenta.
           </p>
 
           {#if mensajeOperadores}
@@ -8024,13 +8053,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                   type="email"
                   class="contexto-input"
                   bind:value={operadorFormEmail}
-                  disabled={guardandoOperador || !!operadorEditandoId}
+                  disabled={guardandoOperador}
                   placeholder="persona@buzzword.mx"
                   autocomplete="off"
                 />
                 {#if operadorEditandoId}
                   <small style="font-size: 0.75rem; color: var(--fg-muted); display: block; margin-top: 0.25rem;">
-                    El email no se puede cambiar: es la credencial con la que entra.
+                    Es con lo que entra. Si lo cambias, esa persona entra con el nuevo desde ya;
+                    conserva su contraseña, su rol, sus proyectos y su historial en la bitácora.
                   </small>
                 {/if}
               </div>
@@ -8160,7 +8190,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                       {/if}
                     </td>
                     <td style="text-align: right; white-space: nowrap;">
-                      <button class="op-btn" title="Editar nombre y rol" onclick={() => abrirEditarOperador(o)}><Icon name="editar" size={15} /></button>
+                      <button class="op-btn" title="Editar email, nombre, rol y proyectos" onclick={() => abrirEditarOperador(o)}><Icon name="editar" size={15} /></button>
                       <button class="op-btn" title="Restablecer su contraseña" onclick={() => abrirPasswordOperador(o)}><Icon name="accesos" size={15} /></button>
                       {#if !soyYo}
                         <button
@@ -8212,9 +8242,15 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               <label for="audit-operador" style="display: block;">Quién</label>
               <select id="audit-operador" class="contexto-select" bind:value={auditOperador} onchange={filtrarAuditoria} disabled={cargandoAuditoria} style="padding: 0.55rem 0.75rem; min-width: 200px;">
                 <option value="">(todos)</option>
-                {#each auditOperadores as o (o)}
-                  <option value={o}>{o}</option>
-                {/each}
+                {#if auditCuentas}
+                  {#each auditCuentas as c (c.id)}
+                    <option value={c.id}>{c.nombre || c.email} · {c.email}{c.existe ? '' : ' (cuenta borrada)'}</option>
+                  {/each}
+                {:else}
+                  {#each auditOperadores as o (o)}
+                    <option value={o}>{o}</option>
+                  {/each}
+                {/if}
               </select>
             </div>
             <div class="lightbot-field" style="margin: 0;">
