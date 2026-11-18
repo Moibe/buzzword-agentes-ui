@@ -181,7 +181,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   // `identidad` = lo que responde GET /auth/yo: `tipo` es 'operador' (cuenta
   // propia) o 'legacy' (el token compartido, que no identifica a nadie).
   let identidad = $state(null);
-  // `esCliente` = cuenta limitada a sus proyectos (sin Administración ni fuentes).
+  // `esCliente` = cuenta limitada a sus proyectos (sin Configuración ni fuentes).
   // `isAdmin` = privilegios efectivos de admin en este momento (respeta el toggle
   // de vista cliente). El token legacy cuenta como superadmin.
   const esCliente = $derived(identidad?.rol === 'cliente');
@@ -560,7 +560,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   const esSuperadmin = $derived(identidad?.rol === 'superadmin');
   // La sección "Superadmin" del header junta lo ÚNICO que un admin no puede
   // hacer: administrar las cuentas del panel y leer la bitácora. Vive aparte de
-  // Administración (el engrane) para que la diferencia entre los dos roles se
+  // Configuración (el engrane) para que la diferencia entre los dos roles se
   // vea sin tener que explicarla. Se esconde en la vista cliente, como el engrane.
   const verSuperadmin = $derived(esSuperadmin && isAdmin);
   let superTab = $state('operadores');
@@ -4100,7 +4100,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 {:else}
   {#if vistaUsuario}
     <div class="vista-usuario-banner" role="status" aria-live="polite">
-      <span>👁 <strong>Vista cliente</strong> — eres admin, pero el panel se muestra como lo ve una cuenta de cliente: sin Administración, sin fuentes de datos y sin crear proyectos.</span>
+      <span>👁 <strong>Vista cliente</strong> — eres admin, pero el panel se muestra como lo ve una cuenta de cliente: sin Configuración, sin fuentes de datos y sin crear proyectos.</span>
       <button type="button" class="vista-usuario-banner__btn" onclick={salirVistaUsuario}>
         ← Volver a admin
       </button>
@@ -4166,8 +4166,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           class:active={activeTab === 'admin'}
           onclick={() => { activeTab = 'admin'; cargarModelos(); cargarModelosEmbedding(); }}
           aria-pressed={activeTab === 'admin'}
-          title="Administración"
-        ><Icon name="admin" size={18} label="Administración" /></button>
+          title="Configuración del panel: modelos, API keys, consumo y registros"
+        ><Icon name="admin" size={16} /> Configuración</button>
         {#if esSuperadmin}
           <button
             class="tab-btn superadmin-btn"
@@ -4175,7 +4175,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             onclick={abrirSuperadmin}
             aria-pressed={activeTab === 'superadmin'}
             title="Solo superadmin: cuentas que entran al panel y bitácora"
-          ><Icon name="superadmin" size={16} label="Superadmin" /> Superadmin</button>
+          ><Icon name="superadmin" size={16} /> Superadmin</button>
         {/if}
         <button
           class="tab-btn vista-usuario-toggle"
@@ -4184,7 +4184,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           aria-label="Activar vista cliente"
         >👁</button>
       {/if}
-      {#if identidad?.tipo === 'operador'}
+    </div>
+    {#if identidad?.tipo === 'operador'}
         <span class="operador-chip header-cuenta" title="Entraste con tu cuenta ({identidad.operador?.email}) — rol {identidad.rol}">
           <Icon name="cuenta" size={15} />
           <span class="header-cuenta-nombre">{nombreOperador} · {identidad.rol}</span>
@@ -4203,7 +4204,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       >
         <Icon name="cerrar-sesion" size={15} /> <span class="header-salir-texto">Cerrar sesión</span>
       </button>
-    </div>
   </header>
 
   <!-- Vectorización section -->
@@ -6764,12 +6764,12 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     </div>
   {/if}
 
-  <!-- Administración section -->
+  <!-- Configuración section (el engrane): lo que comparten admin y superadmin -->
   {#if activeTab === 'admin' && isAdmin}
     <main class="vectorizacion-body">
       <div class="vectorizacion-container">
         <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
-          <h2 style="color: var(--fg); margin: 0;"><Icon name="cuenta" size={20} /> Administración</h2>
+          <h2 style="color: var(--fg); margin: 0;"><Icon name="admin" size={20} /> Configuración</h2>
         </div>
 
         <!-- Sub-tab bar -->
@@ -7967,7 +7967,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           <p>
             Esta sección solo la ven las cuentas con rol <strong>superadmin</strong>. Reúne lo único que un
             <strong>admin</strong> no puede hacer: decidir quién entra al panel y revisar la bitácora. Todo lo demás
-            (modelos, API keys, consumo, registros) está en <strong>Administración</strong>, el engrane, y lo comparten los dos roles.
+            (modelos, API keys, consumo, registros) está en <strong>Configuración</strong>, el engrane, y lo comparten los dos roles.
           </p>
         </div>
 
@@ -8095,7 +8095,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     </ul>
                   {/if}
                   <small style="font-size: 0.75rem; color: var(--fg-muted); display: block; margin-top: 0.25rem;">
-                    Dentro de ellos arma bases de conocimiento, asistentes y usuarios finales. No entra a Administración,
+                    Dentro de ellos arma bases de conocimiento, asistentes y usuarios finales. No entra a Configuración,
                     no crea proyectos y no toca fuentes de datos.
                   </small>
                 </div>
@@ -8459,8 +8459,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   .header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 1.5rem;
+    justify-content: flex-start;
+    gap: 0.25rem;
     height: 64px;
     padding: 0 1.5rem;
     background: var(--card);
@@ -8472,6 +8472,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     display: flex;
     align-items: center;
     gap: 1.25rem;
+    /* Puede encogerse (lo absorbe el título con puntos suspensivos), pero es lo
+       último en ceder: antes cede el chip de la cuenta, ver .header-cuenta. */
+    flex: 0 1 auto;
+    min-width: 0;
+    margin-right: 1.25rem;
   }
 
   .avatar {
@@ -8494,6 +8499,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     display: flex;
     flex-direction: column;
     gap: 2px;
+    min-width: 0;
   }
 
   .header-title {
@@ -8501,6 +8507,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     font-weight: 600;
     color: var(--fg);
     letter-spacing: -0.005em;
+    /* Nunca se parte en dos renglones: si falta ancho, se recorta con "…". */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .header-version {
@@ -8587,6 +8597,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   .ambiente-indicador {
     display: inline-flex;
     align-items: center;
+    flex-shrink: 0;
     gap: 0.45rem;
     padding: 0.3rem 0.6rem;
     background: var(--surface-2);
@@ -8781,16 +8792,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     gap: 0.25rem;
     margin-left: auto;
     align-items: center;
-  }
-
-  .admin-gear-btn {
-    padding: 0.55rem 0.65rem;
-    line-height: 1;
-  }
-
-  .admin-gear-btn.active {
-    background: var(--primary);
-    color: var(--primary-fg);
+    flex-shrink: 0;
   }
 
   .tab-btn {
@@ -8814,12 +8816,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     background: var(--muted);
   }
 
-  .tab-btn.active:not(.admin-gear-btn) {
+  .tab-btn.active {
     background: var(--primary);
     color: var(--primary-fg);
   }
 
-  /* ── Chat sub-nav ───────────────────────────────── */
 
 
   /* ── Admin Body ──────────────────────────────────── */
@@ -10214,7 +10215,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   /* ── Admin toast ────────────────────── */
   .admin-toast {
     position: fixed;
-    top: 1rem;
+    /* Debajo del header (64px): arriba a la derecha ahora están la cuenta y
+       Cerrar sesión, y el aviso los tapaba mientras duraba. */
+    top: calc(64px + 0.75rem);
     right: 1rem;
     background: rgba(15, 23, 42, 0.45);
     color: var(--fg);
@@ -11260,30 +11263,16 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
   .keys-modo-desc { color: var(--fg-muted); }
 
-  /* Chat: burbuja del usuario en el acento, la del asistente neutra;
-     Enviar es el botón primario y Reiniciar el secundario. */
 
 
-  /* Pantallas angostas: el encabezado no cabe completo. Se esconde el
-     indicador de host y las pestañas principales quedan sólo con ícono
-     (font-size 0 oculta el texto; el <Icon> tiene tamaño propio). */
+  /* Pantallas angostas: el encabezado se compacta. Lo que se va escondiendo
+     antes de llegar aquí está en las etapas del header, al final del <style>. */
   @media (max-width: 760px) {
-    .header { padding: 0 0.75rem; gap: 0.75rem; }
-    .header-left { gap: 0.6rem; min-width: 0; }
-    .ambiente-indicador { display: none; }
+    .header { padding: 0 0.75rem; }
+    .header-left { gap: 0.6rem; margin-right: 0.5rem; }
     /* la etiqueta de ambiente se queda, más compacta */
     .ambiente-etiqueta { padding: 0.35rem 0.55rem; font-size: 0.72rem; letter-spacing: 0.06em; gap: 0.35rem; }
-    .header-info { min-width: 0; }
-    .header-title {
-      font-size: 0.85rem;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .tabs-toggle { flex-shrink: 0; }
-    .tab-btn { font-size: 0; gap: 0; padding: 0.55rem; }
-    /* el ojo de "vista usuario" es un emoji de texto, no un <Icon>: sin esto desaparece */
-    .tab-btn.vista-usuario-toggle { font-size: 1rem; }
+    .header-title { font-size: 0.85rem; }
   }
 
   /* Teléfonos muy angostos: la etiqueta pierde el punto para dejarle algo de
@@ -11540,12 +11529,22 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   .header-salir-btn {
     flex-shrink: 0;
     white-space: nowrap;
+    margin-left: 0.25rem;
   }
 
   .header-cuenta {
     max-width: 260px;
-    flex-shrink: 1;
-    min-width: 0;
+    /* Es lo primero que cede cuando el header aprieta: su texto se recorta con
+       "…" hasta dejar unas letras del nombre. El factor es enorme a propósito:
+       .header-left tiene factor 1, y con una proporción "normal" (p. ej. 1000)
+       al título le tocaban décimas de píxel del recorte, suficientes para que
+       apareciera su "…" antes de tiempo. Con 1e8 su parte redondea a cero. */
+    flex: 0 100000000 auto;
+    min-width: 6.5rem;
+  }
+
+  .header-cuenta :global(iconify-icon) {
+    flex-shrink: 0;
   }
 
   .header-cuenta-nombre {
@@ -11564,11 +11563,40 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     margin-bottom: 0.4rem;
   }
 
-  @media (max-width: 760px) {
-    .header-cuenta-nombre,
-    .header-salir-texto {
-      display: none;
-    }
+  /* El header cede por etapas conforme se angosta la ventana, de lo menos a lo
+     más importante. Entre etapa y etapa lo que falte lo absorbe primero el chip
+     de la cuenta y después el título, los dos con "…".
+       1460  se esconde el indicador de host
+       1180  "Cerrar sesión" queda solo con ícono
+       1090  la cuenta queda solo con ícono
+        880  las pestañas (Construcción, Configuración, Superadmin) quedan solo con ícono
+        760  todo más compacto (ver el bloque de "Pantallas angostas")
+        480  la cuenta se esconde: ahí ya era un ícono sin acción, y en pantallas
+             táctiles ni siquiera se alcanza a leer su descripción */
+  @media (max-width: 1460px) {
+    .ambiente-indicador { display: none; }
+  }
+
+  @media (max-width: 1180px) {
+    .header-salir-texto { display: none; }
+  }
+
+  @media (max-width: 1090px) {
+    .header-cuenta-nombre { display: none; }
+    /* Ya es solo el ícono: deja de ceder (si no, se aplasta y el ícono se sale
+       de su píldora). De aquí en adelante lo que cede es el título. */
+    .header-cuenta { flex: 0 0 auto; min-width: 0; }
+  }
+
+  @media (max-width: 880px) {
+    /* font-size 0 oculta el texto; el <Icon> tiene tamaño propio */
+    .tab-btn { font-size: 0; gap: 0; padding: 0.55rem; }
+    /* el ojo de "vista cliente" es un emoji de texto, no un <Icon>: sin esto desaparece */
+    .tab-btn.vista-usuario-toggle { font-size: 1rem; }
+  }
+
+  @media (max-width: 480px) {
+    .header-cuenta { display: none; }
   }
 
   /* ─── Sección Superadmin ─── */
