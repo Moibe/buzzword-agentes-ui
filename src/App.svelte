@@ -4491,12 +4491,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         onclick={() => { activeTab = 'vectorizacion'; verificarSalud(); }}
         aria-pressed={activeTab === 'vectorizacion'}
       ><Icon name="construccion" size={16} /> Construcción</button>
-      <button
-        class="tab-btn"
-        class:active={activeTab === 'chat'}
-        onclick={() => { activeTab = 'chat'; cargarAsistentes(); verificarSalud(); }}
-        aria-pressed={activeTab === 'chat'}
-      ><Icon name="chatbot" size={16} /> Chatbot</button>
       {#if isAdmin}
         <button
           class="tab-btn admin-gear-btn"
