@@ -559,7 +559,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   // ─── CRUD de operadores (solo superadmin) ──────────────────
   const esSuperadmin = $derived(identidad?.rol === 'superadmin');
   // La sección "Superadmin" del header junta lo ÚNICO que un admin no puede
-  // hacer: administrar las cuentas del panel y leer la bitácora. Vive aparte de
+  // hacer: administrar los proyectos y las cuentas del panel, y leer la
+  // bitácora. Vive aparte de
   // Configuración (el engrane) para que la diferencia entre los dos roles se
   // vea sin tener que explicarla. Se esconde en la vista cliente, como el engrane.
   const verSuperadmin = $derived(esSuperadmin && isAdmin);
@@ -567,7 +568,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   function abrirSuperadmin() {
     activeTab = 'superadmin';
     if (superTab === 'auditoria') cargarAuditoria();
+    else if (superTab === 'proyectos') cargarProyectos();
     else cargarOperadores();
+  }
+
+  // Desde Construcción → Proyectos (botón "Administrar").
+  function irAProyectosSuperadmin() {
+    superTab = 'proyectos';
+    abrirSuperadmin();
   }
 
   let operadores = $state([]);
@@ -1383,6 +1391,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let mensajeProyecto = $state('');
   let proyectoABorrar = $state(null);
   let mostrarConfirmacionBorrarProyecto = $state(false);
+  // El error de borrado se muestra DENTRO del modal (p. ej. "tiene asistentes").
+  let errorBorrarProyecto = $state('');
   let cargandoBorrarProyecto = $state(false);
 
   // Proyecto activo (filtra todo lo de abajo). Persiste cross-sesión.
@@ -1510,7 +1520,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       if (recienCreado) proyectoActivoId = proyectoCreado.id;
       setTimeout(() => {
         cerrarFormProyecto();
-        if (recienCreado) irABasesDeConocimiento();
+        // Se crea en Superadmin, pero se trabaja en Construcción: allá se va.
+        if (recienCreado) {
+          activeTab = 'vectorizacion';
+          irABasesDeConocimiento();
+        }
       }, 800);
     } catch (err) {
       mensajeProyecto = `❌ ${err.message}`;
@@ -1521,7 +1535,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   function pedirConfirmacionBorrarProyecto(p) {
     proyectoABorrar = p;
+    errorBorrarProyecto = '';
     mostrarConfirmacionBorrarProyecto = true;
+  }
+
+  function cerrarConfirmacionBorrarProyecto() {
+    mostrarConfirmacionBorrarProyecto = false;
+    proyectoABorrar = null;
+    errorBorrarProyecto = '';
   }
 
   async function borrarProyectoConfirmado() {
@@ -1546,11 +1567,15 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       }
       // Si era el proyecto activo, limpiar la selección activa.
       if (proyectoActivoId === proyectoABorrar.id) proyectoActivoId = '';
+      // Si justo se estaba editando, ese formulario ya no tiene a qué apuntar.
+      if (proyectoEditandoId === proyectoABorrar.id) cerrarFormProyecto();
+      const nombre = proyectoABorrar.nombre;
       await cargarProyectos();
-      mostrarConfirmacionBorrarProyecto = false;
-      proyectoABorrar = null;
+      cerrarConfirmacionBorrarProyecto();
+      adminMensaje = `🗑️ Proyecto "${nombre}" borrado`;
+      setTimeout(() => { adminMensaje = ''; }, 3000);
     } catch (err) {
-      mensajeProyecto = `❌ ${err.message}`;
+      errorBorrarProyecto = err.message;
     } finally {
       cargandoBorrarProyecto = false;
     }
@@ -4129,7 +4154,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 {:else}
   {#if vistaUsuario}
     <div class="vista-usuario-banner" role="status" aria-live="polite">
-      <span>👁 <strong>Vista cliente</strong> — eres admin, pero el panel se muestra como lo ve una cuenta de cliente: sin Configuración, sin fuentes de datos y sin crear proyectos.</span>
+      <span>👁 <strong>Vista cliente</strong> — el panel se muestra como lo ve una cuenta de cliente: sin Configuración, sin Superadmin y sin fuentes de datos.</span>
       <button type="button" class="vista-usuario-banner__btn" onclick={salirVistaUsuario}>
         ← Volver a admin
       </button>
@@ -4349,91 +4374,20 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               >Cambiar de proyecto</button>
             </div>
           {/if}
-          {#if isAdmin}
-          <div class="crear-contexto-wrap" class:abierto={proyectoFormAbierto}>
-            <button class="crear-contexto-toggle" onclick={() => proyectoFormAbierto ? cerrarFormProyecto() : abrirFormCrearProyecto()}>
-              <h3>
-                {#if proyectoEditandoId}
-                  <Icon name="editar" size={18} /> Editar Proyecto
-                {:else}
-                  <Icon name="crear" size={18} /> Crear Nuevo Proyecto
-                {/if}
-              </h3>
-            </button>
-            {#if proyectoFormAbierto}
-              <div class="crear-contexto-form" style="flex-direction: column; align-items: stretch; max-width: 720px;">
-                <div class="form-field">
-                  <label for="proyecto-slug">Slug {proyectoEditandoId ? '(no modificable)' : ''}</label>
-                  <input
-                    id="proyecto-slug"
-                    type="text"
-                    placeholder="ej: banfondesa"
-                    bind:value={proyectoFormSlug}
-                    disabled={cargandoGuardarProyecto || !!proyectoEditandoId}
-                    class="contexto-input"
-                  />
-                  <small style="font-size: 0.75rem; color: var(--fg-muted); line-height: 1.3; display: block; margin-top: 0.25rem;">
-                    Identidad estable cross-ambiente. Lowercase, dígitos y guiones, 2-64 chars.
-                  </small>
-                </div>
-                <div class="form-field">
-                  <label for="proyecto-nombre">Nombre</label>
-                  <input
-                    id="proyecto-nombre"
-                    type="text"
-                    placeholder="ej: Banfondesa"
-                    bind:value={proyectoFormNombre}
-                    disabled={cargandoGuardarProyecto}
-                    maxlength="80"
-                    class="contexto-input"
-                  />
-                </div>
-                <div class="form-field">
-                  <label for="proyecto-descripcion">Descripción (opcional)</label>
-                  <textarea
-                    id="proyecto-descripcion"
-                    bind:value={proyectoFormDescripcion}
-                    disabled={cargandoGuardarProyecto}
-                    rows="3"
-                    maxlength="500"
-                    class="contexto-input"
-                    style="font-family: inherit; resize: vertical;"
-                    placeholder="Para qué sirve este proyecto, qué agrupa..."
-                  ></textarea>
-                </div>
-                <div style="display: flex; gap: 0.5rem;">
-                  <button
-                    onclick={guardarProyecto}
-                    disabled={cargandoGuardarProyecto}
-                    class="crear-contexto-btn"
-                  >
-                    {cargandoGuardarProyecto ? '⟳ Guardando...' : (proyectoEditandoId ? '✓ Actualizar' : '✓ Crear')}
-                  </button>
-                  <button
-                    onclick={cerrarFormProyecto}
-                    disabled={cargandoGuardarProyecto}
-                    class="crear-contexto-btn"
-                    style="background: var(--muted); color: var(--fg);"
-                  >
-                    Cancelar
-                  </button>
-                </div>
-                {#if mensajeProyecto}
-                  <p class="mensaje-contexto" class:success={mensajeProyecto.includes('✅')}>
-                    {mensajeProyecto}
-                  </p>
-                {/if}
-              </div>
-            {/if}
-          </div>
-          {/if}
-
           <div class="contextos-table-wrap">
             <div class="seccion-header">
               <h3><Icon name="proyecto" size={18} /> Proyectos Existentes</h3>
-              <button onclick={cargarProyectos} class="vectorizacion-action-btn contextos-recargar-btn" disabled={cargandoProyectos} aria-label="Recargar proyectos" title="Recargar proyectos">
-                <Icon name="recargar" size={16} />
-              </button>
+              <div style="display: flex; gap: 0.4rem; align-items: center;">
+                {#if verSuperadmin}
+                  <!-- Crear, editar y borrar viven en Superadmin → Proyectos: aquí solo se activan. -->
+                  <button onclick={irAProyectosSuperadmin} class="vectorizacion-action-btn" title="Crear, editar y borrar proyectos (solo superadmin)">
+                    <Icon name="superadmin" size={15} /> Administrar
+                  </button>
+                {/if}
+                <button onclick={cargarProyectos} class="vectorizacion-action-btn contextos-recargar-btn" disabled={cargandoProyectos} aria-label="Recargar proyectos" title="Recargar proyectos">
+                  <Icon name="recargar" size={16} />
+                </button>
+              </div>
             </div>
             {#if errorCargarProyectos}
               <p class="mensaje-contexto" style="margin-top: 0.5rem;">❌ {errorCargarProyectos}</p>
@@ -4441,7 +4395,15 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             {#if cargandoProyectos}
               <p style="color: var(--fg-muted); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando proyectos...</p>
             {:else if proyectos.length === 0}
-              <p style="color: var(--fg-muted); font-size: 0.9rem; padding: 1rem 0;">No hay proyectos creados todavía.</p>
+              <p style="color: var(--fg-muted); font-size: 0.9rem; padding: 1rem 0;">
+                {#if esCliente}
+                  Todavía no tienes proyectos asignados. Pídeselos a un superadmin.
+                {:else if verSuperadmin}
+                  No hay proyectos todavía. Se crean en <strong>Superadmin → Proyectos</strong>.
+                {:else}
+                  No hay proyectos todavía. Solo un superadmin puede crearlos.
+                {/if}
+              </p>
             {:else}
               <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.5rem;">
                 {#each proyectos as p (p.id)}
@@ -4466,19 +4428,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                         {/if}
                         <strong style="color: var(--fg); font-size: 1rem;">{p.nombre}</strong>
                         <code style="background: var(--muted); padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; color: var(--fg-soft);">{p.slug}</code>
-                        {#if isAdmin}
-                          <!-- Pegado al nombre (y no en el grupo de la derecha) para que
-                               se lea como "editar los datos de ESTE proyecto". -->
-                          <button
-                            onclick={() => abrirFormEditarProyecto(p)}
-                            class="vectorizacion-action-btn"
-                            style="align-self: center; padding: 0.25rem 0.4rem;"
-                            title="Editar datos del proyecto {p.nombre}"
-                            aria-label="Editar proyecto {p.nombre}"
-                          >
-                            <Icon name="editar" size={14} label="Editar" />
-                          </button>
-                        {/if}
                       </div>
                       {#if p.descripcion}
                         <p style="color: var(--fg-soft); font-size: 0.85rem; margin: 0.5rem 0 0 0; line-height: 1.4;">
@@ -4494,35 +4443,12 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                       >
                         <Icon name="base-conocimiento" size={16} label="Bases de Conocimiento" />
                       </button>
-                      {#if isAdmin}
-                        <button onclick={() => pedirConfirmacionBorrarProyecto(p)} class="vectorizacion-action-btn" title="Borrar proyecto"><Icon name="borrar" size={16} label="Borrar" /></button>
-                      {/if}
                     </div>
                   </div>
                 {/each}
               </div>
             {/if}
           </div>
-
-          {#if mostrarConfirmacionBorrarProyecto && proyectoABorrar}
-            <div class="confirmacion-borrar">
-              <h3><Icon name="warning" size={18} /> Confirmar Borrado de Proyecto</h3>
-              <p style="color: var(--fg);">
-                ¿Estás seguro de borrar el proyecto <strong>{proyectoABorrar.nombre}</strong> (<code>{proyectoABorrar.slug}</code>)?
-              </p>
-              <p style="color: var(--fg-muted); font-size: 0.85rem;">
-                Cuando esté el backend, esto fallará si el proyecto tiene bases de conocimiento o asistentes asociados.
-              </p>
-              <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
-                <button onclick={borrarProyectoConfirmado} disabled={cargandoBorrarProyecto} class="crear-contexto-btn" style="background: var(--danger);">
-                  {cargandoBorrarProyecto ? '⟳ Borrando...' : '🗑️ Sí, borrar'}
-                </button>
-                <button onclick={() => { mostrarConfirmacionBorrarProyecto = false; proyectoABorrar = null; }} disabled={cargandoBorrarProyecto} class="crear-contexto-btn" style="background: var(--muted); color: var(--fg);">
-                  Cancelar
-                </button>
-              </div>
-            </div>
-          {/if}
         {/if}
 
         <!-- Asistente -->
@@ -6523,6 +6449,33 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     </div>
   {/if}
 
+  {#if mostrarConfirmacionBorrarProyecto && proyectoABorrar}
+    <div class="modal-overlay" onclick={() => { if (!cargandoBorrarProyecto) cerrarConfirmacionBorrarProyecto(); }} role="presentation">
+      <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 480px;" use:modal>
+        <h3>Borrar proyecto</h3>
+        <p>
+          Vas a borrar el proyecto <strong>{proyectoABorrar.nombre}</strong> (<code>{proyectoABorrar.slug}</code>).
+        </p>
+        <p style="font-size: 0.8rem; color: var(--fg-soft); margin-top: 0.5rem;">
+          Solo se puede si ya no tiene asistentes ni bases de conocimiento. Los registros históricos no se tocan.
+        </p>
+        {#if errorBorrarProyecto}
+          <p class="login-error" role="alert">❌ {errorBorrarProyecto}</p>
+        {/if}
+        <div class="modal-buttons">
+          <button onclick={cerrarConfirmacionBorrarProyecto} disabled={cargandoBorrarProyecto} class="modal-btn cancel">
+            {errorBorrarProyecto ? 'Cerrar' : 'Cancelar'}
+          </button>
+          {#if !errorBorrarProyecto}
+            <button onclick={borrarProyectoConfirmado} disabled={cargandoBorrarProyecto} class="modal-btn danger">
+              {cargandoBorrarProyecto ? '⟳ Borrando...' : 'Sí, borrar'}
+            </button>
+          {/if}
+        </div>
+      </div>
+    </div>
+  {/if}
+
   <!-- Modal: restablecer la contraseña de un operador -->
   {#if operadorParaPassword}
     <div class="modal-overlay" onclick={() => { if (!guardandoPasswordOperador) operadorParaPassword = null; }} role="presentation">
@@ -7995,7 +7948,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           <h2><Icon name="superadmin" size={20} /> Superadmin</h2>
           <p>
             Solo la ven las cuentas con rol <strong>superadmin</strong>. Aquí está lo único que un <strong>admin</strong> no puede hacer:
-            decidir quién entra al panel y revisar la bitácora. Lo demás está en <strong>Configuración</strong>.
+            administrar los proyectos, decidir quién entra al panel y revisar la bitácora. Lo demás está en <strong>Configuración</strong>.
           </p>
         </div>
 
@@ -8007,6 +7960,13 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             onclick={() => { superTab = 'operadores'; cargarOperadores(); }}
           >
             <Icon name="operadores" size={15} /> Operadores
+          </button>
+          <button
+            class="vectorizacion-subtab-btn"
+            class:active={superTab === 'proyectos'}
+            onclick={() => { superTab = 'proyectos'; cargarProyectos(); }}
+          >
+            <Icon name="proyecto" size={15} /> Proyectos
           </button>
           <button
             class="vectorizacion-subtab-btn"
@@ -8208,6 +8168,132 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               💡 Sobre tu propia fila solo puedes editar nombre y contraseña: desactivarte o borrarte te dejaría fuera.
               Tampoco se puede quitar al último superadmin activo.
               Desactivar o restablecer una contraseña cierra las sesiones de esa persona al instante.
+            </p>
+          {/if}
+        </div>
+        {/if}
+
+        <!-- Proyectos: crear, editar y borrar (solo superadmin) -->
+        {#if superTab === 'proyectos'}
+        <div class="modelos-wrap">
+          <div class="seccion-header">
+            <h3><Icon name="proyecto" size={16} /> Proyectos</h3>
+            <div style="display: flex; gap: 0.4rem;">
+              <button onclick={abrirFormCrearProyecto} class="vectorizacion-action-btn" disabled={cargandoGuardarProyecto}>➕ Nuevo proyecto</button>
+            </div>
+          </div>
+
+          <p style="color: var(--fg-soft); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
+            Aquí se crean, se editan y se borran. Para trabajar <em>dentro</em> de un proyecto (bases de conocimiento,
+            asistentes, usuarios) actívalo en <strong>Construcción → Proyectos</strong>. Uno recién creado se activa solo y te lleva ahí.
+          </p>
+
+          {#if proyectoFormAbierto}
+            <div class="crear-contexto-form" style="flex-direction: column; align-items: stretch; max-width: 720px; margin-bottom: 1.25rem;">
+              <h4 style="margin: 0 0 0.25rem 0; color: var(--fg);">
+                {proyectoEditandoId ? 'Editar proyecto' : 'Nuevo proyecto'}
+              </h4>
+              <div class="form-field">
+                <label for="proyecto-slug">Slug {proyectoEditandoId ? '(no modificable)' : ''}</label>
+                <input
+                  id="proyecto-slug"
+                  type="text"
+                  placeholder="ej: banfondesa"
+                  bind:value={proyectoFormSlug}
+                  disabled={cargandoGuardarProyecto || !!proyectoEditandoId}
+                  class="contexto-input"
+                />
+                <small style="font-size: 0.75rem; color: var(--fg-muted); line-height: 1.3; display: block; margin-top: 0.25rem;">
+                  Identidad estable cross-ambiente. Lowercase, dígitos y guiones, 2-64 chars.
+                </small>
+              </div>
+              <div class="form-field">
+                <label for="proyecto-nombre">Nombre</label>
+                <input
+                  id="proyecto-nombre"
+                  type="text"
+                  placeholder="ej: Banfondesa"
+                  bind:value={proyectoFormNombre}
+                  disabled={cargandoGuardarProyecto}
+                  maxlength="80"
+                  class="contexto-input"
+                />
+              </div>
+              <div class="form-field">
+                <label for="proyecto-descripcion">Descripción (opcional)</label>
+                <textarea
+                  id="proyecto-descripcion"
+                  bind:value={proyectoFormDescripcion}
+                  disabled={cargandoGuardarProyecto}
+                  rows="3"
+                  maxlength="500"
+                  class="contexto-input"
+                  style="font-family: inherit; resize: vertical;"
+                  placeholder="Para qué sirve este proyecto, qué agrupa..."
+                ></textarea>
+              </div>
+              <div style="display: flex; gap: 0.5rem;">
+                <button
+                  onclick={guardarProyecto}
+                  disabled={cargandoGuardarProyecto}
+                  class="crear-contexto-btn"
+                >
+                  {cargandoGuardarProyecto ? '⟳ Guardando...' : (proyectoEditandoId ? '✓ Actualizar' : '✓ Crear')}
+                </button>
+                <button
+                  onclick={cerrarFormProyecto}
+                  disabled={cargandoGuardarProyecto}
+                  class="crear-contexto-btn"
+                  style="background: var(--muted); color: var(--fg);"
+                >
+                  Cancelar
+                </button>
+              </div>
+              {#if mensajeProyecto}
+                <p class="mensaje-contexto" class:success={mensajeProyecto.includes('✅')}>
+                  {mensajeProyecto}
+                </p>
+              {/if}
+            </div>
+          {/if}
+
+          {#if errorCargarProyectos}
+            <p class="mensaje-contexto">❌ {errorCargarProyectos}</p>
+          {:else if cargandoProyectos && proyectos.length === 0}
+            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando proyectos...</p>
+          {:else if proyectos.length === 0}
+            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">No hay proyectos todavía.</p>
+          {:else}
+            <table class="consumo-tabla">
+              <thead>
+                <tr>
+                  <th>Proyecto</th>
+                  <th>Slug</th>
+                  <th style="text-align: right;">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each proyectos as p (p.id)}
+                  <tr>
+                    <td>
+                      <strong>{p.nombre}</strong>
+                      {#if p.id === proyectoActivoId}<span class="operador-yo">activo</span>{/if}
+                      {#if p.descripcion}
+                        <div style="font-size: 0.78rem; color: var(--fg-muted); margin-top: 0.2rem; line-height: 1.4;">{p.descripcion}</div>
+                      {/if}
+                    </td>
+                    <td><code style="font-size: 0.78rem;">{p.slug}</code></td>
+                    <td style="text-align: right; white-space: nowrap;">
+                      <button class="op-btn" title="Editar nombre y descripción de {p.nombre}" aria-label="Editar proyecto {p.nombre}" onclick={() => abrirFormEditarProyecto(p)} disabled={cargandoGuardarProyecto}><Icon name="editar" size={15} /></button>
+                      <button class="op-btn op-btn--danger" title="Borrar {p.nombre}" aria-label="Borrar proyecto {p.nombre}" onclick={() => pedirConfirmacionBorrarProyecto(p)}><Icon name="borrar" size={15} /></button>
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+            <p style="color: var(--fg-muted); font-size: 0.78rem; margin-top: 0.75rem; line-height: 1.45;">
+              El slug no se puede cambiar: lo usan las URLs de los widgets. Un proyecto solo se puede borrar cuando ya no
+              tiene asistentes ni bases de conocimiento.
             </p>
           {/if}
         </div>
