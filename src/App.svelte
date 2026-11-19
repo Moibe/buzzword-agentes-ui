@@ -572,12 +572,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     else cargarOperadores();
   }
 
-  // Desde Construcción → Proyectos (botón "Administrar").
-  function irAProyectosSuperadmin() {
-    superTab = 'proyectos';
-    abrirSuperadmin();
-  }
-
   let operadores = $state([]);
   let rolesAsignables = $state(['superadmin', 'admin']);
   let cargandoOperadores = $state(false);
@@ -4377,17 +4371,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           <div class="contextos-table-wrap">
             <div class="seccion-header">
               <h3><Icon name="proyecto" size={18} /> Proyectos Existentes</h3>
-              <div style="display: flex; gap: 0.4rem; align-items: center;">
-                {#if verSuperadmin}
-                  <!-- Crear, editar y borrar viven en Superadmin → Proyectos: aquí solo se activan. -->
-                  <button onclick={irAProyectosSuperadmin} class="vectorizacion-action-btn" title="Crear, editar y borrar proyectos (solo superadmin)">
-                    <Icon name="superadmin" size={15} /> Administrar
-                  </button>
-                {/if}
-                <button onclick={cargarProyectos} class="vectorizacion-action-btn contextos-recargar-btn" disabled={cargandoProyectos} aria-label="Recargar proyectos" title="Recargar proyectos">
-                  <Icon name="recargar" size={16} />
-                </button>
-              </div>
+              <button onclick={cargarProyectos} class="vectorizacion-action-btn contextos-recargar-btn" disabled={cargandoProyectos} aria-label="Recargar proyectos" title="Recargar proyectos">
+                <Icon name="recargar" size={16} />
+              </button>
             </div>
             {#if errorCargarProyectos}
               <p class="mensaje-contexto" style="margin-top: 0.5rem;">❌ {errorCargarProyectos}</p>
