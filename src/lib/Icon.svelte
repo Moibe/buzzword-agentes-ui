@@ -17,6 +17,7 @@
     'construccion':         { emoji: '🛠️', iconify: 'ph:wrench' },
     'chatbot':              { emoji: '💬', iconify: 'ph:chat-circle' },
     'admin':                { emoji: '⚙️', iconify: 'ph:gear' },
+    'superadmin':           { emoji: '🛡️', iconify: 'ph:shield-check' },
     'proyecto':             { emoji: '📁', iconify: 'ph:folders' },
     'asistente':            { emoji: '🎧', iconify: 'ph:headset' },
     'fuente-datos':         { emoji: '🔌', iconify: 'ph:plugs-connected' },

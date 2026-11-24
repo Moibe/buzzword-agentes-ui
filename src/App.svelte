@@ -3,69 +3,6 @@
   import Icon from './lib/Icon.svelte';
   import { modal } from './lib/modal.js';
 
-  // ─── Sesión & Logs ───────────────────────────────────────────────
-  function generateSessionId() {
-    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-      return crypto.randomUUID();
-    }
-
-    // getRandomValues suele seguir disponible aun sin secure context.
-    if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
-      const bytes = new Uint8Array(16);
-      crypto.getRandomValues(bytes);
-      bytes[6] = (bytes[6] & 0x0f) | 0x40;
-      bytes[8] = (bytes[8] & 0x3f) | 0x80;
-      const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
-      return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-    }
-
-    return `id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  }
-
-  const SESSION_ID = generateSessionId();
-  let logs = $state([]);
-
-  async function registrarLog({ pregunta, historial, respuesta, ms, error, contexto, modelo }) {
-    const entry = {
-      fecha: new Date().toISOString(),
-      sesion: SESSION_ID,
-      host: location.hostname,
-      modelo: modelo ?? '',
-      contexto: contexto ?? '',
-      pregunta,
-      historial: JSON.stringify(historial),
-      respuesta: respuesta ?? '',
-      ms: ms ?? 0,
-      error: error ?? '',
-    };
-    logs = [...logs, entry];
-    console.groupCollapsed(
-      `%c📋 Log #${logs.length}  ·  ${entry.host}  ·  ${entry.ms || '—'}ms`,
-      'color:#7c3aed;font-weight:bold;font-size:12px'
-    );
-    console.table({ ...entry, historial: `(${historial.length} msgs)` });
-    console.log('Historial completo:', historial);
-    console.groupEnd();
-
-    // Guardar en SQLite vía API
-    try {
-      const res = await fetch(`${apiUrl.base}/registrarLog`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...adminHeaders() },
-        body: JSON.stringify(entry),
-      });
-      if (res.ok) {
-        console.log('%c💾 Log guardado en BD', 'color:#16a34a;font-weight:bold');
-      } else {
-        console.warn('%c⚠️ Error al guardar log en BD:', 'color:orange;font-weight:bold', res.status);
-      }
-    } catch (err) {
-      console.warn('%c⚠️ No se pudo guardar log en BD:', 'color:orange;font-weight:bold', err.message);
-    }
-
-    return entry;
-  }
-
   // Subir esta versión manualmente con cada despliegue para llevar control
   // visual de qué build está corriendo. Se muestra debajo del título del header.
   const APP_VERSION = '0.7.0';
@@ -77,6 +14,30 @@
   // de producción. Se fija al compilar, como cualquier variable VITE_.
   const HOST_ASISTENTES_PORT = Number(import.meta.env.VITE_HOST_ASISTENTES_PORT) || 4176;
 
+  // Etiqueta de ambiente del header. VITE_AMBIENTE la fuerza si está en el .env;
+  // si no, con `vite` (servidor de desarrollo) es LOCAL y en un build sale de la
+  // rama de git con la que se construyó (ver vite.config.js). Colores iguales a
+  // las pestañas de webhook-central: dev azul, staging ámbar, prod verde.
+  const AMBIENTES = {
+    prod: { etiqueta: 'PROD', nombre: 'Producción', titulo: 'Producción' },
+    staging: { etiqueta: 'STAGING', nombre: 'Staging', titulo: 'Staging' },
+    dev: { etiqueta: 'DEV', nombre: 'Desarrollo', titulo: 'Desarrollo' },
+    local: { etiqueta: 'LOCAL', nombre: 'Local', titulo: 'Tu máquina (servidor de desarrollo de Vite)' },
+  };
+  const RAMA_GIT = typeof __RAMA_GIT__ === 'string' ? __RAMA_GIT__ : '';
+  const AMBIENTE = (() => {
+    const forzado = (import.meta.env.VITE_AMBIENTE || '').trim().toLowerCase();
+    if (forzado) return forzado;
+    if (import.meta.env.DEV) return 'local';
+    return { main: 'prod', master: 'prod', staging: 'staging', dev: 'dev', develop: 'dev' }[RAMA_GIT] ?? '';
+  })();
+  const ambienteInfo = AMBIENTES[AMBIENTE] ?? (AMBIENTE ? { etiqueta: AMBIENTE.toUpperCase(), nombre: AMBIENTE, titulo: AMBIENTE } : null);
+  // Clase de color de la etiqueta y de la franja del header (un ambiente desconocido va en morado).
+  const ambienteClase = AMBIENTES[AMBIENTE] ? AMBIENTE : 'otro';
+  if (ambienteInfo && typeof document !== 'undefined' && !document.title.startsWith(ambienteInfo.etiqueta + ' · ')) {
+    document.title = `${ambienteInfo.etiqueta} · ${document.title}`;
+  }
+
   // El API se llama por ruta relativa (/api/...): quien sirve este admin
   // (Vite dev/preview local, o el reverse proxy en el servidor real) reenvía
   // /api/* al backend en 127.0.0.1:8077 — ver vite.config.js. Esto evita que
@@ -86,19 +47,9 @@
   const apiUrl = { base: '/api', real: `${location.origin}/api` };
   const hostAsistentesBase = `${location.protocol}//${location.hostname}:${HOST_ASISTENTES_PORT}`;
 
-  // Exponer helpers de log en consola para depuración
-  if (typeof window !== 'undefined') {
-    window.__mideLogs = () => logs;
-    window.__mideSession = SESSION_ID;
-  }
-
   $effect(() => {
-    console.groupCollapsed('%c🌐 MIDE Chat — Configuración', 'color:#c8102e;font-weight:bold;font-size:13px');
-    console.log('Sesión     :', SESSION_ID);
-    console.log('Host       :', location.hostname);
-    console.log('API URL    :', apiUrl.real);
-    console.log('Endpoint   :', `${apiUrl.real}/chatbot`);
-    console.groupEnd();
+    // Sin sesión no hay nada que cargar: el API exige credencial.
+    if (!identidad) return;
     // Carga inicial de proyectos y contextos al montar.
     // Proyectos primero porque el resto filtra por proyecto activo.
     cargarProyectos();
@@ -108,6 +59,7 @@
   // Cuando cambia el proyecto activo, recargar listas filtradas.
   $effect(() => {
     proyectoActivoId; // dependencia explícita (no operación, solo tracking)
+    if (!identidad) return;
     untrack(() => {
       cargarContextos();
       cargarAsistentes();
@@ -120,21 +72,13 @@
 
   // Carga contextos en vectorización cuando cambia el tab
   $effect(() => {
+    if (!identidad) return;
     if (activeTab === 'vectorizacion') {
       untrack(() => {
         cargarContextosVectorizacion();
       });
     }
   });
-
-  let messages = $state([
-    {
-      id: 1,
-      role: 'bot',
-      text: '¡Hola! Soy el asistente. ¿En qué puedo ayudarte hoy?',
-      time: formatTime(new Date()),
-    },
-  ]);
 
   const MODELOS = ['mistral', 'llama3.1'];
   const MODELOS_OPENAI = ['gpt-5.5', 'gpt-5.5-pro', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano', 'gpt-4o', 'gpt-4o-mini'];
@@ -191,42 +135,43 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   let contextos = $state([]);
   let cargandoContextos = $state(false);
-  let inputText = $state('');
-  let isLoading = $state(false);
-  let chatContainer = $state(null);
-  let chatTextareaEl = $state(null);
   let activeTab = $state('vectorizacion');
 
-  // Autocrece el textarea del chat con el contenido para que nunca se vea una
-  // línea cortada a la mitad — o se ve la línea completa, o el textarea crece.
-  $effect(() => {
-    inputText;
-    if (!chatTextareaEl) return;
-    chatTextareaEl.style.height = 'auto';
-    chatTextareaEl.style.height = `${chatTextareaEl.scrollHeight}px`;
-  });
-
   // ─── Admin gate ────────────────────────────────────────────
-  // Modo admin: visible solo si el usuario entró alguna vez con la URL
-  // mágica ?admin=<token>. El token se guarda en localStorage. Endpoints
-  // sensibles del backend validan el mismo token vía Authorization Bearer.
+  // El panel entero exige sesión: sin `identidad` solo se muestra la pantalla de
+  // login. La credencial (token de sesión de un operador, o el ADMIN_PASSWORD
+  // legacy que entra por la URL ?admin=<token>) se guarda en localStorage y
+  // viaja como Authorization Bearer en todas las llamadas al API.
   const ADMIN_TOKEN_STORAGE_KEY = 'bzz_admin_token';
   let adminToken = $state(
     typeof localStorage !== 'undefined' ? (localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) || '') : ''
   );
   let adminMensaje = $state('');
-  // Toggle de "vista usuario": cuando es true, isAdmin se comporta como false
-  // sin borrar el token. Permite previsualizar la UI tal como la ven los no-admin
-  // sin tener que volver a pegar el query param. No persiste — cada recarga
-  // arranca con admin completo si hay token.
+  // Toggle de "vista cliente": cuando es true, isAdmin se comporta como false
+  // sin cerrar la sesión. Permite previsualizar el panel tal como lo ve una
+  // cuenta de cliente. No persiste: cada recarga arranca con la vista completa.
   let vistaUsuario = $state(false);
-  // `tieneTokenAdmin` = hay token guardado (independiente del toggle).
-  // `isAdmin` = privilegios efectivos en este momento (respeta el toggle).
-  const tieneTokenAdmin = $derived(!!adminToken);
-  const isAdmin = $derived(!!adminToken && !vistaUsuario);
 
   function adminHeaders() {
     return adminToken ? { 'Authorization': `Bearer ${adminToken}` } : {};
+  }
+
+  // Todas las llamadas del panel al API llevan la credencial sin depender de
+  // que cada fetch se acuerde de mandarla: con el login obligatorio casi todos
+  // los endpoints la exigen. Y si el API responde 401 a media sesión (venció o
+  // la cerraron desde otro lado), se revisa y se regresa al login.
+  if (typeof window !== 'undefined') {
+    if (!window.__bzzFetchOriginal) window.__bzzFetchOriginal = window.fetch.bind(window);
+    const fetchOriginal = window.__bzzFetchOriginal;
+    window.fetch = async (input, init) => {
+      const url = typeof input === 'string' ? input : (input?.url ?? String(input));
+      if (!url.startsWith(`${apiUrl.base}/`)) return fetchOriginal(input, init);
+      const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+      if (adminToken && !headers.has('Authorization')) headers.set('Authorization', `Bearer ${adminToken}`);
+      const res = await fetchOriginal(input, { ...init, headers });
+      if (res.status === 401 && adminToken && !url.includes('/auth/') && !url.includes('/admin/verify')) revisarSesion();
+      return res;
+    };
   }
 
   // ─── Login de operadores ────────────────────────────────────
@@ -238,7 +183,15 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   // `identidad` = lo que responde GET /auth/yo: `tipo` es 'operador' (cuenta
   // propia) o 'legacy' (el token compartido, que no identifica a nadie).
   let identidad = $state(null);
-  let loginAbierto = $state(false);
+  // `esCliente` = cuenta limitada a sus proyectos (sin Configuración ni fuentes).
+  // `isAdmin` = privilegios efectivos de admin en este momento (respeta el toggle
+  // de vista cliente). El token legacy cuenta como superadmin.
+  const esCliente = $derived(identidad?.rol === 'cliente');
+  const isAdmin = $derived(!!identidad && !esCliente && !vistaUsuario);
+  // true mientras se confirma con el API si el token guardado sigue vivo: evita
+  // que la pantalla de login parpadee al recargar con una sesión válida.
+  let sesionVerificando = $state(!!adminToken);
+  let errorConexionSesion = $state(false);
   let loginEmail = $state('');
   let loginPassword = $state('');
   let loginCargando = $state(false);
@@ -248,26 +201,58 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     identidad?.tipo === 'operador' ? (identidad.operador?.nombre || identidad.operador?.email) : null
   );
 
+  const AVISO_LOGIN_KEY = 'bzz_aviso_login';
+
   async function cargarIdentidad() {
-    if (!adminToken) { identidad = null; return; }
+    if (!adminToken) { identidad = null; sesionVerificando = false; return; }
+    errorConexionSesion = false;
     try {
       const res = await fetch(`${apiUrl.base}/auth/yo`, { headers: adminHeaders() });
-      identidad = res.ok ? await res.json() : null;
+      if (res.ok) {
+        identidad = await res.json();
+      } else if (res.status === 401 || res.status === 403) {
+        // El token ya no vale (venció, cerraron la sesión o desactivaron la cuenta).
+        adminToken = '';
+        identidad = null;
+        if (typeof localStorage !== 'undefined') localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+      } else {
+        identidad = null;
+        errorConexionSesion = true;
+      }
     } catch {
+      // API caída: no se tira el token, se ofrece reintentar.
       identidad = null;
+      errorConexionSesion = true;
+    } finally {
+      sesionVerificando = false;
     }
   }
 
-  function abrirLogin() {
-    loginEmail = '';
-    loginPassword = '';
-    loginError = '';
-    loginAbierto = true;
+  // Sale al login recargando la página: así no queda en memoria nada de lo que
+  // había cargado la cuenta anterior (proyectos, asistentes, registros).
+  function salirAlLogin(aviso = '') {
+    adminToken = '';
+    if (typeof localStorage !== 'undefined') localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+    try {
+      if (aviso) sessionStorage.setItem(AVISO_LOGIN_KEY, aviso);
+    } catch { /* sin sessionStorage solo se pierde el aviso */ }
+    if (typeof window !== 'undefined') window.location.reload();
   }
 
-  function cerrarLogin() {
-    loginAbierto = false;
-    loginPassword = '';
+  // Un 401 a media sesión no basta para echar a nadie (hay endpoints que lo usan
+  // para otra cosa): se confirma contra /auth/yo y solo entonces se sale.
+  let revisandoSesion = false;
+  async function revisarSesion() {
+    if (revisandoSesion || !adminToken) return;
+    revisandoSesion = true;
+    try {
+      const res = await fetch(`${apiUrl.base}/auth/yo`, { headers: adminHeaders() });
+      if (res.status === 401) salirAlLogin('Tu sesión terminó. Vuelve a entrar.');
+    } catch {
+      // Sin conexión no se concluye nada.
+    } finally {
+      revisandoSesion = false;
+    }
   }
 
   async function iniciarSesion() {
@@ -291,7 +276,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       if (typeof localStorage !== 'undefined') localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, data.token);
       vistaUsuario = false;
       await cargarIdentidad();
-      cerrarLogin();
+      loginPassword = '';
       adminMensaje = `👋 Hola, ${data.operador?.nombre || data.operador?.email}`;
       setTimeout(() => { adminMensaje = ''; }, 3000);
     } catch (err) {
@@ -312,18 +297,12 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       // Si la API no responde igual limpiamos local: quedarse "dentro" de un
       // panel que no puede hablar con el backend no le sirve a nadie.
     }
-    adminToken = '';
-    identidad = null;
-    vistaUsuario = false;
-    if (typeof localStorage !== 'undefined') localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
-    if (activeTab === 'admin') activeTab = 'vectorizacion';
-    adminMensaje = '🔒 Sesión cerrada';
-    setTimeout(() => { adminMensaje = ''; }, 2500);
+    salirAlLogin();
   }
 
   function entrarVistaUsuario() {
     vistaUsuario = true;
-    if (activeTab === 'admin') activeTab = 'vectorizacion';
+    if (activeTab === 'admin' || activeTab === 'superadmin') activeTab = 'vectorizacion';
   }
 
   function salirVistaUsuario() {
@@ -396,6 +375,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     const params = new URLSearchParams(window.location.search);
     const tokenParam = params.get('admin');
     if (!tokenParam) return;
+    sesionVerificando = true;
     // Limpia la URL inmediatamente para no dejar el token a la vista.
     params.delete('admin');
     const cleanUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '') + window.location.hash;
@@ -420,6 +400,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       // Si la API no responde, no guardamos nada. El usuario reintenta.
       adminMensaje = '❌ No se pudo verificar token admin (API offline)';
       setTimeout(() => { adminMensaje = ''; }, 4000);
+    } finally {
+      sesionVerificando = false;
     }
   }
   let vectorizacionTab = $state('proyectos');
@@ -578,6 +560,19 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   // ─── CRUD de operadores (solo superadmin) ──────────────────
   const esSuperadmin = $derived(identidad?.rol === 'superadmin');
+  // La sección "Superadmin" del header junta lo ÚNICO que un admin no puede
+  // hacer: administrar los proyectos y las cuentas del panel, y leer la
+  // bitácora. Vive aparte de
+  // Configuración (el engrane) para que la diferencia entre los dos roles se
+  // vea sin tener que explicarla. Se esconde en la vista cliente, como el engrane.
+  const verSuperadmin = $derived(esSuperadmin && isAdmin);
+  let superTab = $state('operadores');
+  function abrirSuperadmin() {
+    activeTab = 'superadmin';
+    if (superTab === 'auditoria') cargarAuditoria();
+    else if (superTab === 'proyectos') cargarProyectos();
+    else cargarOperadores();
+  }
 
   let operadores = $state([]);
   let rolesAsignables = $state(['superadmin', 'admin']);
@@ -618,8 +613,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       }
       const data = await res.json();
       operadores = data.operadores ?? [];
-      // La lista de roles la manda el backend para no duplicarla aquí: hoy
-      // 'cliente' no se puede asignar hasta que exista el filtrado por proyecto.
+      // La lista de roles la manda el backend para no duplicarla aquí.
       if (data.roles_asignables?.length) rolesAsignables = data.roles_asignables;
     } catch (err) {
       errorOperadores = err.message;
@@ -635,18 +629,32 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     operadorFormNombre = '';
     operadorFormPassword = '';
     operadorFormRol = 'admin';
+    operadorFormProyectos = new Set();
     errorFormOperador = '';
     operadorFormAbierto = true;
+    if (proyectos.length === 0) cargarProyectos();
+  }
+
+  // Proyectos a los que entra una cuenta con rol 'cliente'.
+  let operadorFormProyectos = $state(new Set());
+  function alternarProyectoOperador(id) {
+    const elegidos = new Set(operadorFormProyectos);
+    elegidos.has(id) ? elegidos.delete(id) : elegidos.add(id);
+    operadorFormProyectos = elegidos;
   }
 
   function abrirEditarOperador(o) {
+    // Con un guardado en curso no se cambia de formulario: al terminar lo cerraría.
+    if (guardandoOperador) return;
     operadorEditandoId = o.id;
-    operadorFormEmail = o.email;   // se muestra, pero es inmutable
+    operadorFormEmail = o.email;
     operadorFormNombre = o.nombre;
     operadorFormPassword = '';
     operadorFormRol = o.rol;
+    operadorFormProyectos = new Set(o.proyectos ?? []);
     errorFormOperador = '';
     operadorFormAbierto = true;
+    if (proyectos.length === 0) cargarProyectos();
   }
 
   function cerrarFormOperador() {
@@ -662,13 +670,33 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       const url = editando
         ? `${apiUrl.base}/operadores/${encodeURIComponent(operadorEditandoId)}`
         : `${apiUrl.base}/operadores`;
+      // Los proyectos solo significan algo para 'cliente'; con otro rol se limpian.
+      const proyectosElegidos = operadorFormRol === 'cliente' ? [...operadorFormProyectos] : [];
+      if (operadorFormRol === 'cliente' && proyectosElegidos.length === 0) {
+        throw new Error('Elige al menos un proyecto: sin proyectos, la cuenta de cliente entra y no ve nada.');
+      }
+      // El email solo viaja si de verdad cambió: así la bitácora anota "cambió el
+      // email" únicamente cuando pasó.
+      const emailNuevo = operadorFormEmail.trim().toLowerCase();
+      const emailPrevio = operadores.find((o) => o.id === operadorEditandoId)?.email ?? '';
+      const cambiaEmail = editando && emailNuevo !== emailPrevio;
+      if (editando && (!emailNuevo || !emailNuevo.includes('@'))) {
+        throw new Error('Escribe un email válido.');
+      }
+      const eraMiCuenta = editando && identidad?.operador?.id === operadorEditandoId;
       const body = editando
-        ? { nombre: operadorFormNombre, rol: operadorFormRol }
+        ? {
+            nombre: operadorFormNombre,
+            rol: operadorFormRol,
+            proyectos: proyectosElegidos,
+            ...(cambiaEmail ? { email: emailNuevo } : {}),
+          }
         : {
             email: operadorFormEmail.trim(),
             nombre: operadorFormNombre.trim(),
             password: operadorFormPassword,
             rol: operadorFormRol,
+            proyectos: proyectosElegidos,
           };
       const res = await fetch(url, {
         method: editando ? 'PUT' : 'POST',
@@ -678,8 +706,17 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.detail || `HTTP ${res.status}`);
       await cargarOperadores();
+      // Un API anterior a este cambio ignora el campo y responde 200 con el email
+      // de antes: mejor decirlo que anunciar un cambio que no pasó.
+      if (cambiaEmail && data?.email !== emailNuevo) {
+        throw new Error('Lo demás se guardó, pero el servidor todavía no permite cambiar el email: falta actualizar la API.');
+      }
+      // Si era mi propia cuenta, el header muestra mi nombre y mi email: refrescarlos.
+      if (eraMiCuenta) await cargarIdentidad();
       cerrarFormOperador();
-      avisoOperadores(editando ? '✅ Operador actualizado' : '✅ Operador creado');
+      avisoOperadores(!editando ? '✅ Operador creado'
+        : cambiaEmail ? `✅ Email cambiado: ahora entra con ${emailNuevo}`
+        : '✅ Operador actualizado');
     } catch (err) {
       errorFormOperador = err.message;
     } finally {
@@ -771,6 +808,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   // Las listas de filtros las manda el backend (qué entidades y acciones
   // existen, y quiénes aparecen de verdad en la bitácora), para no duplicarlas.
   const auditOperadores = $derived(auditoria?.operadores ?? []);
+  // Una entrada por CUENTA (id), con su nombre y email de hoy: así el filtro junta
+  // todo lo que hizo una persona aunque le hayan cambiado el email. `null` = el
+  // API es anterior a esto y solo manda la lista de emails de arriba.
+  const auditCuentas = $derived(auditoria?.cuentas ?? null);
   const auditEntidades = $derived(auditoria?.entidades ?? []);
   const auditAcciones = $derived(auditoria?.acciones ?? []);
 
@@ -832,7 +873,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   // === Registros ===
   // Bitácora de interacciones /chatbot. Consume GET /registros con filtros y
-  // paginación. El "user" del sistema es el proyecto (quien tiene su password).
+  // paginación. El "user" del sistema es el proyecto.
   let registrosDesde = $state('');
   let registrosHasta = $state('');
   let registrosProyectoFiltro = $state('');
@@ -1342,12 +1383,12 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let proyectoFormSlug = $state('');
   let proyectoFormNombre = $state('');
   let proyectoFormDescripcion = $state('');
-  let proyectoFormPassword = $state('');
-  let proyectoFormPasswordVisible = $state(false);
   let cargandoGuardarProyecto = $state(false);
   let mensajeProyecto = $state('');
   let proyectoABorrar = $state(null);
   let mostrarConfirmacionBorrarProyecto = $state(false);
+  // El error de borrado se muestra DENTRO del modal (p. ej. "tiene asistentes").
+  let errorBorrarProyecto = $state('');
   let cargandoBorrarProyecto = $state(false);
 
   // Proyecto activo (filtra todo lo de abajo). Persiste cross-sesión.
@@ -1358,58 +1399,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   let proyectoActivoId = $state('');
   const proyectoActivo = $derived(proyectos.find((p) => p.id === proyectoActivoId) ?? null);
 
-  // ─── Activación con password ──────────────────────────────────────
-  // Cada proyecto puede tener su propio password (gestionado por admin).
-  // Al hacer click en ⚡:
-  //   - Admin (con token) → activa sin password.
-  //   - Proyecto sin password → activa directo.
-  //   - Proyecto con password ya desbloqueado en esta sesión → activa.
-  //   - Proyecto con password no desbloqueado → modal pide password.
-  let proyectoParaDesbloquear = $state(null); // {id, nombre, slug} mientras el modal está abierto
-  let passwordIntento = $state('');
-  let cargandoVerificarPassword = $state(false);
-  let errorPasswordProyecto = $state('');
-
-  function proyectoUnlockKey(id) { return `bzz_proyecto_unlock_${id}`; }
-
-  function proyectoYaDesbloqueado(id) {
-    if (typeof sessionStorage === 'undefined') return false;
-    return sessionStorage.getItem(proyectoUnlockKey(id)) === '1';
-  }
-
-  function marcarProyectoDesbloqueado(id) {
-    if (typeof sessionStorage !== 'undefined') {
-      sessionStorage.setItem(proyectoUnlockKey(id), '1');
-    }
-  }
-
+  // Activar un proyecto = elegirlo como contexto de trabajo. El API ya solo
+  // lista los proyectos a los que la cuenta tiene acceso, así que no hay nada
+  // más que verificar aquí.
   function activarProyectoPorClick(p) {
     if (p.id === proyectoActivoId) return; // ya activo
-    // Admin bypass total.
-    if (isAdmin) {
-      proyectoActivoId = p.id;
-      vinoDeCambiarProyecto = false;
-      irABasesDeConocimiento();
-      return;
-    }
-    // Sin password → activa directo.
-    if (!p.requires_password) {
-      proyectoActivoId = p.id;
-      vinoDeCambiarProyecto = false;
-      irABasesDeConocimiento();
-      return;
-    }
-    // Ya desbloqueado en esta sesión → activa.
-    if (proyectoYaDesbloqueado(p.id)) {
-      proyectoActivoId = p.id;
-      vinoDeCambiarProyecto = false;
-      irABasesDeConocimiento();
-      return;
-    }
-    // Pedir password.
-    proyectoParaDesbloquear = { id: p.id, nombre: p.nombre, slug: p.slug };
-    passwordIntento = '';
-    errorPasswordProyecto = '';
+    proyectoActivoId = p.id;
+    vinoDeCambiarProyecto = false;
+    irABasesDeConocimiento();
   }
 
   // Elegir un proyecto lleva directo al siguiente paso del flujo: sus Bases
@@ -1420,108 +1417,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     vectorizacionTab = 'contextos';
   }
 
-  function cerrarPromptPassword() {
-    proyectoParaDesbloquear = null;
-    passwordIntento = '';
-    errorPasswordProyecto = '';
-  }
-
-  async function verificarPasswordProyecto() {
-    if (!proyectoParaDesbloquear) return;
-    const intento = passwordIntento;
-    if (!intento) {
-      errorPasswordProyecto = 'Tipea un password.';
-      return;
-    }
-    cargandoVerificarPassword = true;
-    errorPasswordProyecto = '';
-    try {
-      const res = await fetch(`${apiUrl.base}/proyectos/${encodeURIComponent(proyectoParaDesbloquear.id)}/verificar-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: intento }),
-      });
-      if (res.status === 401) {
-        errorPasswordProyecto = '❌ Password incorrecto';
-        return;
-      }
-      if (!res.ok) {
-        const txt = await res.text().catch(() => '');
-        throw new Error(`HTTP ${res.status}${txt ? ': ' + txt : ''}`);
-      }
-      // OK
-      marcarProyectoDesbloqueado(proyectoParaDesbloquear.id);
-      proyectoActivoId = proyectoParaDesbloquear.id;
-      vinoDeCambiarProyecto = false;
-      irABasesDeConocimiento();
-      cerrarPromptPassword();
-    } catch (err) {
-      errorPasswordProyecto = `❌ ${err.message}`;
-    } finally {
-      cargandoVerificarPassword = false;
-    }
-  }
-
-  // ─── Admin: gestión centralizada de passwords por proyecto ────────
-  // Edición inline desde el subtab "🔑 Accesos" del engrane. Cada fila
-  // mantiene su propio borrador y mensaje.
-  let accesosBorrador = $state({}); // { [proyectoId]: 'password tipeado' }
-  let accesosVisible = $state({});  // { [proyectoId]: bool } — toggle mostrar/ocultar
-  let accesosMensaje = $state({});  // { [proyectoId]: '✅ Guardado' | '❌ Error...' }
-  let accesosCargando = $state({}); // { [proyectoId]: bool }
-
-  async function patchPasswordProyecto(p, payload) {
-    // payload es { password: 'x' } o { password: null } (quitar) — ya
-    // pre-formateado por el caller.
-    accesosCargando[p.id] = true;
-    accesosMensaje[p.id] = '';
-    try {
-      const res = await fetch(`${apiUrl.base}/proyectos/${encodeURIComponent(p.id)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', ...adminHeaders() },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        const txt = await res.text().catch(() => '');
-        throw new Error(`HTTP ${res.status}${txt ? ': ' + txt : ''}`);
-      }
-      accesosMensaje[p.id] = payload.password === null ? '✅ Password removido' : '✅ Password actualizado';
-      accesosBorrador[p.id] = '';
-      accesosVisible[p.id] = false;
-      // Refresca para actualizar `requires_password`.
-      await cargarProyectos();
-      const msgSnap = accesosMensaje[p.id];
-      setTimeout(() => {
-        if (accesosMensaje[p.id] === msgSnap) accesosMensaje[p.id] = '';
-      }, 2500);
-    } catch (err) {
-      accesosMensaje[p.id] = `❌ ${err.message}`;
-    } finally {
-      accesosCargando[p.id] = false;
-    }
-  }
-
-  function guardarPasswordAcceso(p) {
-    const valor = (accesosBorrador[p.id] ?? '').trim();
-    if (!valor) {
-      accesosMensaje[p.id] = '⚠️ Tipea un password antes de guardar';
-      setTimeout(() => { if (accesosMensaje[p.id]?.includes('Tipea')) accesosMensaje[p.id] = ''; }, 2500);
-      return;
-    }
-    patchPasswordProyecto(p, { password: valor });
-  }
-
-  function quitarPasswordAcceso(p) {
-    patchPasswordProyecto(p, { password: null });
-  }
-
   function resetProyectoForm() {
     proyectoEditandoId = null;
     proyectoFormSlug = '';
     proyectoFormNombre = '';
     proyectoFormDescripcion = '';
-    proyectoFormPassword = '';
-    proyectoFormPasswordVisible = false;
     mensajeProyecto = '';
   }
   function abrirFormCrearProyecto() {
@@ -1533,11 +1433,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     proyectoFormSlug = p.slug;
     proyectoFormNombre = p.nombre;
     proyectoFormDescripcion = p.descripcion ?? '';
-    // Al editar, NO precargamos el password (la API no lo devuelve por
-    // seguridad). Si el usuario deja vacío = mantener el password actual.
-    // Si tipea algo nuevo = reemplazar.
-    proyectoFormPassword = '';
-    proyectoFormPasswordVisible = false;
     mensajeProyecto = '';
     proyectoFormAbierto = true;
   }
@@ -1593,13 +1488,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       const url = editando
         ? `${apiUrl.base}/proyectos/${encodeURIComponent(proyectoEditandoId)}`
         : `${apiUrl.base}/proyectos`;
-      // Password: en CREATE, vacío = sin password; en EDIT, vacío = no tocar el
-      // password existente (no se manda en el body). Solo se manda si el usuario
-      // tipea algo.
-      const passwordInput = proyectoFormPassword.trim();
-      const body = editando
-        ? (passwordInput ? { nombre, descripcion, password: passwordInput } : { nombre, descripcion })
-        : { slug, nombre, descripcion, password: passwordInput || null };
+      const body = editando ? { nombre, descripcion } : { slug, nombre, descripcion };
 
       const res = await fetch(url, {
         method: editando ? 'PUT' : 'POST',
@@ -1627,7 +1516,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       if (recienCreado) proyectoActivoId = proyectoCreado.id;
       setTimeout(() => {
         cerrarFormProyecto();
-        if (recienCreado) irABasesDeConocimiento();
+        // Se crea en Superadmin, pero se trabaja en Construcción: allá se va.
+        if (recienCreado) {
+          activeTab = 'vectorizacion';
+          irABasesDeConocimiento();
+        }
       }, 800);
     } catch (err) {
       mensajeProyecto = `❌ ${err.message}`;
@@ -1638,7 +1531,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   function pedirConfirmacionBorrarProyecto(p) {
     proyectoABorrar = p;
+    errorBorrarProyecto = '';
     mostrarConfirmacionBorrarProyecto = true;
+  }
+
+  function cerrarConfirmacionBorrarProyecto() {
+    mostrarConfirmacionBorrarProyecto = false;
+    proyectoABorrar = null;
+    errorBorrarProyecto = '';
   }
 
   async function borrarProyectoConfirmado() {
@@ -1663,11 +1563,15 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       }
       // Si era el proyecto activo, limpiar la selección activa.
       if (proyectoActivoId === proyectoABorrar.id) proyectoActivoId = '';
+      // Si justo se estaba editando, ese formulario ya no tiene a qué apuntar.
+      if (proyectoEditandoId === proyectoABorrar.id) cerrarFormProyecto();
+      const nombre = proyectoABorrar.nombre;
       await cargarProyectos();
-      mostrarConfirmacionBorrarProyecto = false;
-      proyectoABorrar = null;
+      cerrarConfirmacionBorrarProyecto();
+      adminMensaje = `🗑️ Proyecto "${nombre}" borrado`;
+      setTimeout(() => { adminMensaje = ''; }, 3000);
     } catch (err) {
-      mensajeProyecto = `❌ ${err.message}`;
+      errorBorrarProyecto = err.message;
     } finally {
       cargandoBorrarProyecto = false;
     }
@@ -2401,7 +2305,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   async function cargarFuentes() {
-    if (!proyectoActivoId) { fuentes = []; return; }
+    // Las fuentes de datos son cosa de admins: a un cliente el API le responde 403.
+    if (!proyectoActivoId || !isAdmin) { fuentes = []; return; }
     cargandoFuentes = true;
     errorFuentes = '';
     try {
@@ -2847,11 +2752,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       if (contextlightAsistenteSlug && !asistentes.some((a) => a.slug === contextlightAsistenteSlug)) {
         contextlightAsistenteSlug = '';
       }
-      // Mismo caso para el tab Chatbot: si el asistente seleccionado ya no
-      // pertenece al proyecto activo, limpiarlo.
-      if (asistenteSeleccionadoId && !asistentes.some((a) => a.id === asistenteSeleccionadoId)) {
-        asistenteSeleccionadoId = '';
-      }
     } catch (err) {
       errorCargarAsistentes = `No se pudieron cargar los asistentes: ${err.message}`;
       asistentes = [];
@@ -3157,8 +3057,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   async function verificarSalud() {
-    // No interferir con peticiones de chat activas
-    if (isLoading) return;
     const estadoPrevio = estadoSalud;
     estadoSalud = 'checking';
     try {
@@ -3203,10 +3101,17 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   onMount(() => {
     verificarSalud(); // incluye reprogramarTimer() al terminar
-    procesarParamAdmin();
-    // Con un token ya guardado de una sesión anterior, saber de quién es (y si
-    // sigue vivo) sin esperar a que el usuario haga algo.
-    if (adminToken) cargarIdentidad();
+    try {
+      const aviso = sessionStorage.getItem(AVISO_LOGIN_KEY);
+      if (aviso) { loginError = aviso; sessionStorage.removeItem(AVISO_LOGIN_KEY); }
+    } catch { /* sin sessionStorage no hay aviso que mostrar */ }
+    // Primero la URL ?admin=<token> (si viene); después, con el token que haya
+    // quedado guardado, confirmar de quién es y si sigue vivo.
+    procesarParamAdmin().then(() => {
+      if (identidad) return;
+      if (adminToken) cargarIdentidad();
+      else sesionVerificando = false;
+    });
     return () => clearInterval(timerVerificacion);
   });
 
@@ -4169,244 +4074,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     }
   }
 
-  // Asistente seleccionado en el Chatbot tab. Persiste en localStorage.
-  let asistenteSeleccionadoId = $state(
-    typeof localStorage !== 'undefined' ? localStorage.getItem('mide_agente_id') || '' : ''
-  );
-  const asistenteSeleccionado = $derived(
-    asistentes.find((a) => a.id === asistenteSeleccionadoId) ?? null
-  );
-  const maxTurnos = $derived(asistenteSeleccionado?.historial_max ?? 5);
-
-  $effect(() => {
-    if (typeof localStorage === 'undefined') return;
-    if (asistenteSeleccionadoId) localStorage.setItem('mide_agente_id', asistenteSeleccionadoId);
-    else localStorage.removeItem('mide_agente_id');
-  });
-
-  // Construye el historial en formato role/content (últimos N turnos)
-  function buildHistorial() {
-    if (maxTurnos === 0) return [];
-    const historial = [];
-    const convo = messages.filter((m) => m.role === 'user' || m.role === 'bot');
-    let i = 0;
-    while (i < convo.length) {
-      if (convo[i]?.role === 'user' && convo[i + 1]?.role === 'bot') {
-        historial.push({ role: 'user', content: convo[i].text });
-        historial.push({ role: 'assistant', content: convo[i + 1].text });
-        i += 2;
-      } else {
-        i += 1;
-      }
-    }
-    // Cada turno = 2 entradas (user + assistant), conservar últimos N turnos
-    return historial.slice(-maxTurnos * 2);
-  }
-
-  function formatTime(date) {
-    return date.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
-  }
-
-  async function scrollToBottom() {
-    await tick();
-    if (chatContainer) {
-      chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' });
-    }
-  }
-
-  const MENSAJE_INICIAL_DEFAULT = '¡Hola! Soy el asistente. ¿En qué puedo ayudarte hoy?';
-
-  function buildMensajeInicial() {
-    return {
-      id: 1,
-      role: 'bot',
-      text: asistenteSeleccionado?.mensaje_inicial?.trim() || MENSAJE_INICIAL_DEFAULT,
-      time: formatTime(new Date()),
-    };
-  }
-
-  function parseLinks(text) {
-    if (!text) return [{ type: 'text', value: '' }];
-    const re = /(https?:\/\/[^\s]+)/g;
-    const parts = [];
-    let last = 0;
-    let m;
-    while ((m = re.exec(text)) !== null) {
-      if (m.index > last) parts.push({ type: 'text', value: text.slice(last, m.index) });
-      let url = m[0];
-      const trail = url.match(/[.,;!?)\]]+$/);
-      let trailingText = '';
-      if (trail) {
-        trailingText = trail[0];
-        url = url.slice(0, -trail[0].length);
-      }
-      parts.push({ type: 'link', value: url });
-      if (trailingText) parts.push({ type: 'text', value: trailingText });
-      last = m.index + m[0].length;
-    }
-    if (last < text.length) parts.push({ type: 'text', value: text.slice(last) });
-    return parts;
-  }
-
-  function resetChat() {
-    messages = [buildMensajeInicial()];
-    inputText = '';
-  }
-
-  // Cuando cambia el asistente seleccionado (incluido el caso en que deja de
-  // ser válido, p.ej. al cambiar de proyecto) y aún no hay conversación
-  // activa, sincroniza el saludo de bienvenida con el mensaje_inicial del
-  // asistente actual (o el genérico si ya no hay ninguno). Usamos untrack al
-  // leer messages para evitar un loop reactivo (el effect se gatilla solo
-  // por asistenteSeleccionado, no por su propia escritura).
-  $effect(() => {
-    asistenteSeleccionado; // dependencia explícita (no operación, solo tracking)
-    untrack(() => {
-      if (messages.length === 1 && messages[0]?.role === 'bot') {
-        messages = [buildMensajeInicial()];
-      }
-    });
-  });
-
-  async function sendMessage() {
-    const text = inputText.trim();
-    if (!text || isLoading) return;
-
-    if (!asistenteSeleccionado) {
-      messages = [
-        ...messages,
-        {
-          id: Date.now() + 1,
-          role: 'bot',
-          text: '⚠️ Selecciona un asistente primero (o créalo en Construcción → Asistente).',
-          time: formatTime(new Date()),
-          isError: true,
-        },
-      ];
-      return;
-    }
-
-    inputText = '';
-
-    messages = [
-      ...messages,
-      { id: Date.now(), role: 'user', text, time: formatTime(new Date()) },
-    ];
-    await scrollToBottom();
-
-    isLoading = true;
-
-    try {
-      const payload = {
-        agente_id: asistenteSeleccionado.id,
-        pregunta: text,
-        historial: buildHistorial(),
-      };
-
-      console.groupCollapsed(`%c📤 POST /chatbot`, 'color:#c8102e;font-weight:bold;font-size:12px');
-      console.log('URL enviada :', `${apiUrl.real}/chatbot`);
-      console.log('Host        :', location.hostname);
-      console.log('Payload     :', JSON.parse(JSON.stringify(payload)));
-      console.log('Body JSON   :', JSON.stringify(payload, null, 2));
-      console.groupEnd();
-
-      const t0 = performance.now();
-
-      const response = await fetch(`${apiUrl.base}/chatbot`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        const errorBody = await response.text().catch(() => '(sin body)');
-        console.error(`%c❌ HTTP ${response.status}`, 'color:#red;font-weight:bold');
-        console.error('Response body:', errorBody);
-        throw new Error(`HTTP ${response.status}: ${errorBody}`);
-      }
-
-      const data = await response.json();
-
-      const elapsed = Math.round(performance.now() - t0);
-
-      console.groupCollapsed(`%c📥 Respuesta /chatbot (${elapsed}ms)`, 'color:#16a34a;font-weight:bold;font-size:12px');
-      console.log('Status      :', response.status);
-      console.log('Tiempo      :', `${elapsed}ms`);
-      console.log('JSON        :', data);
-      console.log('Keys        :', Object.keys(data));
-      console.groupEnd();
-
-      // Extraer texto: recorre claves conocidas; si el valor es objeto, lo serializa.
-      // Para modelos GPT-5/GPT-5.5 que vienen vía Responses API, el `content` es
-      // un array de items {type, text, ...}. Aplanamos extrayendo solo los de tipo text.
-      let candidato =
-        data.Mensaje ?? data.respuesta ?? data.answer ?? data.response ?? data.message ?? data.content ?? data;
-      if (Array.isArray(candidato)) {
-        const textItems = candidato
-          .filter((it) => it && typeof it === 'object' && it.type === 'text' && typeof it.text === 'string')
-          .map((it) => it.text);
-        if (textItems.length > 0) candidato = textItems.join('\n').trim();
-      }
-      const botText = typeof candidato === 'string'
-        ? candidato
-        : JSON.stringify(candidato, null, 2);
-
-      registrarLog({
-        pregunta: text,
-        historial: payload.historial,
-        respuesta: botText,
-        ms: elapsed,
-        contexto: asistenteSeleccionado.contexto,
-        modelo: asistenteSeleccionado.modelo_llm,
-      });
-
-      messages = [
-        ...messages,
-        {
-          id: Date.now() + 1,
-          role: 'bot',
-          text: botText,
-          // `elapsed` se sigue calculando y aparece en consola/logs pero no
-          // se renderiza junto al timestamp. Para mostrarlo: cambia a
-          // `${formatTime(new Date())} · ${elapsed}ms`
-          time: formatTime(new Date()),
-        },
-      ];
-    } catch (err) {
-      console.error('%c❌ Error al llamar /chatbot', 'color:red;font-weight:bold', err);
-
-      registrarLog({
-        pregunta: text,
-        historial: payload?.historial ?? [],
-        respuesta: null,
-        ms: null,
-        error: err.message,
-        contexto: asistenteSeleccionado?.contexto,
-        modelo: asistenteSeleccionado?.modelo_llm,
-      });
-
-      messages = [
-        ...messages,
-        {
-          id: Date.now() + 1,
-          role: 'bot',
-          text: 'Lo siento, ocurrió un error al procesar tu mensaje. Por favor intenta de nuevo.',
-          time: formatTime(new Date()),
-          isError: true,
-        },
-      ];
-    } finally {
-      isLoading = false;
-      await scrollToBottom();
-    }
-  }
-
-  function handleKeydown(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
-  }
 </script>
 
 <div class="app" class:vectorizacion={activeTab === 'vectorizacion'} class:admin={activeTab === 'admin'}>
@@ -4414,96 +4081,36 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 {#if adminMensaje}
   <div class="admin-toast">{adminMensaje}</div>
 {/if}
-  {#if vistaUsuario}
-    <div class="vista-usuario-banner" role="status" aria-live="polite">
-      <span>👁 <strong>Vista usuario</strong> — eres admin pero los controles privilegiados están ocultos. Así ve la UI alguien sin tu token.</span>
-      <button type="button" class="vista-usuario-banner__btn" onclick={salirVistaUsuario}>
-        ← Volver a admin
-      </button>
-    </div>
-  {/if}
-  <!-- Header -->
-  <header class="header">
-    <div class="header-left">
-      <div class="avatar">
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+{#if !identidad}
+  <main class="login-pantalla">
+    <div class="login-tarjeta">
+      <div class="login-marca">
+        <div class="avatar" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM8 17.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5zM9.5 8c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5S9.5 9.38 9.5 8zm6.5 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="white"/>
         </svg>
-      </div>
-      <div class="header-info">
-        <h1 class="header-title">Constructor de Asistentes Buzzword</h1>
-        <span class="header-version">versión {APP_VERSION}</span>
-        <span class="header-status" onclick={verificarSalud} onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && verificarSalud()} title="Click para verificar conexión" role="button" tabindex="0">
-          <span class="status-dot" class:online={estadoSalud === 'online'} class:offline={estadoSalud === 'offline'} class:checking={estadoSalud === 'checking'}></span>
-          {#if estadoSalud === 'online'}
-            API en línea
-          {:else if estadoSalud === 'offline'}
-            Sin conexion
-          {:else}
-            Verificando...
+        </div>
+        <div>
+          <h1 class="login-titulo">Constructor de Asistentes Buzzword</h1>
+          {#if ambienteInfo}
+            <span class="ambiente-etiqueta ambiente-etiqueta--{ambienteClase}">
+              <span class="ambiente-etiqueta-punto" aria-hidden="true"></span>
+              <span class="ambiente-etiqueta-pre">Ambiente</span>
+              <span class="ambiente-etiqueta-nombre">{ambienteInfo.nombre}</span>
+            </span>
           {/if}
-        </span>
+        </div>
       </div>
-      <button
-        type="button"
-        class="ambiente-indicador ambiente-indicador--btn"
-        title={`Copiar host: ${location.hostname}`}
-        onclick={() => copiarUrl(location.hostname)}
-      >
-        <span class="ambiente-indicador-label">Host</span>
-        <span class="ambiente-indicador-valor">
-          {urlCopiada === location.hostname ? '✓ copiado' : location.hostname}
-        </span>
-      </button>
-    </div>
 
-    <div class="tabs-toggle">
-      <button
-        class="tab-btn"
-        class:active={activeTab === 'vectorizacion'}
-        onclick={() => { activeTab = 'vectorizacion'; verificarSalud(); }}
-        aria-pressed={activeTab === 'vectorizacion'}
-      ><Icon name="construccion" size={16} /> Construcción</button>
-      <button
-        class="tab-btn"
-        class:active={activeTab === 'chat'}
-        onclick={() => { activeTab = 'chat'; cargarAsistentes(); verificarSalud(); }}
-        aria-pressed={activeTab === 'chat'}
-      ><Icon name="chatbot" size={16} /> Chatbot</button>
-      {#if isAdmin}
-        <button
-          class="tab-btn admin-gear-btn"
-          class:active={activeTab === 'admin'}
-          onclick={() => { activeTab = 'admin'; cargarModelos(); cargarModelosEmbedding(); }}
-          aria-pressed={activeTab === 'admin'}
-          title="Administración"
-        ><Icon name="admin" size={18} label="Administración" /></button>
-        <button
-          class="tab-btn vista-usuario-toggle"
-          onclick={entrarVistaUsuario}
-          title="Vista usuario — previsualiza la UI como la verían los no-admin (no cierra sesión)"
-          aria-label="Activar vista usuario"
-        >👁</button>
-      {/if}
-      {#if !tieneTokenAdmin}
-        <button
-          class="tab-btn login-btn"
-          onclick={abrirLogin}
-          title="Entrar con tu cuenta de operador"
-        ><Icon name="admin" size={16} /> Entrar</button>
-      {/if}
-    </div>
-  </header>
-
-  <!-- Login de operador -->
-  {#if loginAbierto}
-    <div class="modal-overlay" onclick={() => { if (!loginCargando) cerrarLogin(); }} role="presentation">
-      <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 420px;" use:modal>
-        <h3><Icon name="api-keys" size={18} /> Entrar</h3>
-        <form
-          onsubmit={(e) => { e.preventDefault(); iniciarSesion(); }}
-          style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.75rem;"
-        >
+      {#if sesionVerificando}
+        <p class="login-estado" role="status">⟳ Verificando tu sesión…</p>
+      {:else if errorConexionSesion}
+        <p class="login-error" role="alert">❌ No se pudo conectar con el servidor para verificar tu sesión.</p>
+        <button type="button" class="modal-btn confirm login-enviar" onclick={() => { sesionVerificando = true; cargarIdentidad(); }}>
+          Reintentar
+        </button>
+      {:else}
+        <form class="login-form" onsubmit={(e) => { e.preventDefault(); iniciarSesion(); }}>
           <label class="login-label" for="login-email">Email</label>
           <!-- svelte-ignore a11y_autofocus -->
           <input
@@ -4532,139 +4139,127 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             <p class="login-error" role="alert">❌ {loginError}</p>
           {/if}
 
-          <div class="modal-buttons" style="margin-top: 0.25rem;">
-            <button type="button" class="modal-btn cancel" onclick={cerrarLogin} disabled={loginCargando}>
-              Cancelar
-            </button>
-            <button type="submit" class="modal-btn confirm" disabled={loginCargando}>
-              {loginCargando ? '⟳ Entrando...' : 'Entrar'}
-            </button>
-          </div>
+          <button type="submit" class="modal-btn confirm login-enviar" disabled={loginCargando}>
+            {loginCargando ? '⟳ Entrando...' : 'Entrar'}
+          </button>
         </form>
-
-        <p class="login-nota">
-          ¿No tienes cuenta todavía? Se sigue pudiendo entrar con el enlace de siempre,
-          <code>?admin=&lt;token&gt;</code>.
-        </p>
-      </div>
-    </div>
-  {/if}
-
-  <!-- Sub-nav de chatbot -->
-  {#if activeTab === 'chat'}
-  <nav class="chat-subnav">
-    <div class="context-select-wrap">
-      <label for="asistente-chat-select">Asistente</label>
-      {#if cargandoAsistentes}
-        <span class="ctx-loading">cargando...</span>
-      {:else if asistentes.length === 0}
-        <span class="ctx-loading">sin asistentes — créalo en Construcción</span>
-      {:else}
-        <select id="asistente-chat-select" bind:value={asistenteSeleccionadoId}>
-          <option value="">-- Selecciona Asistente --</option>
-          {#each asistentes as a (a.id)}
-            <option value={a.id}>{a.nombre}</option>
-          {/each}
-        </select>
+        <p class="login-nota">¿No tienes cuenta o olvidaste tu contraseña? Pídesela a quien administra el panel.</p>
       {/if}
     </div>
-    {#if asistenteSeleccionado}
-      <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; font-size: 0.78rem; color: var(--fg-soft);">
-        {#if asistenteSeleccionado.contexto}
-          <span title="Base de Conocimiento"><Icon name="base-conocimiento" size={14} /> {asistenteSeleccionado.contexto}</span>
-        {:else}
-          <span title="Sin base de conocimiento — asistente conversacional puro" style="opacity:0.7;"><Icon name="sin-rag" size={14} /> sin RAG</span>
-        {/if}
-        <span title="Modelo LLM"><Icon name="modelo" size={14} /> {asistenteSeleccionado.modelo_llm}</span>
-        <span title="Historial"><Icon name="historial" size={14} /> {asistenteSeleccionado.historial_max} turnos</span>
-      </div>
+  </main>
+{:else}
+  {#if vistaUsuario}
+    <div class="vista-usuario-banner" role="status" aria-live="polite">
+      <span>👁 <strong>Vista cliente</strong> — el panel se muestra como lo ve una cuenta de cliente: sin Configuración, sin Superadmin y sin fuentes de datos.</span>
+      <button type="button" class="vista-usuario-banner__btn" onclick={salirVistaUsuario}>
+        ← Volver a admin
+      </button>
+    </div>
+  {/if}
+  <!-- Header -->
+  <header class="header">
+    {#if ambienteInfo}
+      <!-- Franja de lado a lado con el color del ambiente; a rayas si no es producción. -->
+      <div class="ambiente-franja ambiente-etiqueta--{ambienteClase}" aria-hidden="true"></div>
     {/if}
-    <div class="context-select-wrap" style="margin-left: auto;">
-      <button
-        class="clear-chat-btn"
-        onclick={resetChat}
-        disabled={messages.length <= 1}
-        title="Limpiar conversación"
-        aria-label="Limpiar conversación"
-      >&#x1F5D1;</button>
-    </div>
-  </nav>
-  {/if}
-
-  <!-- Chat body -->
-  {#if activeTab === 'chat'}
-    <main class="chat-body" bind:this={chatContainer}>
-      <div class="messages">
-      {#each messages as msg (msg.id)}
-        <div class="message-row {msg.role}" class:error={msg.isError}>
-          {#if msg.role === 'bot'}
-            <div class="bot-avatar">
-              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM8 17.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5zM9.5 8c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5S9.5 9.38 9.5 8zm6.5 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="currentColor"/>
-              </svg>
-            </div>
-          {/if}
-          <div class="bubble-wrap">
-            <div class="bubble">{#each parseLinks(msg.text) as part}{#if part.type === 'link'}<a href={part.value} target="_blank" rel="noopener noreferrer" class="bubble-link">{part.value}</a>{:else}{part.value}{/if}{/each}</div>
-            <span class="time">{msg.time}</span>
-          </div>
-        </div>
-      {/each}
-
-      {#if isLoading}
-        <div class="message-row bot">
-          <div class="bot-avatar">
-            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM8 17.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5zM9.5 8c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5S9.5 9.38 9.5 8zm6.5 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="currentColor"/>
-            </svg>
-          </div>
-          <div class="bubble-wrap">
-            <div class="bubble typing">
-              <span></span><span></span><span></span>
-            </div>
-          </div>
-        </div>
-      {/if}
+    <div class="header-left">
+      <div class="avatar">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zM8 17.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5zM9.5 8c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5S9.5 9.38 9.5 8zm6.5 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="white"/>
+        </svg>
       </div>
-    </main>
-  {/if}
-
-  <!-- Input area -->
-  {#if activeTab === 'chat'}
-  <footer class="input-area">
-    <div class="input-container">
+      <div class="header-info">
+        <h1 class="header-title">Constructor de Asistentes Buzzword</h1>
+        <span class="header-version"><span class="header-version-larga">{'versión '}</span><span class="header-version-corta">v</span>{APP_VERSION}</span>
+        <span class="header-status" onclick={verificarSalud} onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && verificarSalud()} title="Click para verificar conexión" role="button" tabindex="0">
+          <span class="status-dot" class:online={estadoSalud === 'online'} class:offline={estadoSalud === 'offline'} class:checking={estadoSalud === 'checking'}></span>
+          <span class="header-status-texto">
+            {#if estadoSalud === 'online'}
+              API en línea
+            {:else if estadoSalud === 'offline'}
+              Sin conexion
+            {:else}
+              Verificando...
+            {/if}
+          </span>
+        </span>
+      </div>
+      {#if ambienteInfo}
+        <span
+          class="ambiente-etiqueta ambiente-etiqueta--{ambienteClase}"
+          title={`Ambiente: ${ambienteInfo.titulo}${RAMA_GIT && AMBIENTE !== 'local' ? ` (rama ${RAMA_GIT})` : ''}`}
+        >
+          <span class="ambiente-etiqueta-punto" aria-hidden="true"></span>
+          <span class="ambiente-etiqueta-pre">Ambiente</span>
+          <span class="ambiente-etiqueta-nombre">{ambienteInfo.nombre}</span>
+          <span class="ambiente-etiqueta-corta" aria-hidden="true">{ambienteInfo.etiqueta}</span>
+        </span>
+      {/if}
       <button
-        onclick={resetChat}
-        disabled={isLoading || messages.length === 0}
-        aria-label="Limpiar chat"
-        class="reset-btn"
-        title="Limpiar conversación"
+        type="button"
+        class="ambiente-indicador ambiente-indicador--btn"
+        title={`Copiar host: ${location.hostname}`}
+        onclick={() => copiarUrl(location.hostname)}
       >
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" fill="currentColor"/>
-        </svg>
-      </button>
-      <textarea
-        bind:this={chatTextareaEl}
-        bind:value={inputText}
-        onkeydown={handleKeydown}
-        placeholder={asistenteSeleccionado ? "Escribe tu mensaje..." : "Selecciona un asistente primero"}
-        rows="1"
-        disabled={isLoading || !asistenteSeleccionado}
-      ></textarea>
-      <button
-        onclick={sendMessage}
-        disabled={!inputText.trim() || isLoading || !asistenteSeleccionado}
-        aria-label="Enviar mensaje"
-      >
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" fill="currentColor"/>
-        </svg>
+        <span class="ambiente-indicador-label">Host</span>
+        <span class="ambiente-indicador-valor">
+          {urlCopiada === location.hostname ? '✓ copiado' : location.hostname}
+        </span>
       </button>
     </div>
-    <p class="disclaimer">Constructor de Asistentes</p>
-  </footer>
-  {/if}
+
+    <div class="tabs-toggle">
+      <button
+        class="tab-btn"
+        class:active={activeTab === 'vectorizacion'}
+        onclick={() => { activeTab = 'vectorizacion'; verificarSalud(); }}
+        aria-pressed={activeTab === 'vectorizacion'}
+      ><Icon name="construccion" size={16} /> Construcción</button>
+      {#if isAdmin}
+        <button
+          class="tab-btn admin-gear-btn"
+          class:active={activeTab === 'admin'}
+          onclick={() => { activeTab = 'admin'; cargarModelos(); cargarModelosEmbedding(); }}
+          aria-pressed={activeTab === 'admin'}
+          title="Configuración del panel: modelos, API keys, consumo y registros"
+        ><Icon name="admin" size={16} /> Configuración</button>
+        {#if esSuperadmin}
+          <button
+            class="tab-btn superadmin-btn"
+            class:active={activeTab === 'superadmin'}
+            onclick={abrirSuperadmin}
+            aria-pressed={activeTab === 'superadmin'}
+            title="Solo superadmin: cuentas que entran al panel y bitácora"
+          ><Icon name="superadmin" size={16} /> Superadmin</button>
+        {/if}
+        <button
+          class="tab-btn vista-usuario-toggle"
+          onclick={entrarVistaUsuario}
+          title="Vista cliente — previsualiza el panel como lo ve una cuenta de cliente (no cierra sesión)"
+          aria-label="Activar vista cliente"
+        >👁</button>
+      {/if}
+    </div>
+    {#if identidad?.tipo === 'operador'}
+        <span class="operador-chip header-cuenta" title="Entraste con tu cuenta ({identidad.operador?.email}) — rol {identidad.rol}">
+          <Icon name="cuenta" size={15} />
+          <span class="header-cuenta-nombre">{nombreOperador} · {identidad.rol}</span>
+        </span>
+      {:else}
+        <span class="operador-chip operador-chip--legacy header-cuenta" title="Entraste con el token compartido del .env: no identifica a nadie. Entra con tu cuenta para que quede registro de quién hace qué.">
+          ⚠ <span class="header-cuenta-nombre">token compartido</span>
+        </span>
+      {/if}
+      <button
+        onclick={cerrarSesionAdmin}
+        class="vectorizacion-action-btn header-salir-btn"
+        title="Cierra la sesión en el servidor y borra el token de este navegador"
+        aria-label="Cerrar sesión"
+        style="background: var(--danger-bg); border-color: var(--danger-border); color: var(--fg);"
+      >
+        <Icon name="cerrar-sesion" size={15} /> <span class="header-salir-texto">Cerrar sesión</span>
+      </button>
+  </header>
 
   <!-- Vectorización section -->
   {#if activeTab === 'vectorizacion'}
@@ -4723,6 +4318,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           >
             <Icon name="asistente" size={16} /> Asistentes
           </button>
+          {#if isAdmin}
           <button
             class="vectorizacion-subtab-btn"
             class:active={vectorizacionTab === 'fuentes'}
@@ -4732,6 +4328,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           >
             <Icon name="fuente-datos" size={16} /> Fuentes de datos
           </button>
+          {/if}
           <button
             class="vectorizacion-subtab-btn"
             class:active={vectorizacionTab === 'usuarios'}
@@ -4778,118 +4375,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               >Cambiar de proyecto</button>
             </div>
           {/if}
-          {#if isAdmin}
-          <div class="crear-contexto-wrap" class:abierto={proyectoFormAbierto}>
-            <button class="crear-contexto-toggle" onclick={() => proyectoFormAbierto ? cerrarFormProyecto() : abrirFormCrearProyecto()}>
-              <h3>
-                {#if proyectoEditandoId}
-                  <Icon name="editar" size={18} /> Editar Proyecto
-                {:else}
-                  <Icon name="crear" size={18} /> Crear Nuevo Proyecto
-                {/if}
-              </h3>
-            </button>
-            {#if proyectoFormAbierto}
-              <div class="crear-contexto-form" style="flex-direction: column; align-items: stretch; max-width: 720px;">
-                <div class="form-field">
-                  <label for="proyecto-slug">Slug {proyectoEditandoId ? '(no modificable)' : ''}</label>
-                  <input
-                    id="proyecto-slug"
-                    type="text"
-                    placeholder="ej: banfondesa"
-                    bind:value={proyectoFormSlug}
-                    disabled={cargandoGuardarProyecto || !!proyectoEditandoId}
-                    class="contexto-input"
-                  />
-                  <small style="font-size: 0.75rem; color: var(--fg-muted); line-height: 1.3; display: block; margin-top: 0.25rem;">
-                    Identidad estable cross-ambiente. Lowercase, dígitos y guiones, 2-64 chars.
-                  </small>
-                </div>
-                <div class="form-field">
-                  <label for="proyecto-nombre">Nombre</label>
-                  <input
-                    id="proyecto-nombre"
-                    type="text"
-                    placeholder="ej: Banfondesa"
-                    bind:value={proyectoFormNombre}
-                    disabled={cargandoGuardarProyecto}
-                    maxlength="80"
-                    class="contexto-input"
-                  />
-                </div>
-                <div class="form-field">
-                  <label for="proyecto-descripcion">Descripción (opcional)</label>
-                  <textarea
-                    id="proyecto-descripcion"
-                    bind:value={proyectoFormDescripcion}
-                    disabled={cargandoGuardarProyecto}
-                    rows="3"
-                    maxlength="500"
-                    class="contexto-input"
-                    style="font-family: inherit; resize: vertical;"
-                    placeholder="Para qué sirve este proyecto, qué agrupa..."
-                  ></textarea>
-                </div>
-                <div class="form-field">
-                  <label for="proyecto-password" style="display: inline-flex; align-items: center; gap: 0.35rem;">
-                    Password de activación (opcional)
-                    <span
-                      title="Si lo seteas, los usuarios no-admin necesitarán este password para activar el proyecto con ⚡. Déjalo vacío al editar para mantener el password actual sin cambios."
-                      style="display: inline-flex; cursor: help; opacity: 0.65;"
-                      aria-label="Info sobre password de activación"
-                    >
-                      <Icon name="info" size={14} />
-                    </span>
-                  </label>
-                  <div style="display: flex; gap: 0.4rem;">
-                    <input
-                      id="proyecto-password"
-                      type={proyectoFormPasswordVisible ? 'text' : 'password'}
-                      bind:value={proyectoFormPassword}
-                      disabled={cargandoGuardarProyecto}
-                      maxlength="80"
-                      class="contexto-input"
-                      style="flex: 1;"
-                      placeholder={proyectoEditandoId ? 'Vacío = mantener actual; escribe algo nuevo para cambiarlo' : 'Vacío = sin password (cualquiera activa)'}
-                    />
-                    <button
-                      type="button"
-                      onclick={() => proyectoFormPasswordVisible = !proyectoFormPasswordVisible}
-                      class="vectorizacion-action-btn"
-                      title={proyectoFormPasswordVisible ? 'Ocultar' : 'Mostrar'}
-                      style="flex-shrink: 0;"
-                    >
-                      {proyectoFormPasswordVisible ? '🙈' : '👁'}
-                    </button>
-                  </div>
-                </div>
-                <div style="display: flex; gap: 0.5rem;">
-                  <button
-                    onclick={guardarProyecto}
-                    disabled={cargandoGuardarProyecto}
-                    class="crear-contexto-btn"
-                  >
-                    {cargandoGuardarProyecto ? '⟳ Guardando...' : (proyectoEditandoId ? '✓ Actualizar' : '✓ Crear')}
-                  </button>
-                  <button
-                    onclick={cerrarFormProyecto}
-                    disabled={cargandoGuardarProyecto}
-                    class="crear-contexto-btn"
-                    style="background: var(--muted); color: var(--fg);"
-                  >
-                    Cancelar
-                  </button>
-                </div>
-                {#if mensajeProyecto}
-                  <p class="mensaje-contexto" class:success={mensajeProyecto.includes('✅')}>
-                    {mensajeProyecto}
-                  </p>
-                {/if}
-              </div>
-            {/if}
-          </div>
-          {/if}
-
           <div class="contextos-table-wrap">
             <div class="seccion-header">
               <h3><Icon name="proyecto" size={18} /> Proyectos Existentes</h3>
@@ -4903,7 +4388,15 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             {#if cargandoProyectos}
               <p style="color: var(--fg-muted); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando proyectos...</p>
             {:else if proyectos.length === 0}
-              <p style="color: var(--fg-muted); font-size: 0.9rem; padding: 1rem 0;">No hay proyectos creados todavía.</p>
+              <p style="color: var(--fg-muted); font-size: 0.9rem; padding: 1rem 0;">
+                {#if esCliente}
+                  Todavía no tienes proyectos asignados. Pídeselos a un superadmin.
+                {:else if verSuperadmin}
+                  No hay proyectos todavía. Se crean en <strong>Superadmin → Proyectos</strong>.
+                {:else}
+                  No hay proyectos todavía. Solo un superadmin puede crearlos.
+                {/if}
+              </p>
             {:else}
               <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.5rem;">
                 {#each proyectos as p (p.id)}
@@ -4914,14 +4407,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                       disabled={esActivo}
                       class="proyecto-activar-btn"
                       class:proyecto-activar-btn--activo={esActivo}
-                      class:proyecto-activar-btn--locked={p.requires_password && !isAdmin && !proyectoYaDesbloqueado(p.id) && !esActivo}
-                      title={esActivo ? 'Proyecto ya activo' : (p.requires_password && !isAdmin && !proyectoYaDesbloqueado(p.id) ? `Activar (requiere password) — ${p.nombre}` : `Activar ${p.nombre}`)}
+                      title={esActivo ? 'Proyecto ya activo' : `Activar ${p.nombre}`}
                       aria-label={esActivo ? `Proyecto ${p.nombre} ya activo` : `Activar proyecto ${p.nombre}`}
                     >
                       <Icon name="activar" size={20} />
-                      {#if p.requires_password && !isAdmin && !proyectoYaDesbloqueado(p.id) && !esActivo}
-                        <span class="proyecto-activar-lock" aria-hidden="true">🔒</span>
-                      {/if}
                     </button>
                     <div style="flex: 1; min-width: 0;">
                       <div style="display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap;">
@@ -4932,19 +4421,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                         {/if}
                         <strong style="color: var(--fg); font-size: 1rem;">{p.nombre}</strong>
                         <code style="background: var(--muted); padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; color: var(--fg-soft);">{p.slug}</code>
-                        {#if isAdmin}
-                          <!-- Pegado al nombre (y no en el grupo de la derecha) para que
-                               se lea como "editar los datos de ESTE proyecto". -->
-                          <button
-                            onclick={() => abrirFormEditarProyecto(p)}
-                            class="vectorizacion-action-btn"
-                            style="align-self: center; padding: 0.25rem 0.4rem;"
-                            title="Editar datos del proyecto {p.nombre}"
-                            aria-label="Editar proyecto {p.nombre}"
-                          >
-                            <Icon name="editar" size={14} label="Editar" />
-                          </button>
-                        {/if}
                       </div>
                       {#if p.descripcion}
                         <p style="color: var(--fg-soft); font-size: 0.85rem; margin: 0.5rem 0 0 0; line-height: 1.4;">
@@ -4960,35 +4436,12 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                       >
                         <Icon name="base-conocimiento" size={16} label="Bases de Conocimiento" />
                       </button>
-                      {#if isAdmin}
-                        <button onclick={() => pedirConfirmacionBorrarProyecto(p)} class="vectorizacion-action-btn" title="Borrar proyecto"><Icon name="borrar" size={16} label="Borrar" /></button>
-                      {/if}
                     </div>
                   </div>
                 {/each}
               </div>
             {/if}
           </div>
-
-          {#if mostrarConfirmacionBorrarProyecto && proyectoABorrar}
-            <div class="confirmacion-borrar">
-              <h3><Icon name="warning" size={18} /> Confirmar Borrado de Proyecto</h3>
-              <p style="color: var(--fg);">
-                ¿Estás seguro de borrar el proyecto <strong>{proyectoABorrar.nombre}</strong> (<code>{proyectoABorrar.slug}</code>)?
-              </p>
-              <p style="color: var(--fg-muted); font-size: 0.85rem;">
-                Cuando esté el backend, esto fallará si el proyecto tiene bases de conocimiento o asistentes asociados.
-              </p>
-              <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
-                <button onclick={borrarProyectoConfirmado} disabled={cargandoBorrarProyecto} class="crear-contexto-btn" style="background: var(--danger);">
-                  {cargandoBorrarProyecto ? '⟳ Borrando...' : '🗑️ Sí, borrar'}
-                </button>
-                <button onclick={() => { mostrarConfirmacionBorrarProyecto = false; proyectoABorrar = null; }} disabled={cargandoBorrarProyecto} class="crear-contexto-btn" style="background: var(--muted); color: var(--fg);">
-                  Cancelar
-                </button>
-              </div>
-            </div>
-          {/if}
         {/if}
 
         <!-- Asistente -->
@@ -5102,6 +4555,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     {/each}
                   </select>
                 </div>
+                {#if isAdmin}
                 <div class="form-field">
                   <label style="display: inline-flex; align-items: center; gap: 0.35rem;">
                     Fuentes de datos
@@ -5133,6 +4587,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                     </ul>
                   {/if}
                 </div>
+                {/if}
                 <div class="form-field">
                   <label for="asistente-modelo" style="display: inline-flex; align-items: center; gap: 0.35rem;">
                     Modelo LLM
@@ -5688,7 +5143,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             volver a usar la URL universal sin el query param.
           </p>
 
-          {#if isAdmin}
+          {#if identidad}
           <div class="crear-contexto-wrap" class:abierto={usuarioFormAbierto}>
             <button class="crear-contexto-toggle" onclick={() => usuarioFormAbierto ? cerrarFormUsuario() : abrirFormCrearUsuario()}>
               <h3>
@@ -5816,7 +5271,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
                         </div>
                       {/if}
                     </div>
-                    {#if isAdmin}
+                    {#if identidad}
                       <div style="display: flex; gap: 0.4rem; flex-shrink: 0; align-items: center;">
                         <button onclick={() => toggleActivoUsuario(u)} class="vectorizacion-action-btn" title={u.activo ? 'Desactivar' : 'Activar'}>
                           <Icon name={u.activo ? 'reset' : 'check'} size={16} label={u.activo ? 'Desactivar' : 'Activar'} />
@@ -5859,7 +5314,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
         <!-- Contextos -->
         <!-- Fuentes de datos externas -->
-        {#if vectorizacionTab === 'fuentes'}
+        {#if vectorizacionTab === 'fuentes' && isAdmin}
           {#if proyectoActivo}
             <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.85rem; background: var(--muted); border-radius: 8px; margin-bottom: 1rem; font-size: 0.85rem; color: var(--fg);">
               <Icon name="proyecto" size={14} />
@@ -6987,6 +6442,33 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     </div>
   {/if}
 
+  {#if mostrarConfirmacionBorrarProyecto && proyectoABorrar}
+    <div class="modal-overlay" onclick={() => { if (!cargandoBorrarProyecto) cerrarConfirmacionBorrarProyecto(); }} role="presentation">
+      <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 480px;" use:modal>
+        <h3>Borrar proyecto</h3>
+        <p>
+          Vas a borrar el proyecto <strong>{proyectoABorrar.nombre}</strong> (<code>{proyectoABorrar.slug}</code>).
+        </p>
+        <p style="font-size: 0.8rem; color: var(--fg-soft); margin-top: 0.5rem;">
+          Solo se puede si ya no tiene asistentes ni bases de conocimiento. Los registros históricos no se tocan.
+        </p>
+        {#if errorBorrarProyecto}
+          <p class="login-error" role="alert">❌ {errorBorrarProyecto}</p>
+        {/if}
+        <div class="modal-buttons">
+          <button onclick={cerrarConfirmacionBorrarProyecto} disabled={cargandoBorrarProyecto} class="modal-btn cancel">
+            {errorBorrarProyecto ? 'Cerrar' : 'Cancelar'}
+          </button>
+          {#if !errorBorrarProyecto}
+            <button onclick={borrarProyectoConfirmado} disabled={cargandoBorrarProyecto} class="modal-btn danger">
+              {cargandoBorrarProyecto ? '⟳ Borrando...' : 'Sí, borrar'}
+            </button>
+          {/if}
+        </div>
+      </div>
+    </div>
+  {/if}
+
   <!-- Modal: restablecer la contraseña de un operador -->
   {#if operadorParaPassword}
     <div class="modal-overlay" onclick={() => { if (!guardandoPasswordOperador) operadorParaPassword = null; }} role="presentation">
@@ -7022,56 +6504,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             </button>
             <button type="submit" disabled={guardandoPasswordOperador} class="modal-btn confirm">
               {guardandoPasswordOperador ? '⟳ Guardando...' : 'Restablecer'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  {/if}
-
-  <!-- Modal: pedir password para activar proyecto -->
-  {#if proyectoParaDesbloquear}
-    <div class="modal-overlay" onclick={cerrarPromptPassword} role="presentation">
-      <div class="modal-content" onclick={(e) => e.stopPropagation()} role="dialog" tabindex="-1" style="max-width: 440px;" use:modal>
-        <h3><Icon name="accesos" size={16} /> Activar proyecto</h3>
-        <p>
-          Para activar <strong>{proyectoParaDesbloquear.nombre}</strong> (<code>{proyectoParaDesbloquear.slug}</code>) necesitas su password.
-        </p>
-        <form
-          onsubmit={(e) => { e.preventDefault(); verificarPasswordProyecto(); }}
-          style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.75rem;"
-        >
-          <input
-            type="password"
-            bind:value={passwordIntento}
-            disabled={cargandoVerificarPassword}
-            placeholder="Password del proyecto"
-            class="contexto-input"
-            autocomplete="off"
-            autofocus
-          />
-          {#if errorPasswordProyecto}
-            <p style="font-size: 0.85rem; color: var(--danger-fg); margin: 0;">{errorPasswordProyecto}</p>
-          {/if}
-          <p style="font-size: 0.75rem; color: var(--fg-muted); margin: 0;">
-            Si lo tipeas bien, queda desbloqueado en este navegador hasta que cierres la pestaña.
-          </p>
-          <div class="modal-buttons" style="margin-top: 0.25rem;">
-            <button
-              type="button"
-              onclick={cerrarPromptPassword}
-              disabled={cargandoVerificarPassword}
-              class="modal-btn cancel"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={cargandoVerificarPassword}
-              class="modal-btn danger"
-              style="background: var(--ok-solid); border-color: rgba(34,197,94,0.85);"
-            >
-              {cargandoVerificarPassword ? '⟳ Verificando...' : '⚡ Activar'}
             </button>
           </div>
         </form>
@@ -7307,31 +6739,12 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     </div>
   {/if}
 
-  <!-- Administración section -->
+  <!-- Configuración section (el engrane): lo que comparten admin y superadmin -->
   {#if activeTab === 'admin' && isAdmin}
     <main class="vectorizacion-body">
       <div class="vectorizacion-container">
         <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
-          <h2 style="color: var(--fg); margin: 0;"><Icon name="cuenta" size={20} /> Administración</h2>
-          <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
-            {#if identidad?.tipo === 'operador'}
-              <span class="operador-chip" title="Entraste con tu cuenta — rol {identidad.rol}">
-                <Icon name="cuenta" size={15} /> {nombreOperador} · {identidad.rol}
-              </span>
-            {:else if identidad?.tipo === 'legacy'}
-              <span class="operador-chip operador-chip--legacy" title="Entraste con el token compartido del .env: no identifica a nadie. Entra con tu cuenta para que quede registro de quién hace qué.">
-                ⚠ token compartido
-              </span>
-            {/if}
-            <button
-              onclick={cerrarSesionAdmin}
-              class="vectorizacion-action-btn"
-              title="Cierra la sesión en el servidor y borra el token de este navegador"
-              style="background: var(--danger-bg); border-color: var(--danger-border); color: var(--fg);"
-            >
-              <Icon name="cerrar-sesion" size={15} /> Cerrar sesión
-            </button>
-          </div>
+          <h2 style="color: var(--fg); margin: 0;"><Icon name="admin" size={20} /> Configuración</h2>
         </div>
 
         <!-- Sub-tab bar -->
@@ -7350,22 +6763,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           >
             <Icon name="api-keys" size={15} /> API keys
           </button>
-          {#if esSuperadmin}
-            <button
-              class="vectorizacion-subtab-btn"
-              class:active={adminTab === 'operadores'}
-              onclick={() => { adminTab = 'operadores'; cargarOperadores(); }}
-            >
-              <Icon name="operadores" size={15} /> Operadores
-            </button>
-            <button
-              class="vectorizacion-subtab-btn"
-              class:active={adminTab === 'auditoria'}
-              onclick={() => { adminTab = 'auditoria'; cargarAuditoria(); }}
-            >
-              <Icon name="bitacora" size={15} /> Bitácora
-            </button>
-          {/if}
           <button
             class="vectorizacion-subtab-btn"
             class:active={adminTab === 'alias'}
@@ -7386,13 +6783,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
             onclick={() => { adminTab = 'consumo'; if (!consumoData) cargarConsumo(); if (proyectos.length === 0) cargarProyectos(); if (usuariosGlobal.length === 0) cargarUsuariosGlobal(); if (asistentesGlobal.length === 0) cargarAsistentesGlobal(); }}
           >
             <Icon name="consumo" size={15} /> Consumo
-          </button>
-          <button
-            class="vectorizacion-subtab-btn"
-            class:active={adminTab === 'accesos'}
-            onclick={() => { adminTab = 'accesos'; cargarProyectos(); }}
-          >
-            <Icon name="accesos" size={15} /> Accesos
           </button>
           <button
             class="vectorizacion-subtab-btn"
@@ -7615,301 +7005,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
               Cambiar el modo borra las pausas, y el backend las olvida al reiniciarse. En Registros y Consumo se ve qué key respondió cada consulta.
             </p>
           {/if}
-        </div>
-        {/if}
-
-        <!-- Operadores -->
-        {#if adminTab === 'operadores' && esSuperadmin}
-        <div class="modelos-wrap">
-          <div class="seccion-header">
-            <h3><Icon name="operadores" size={16} /> Operadores</h3>
-            <div style="display: flex; gap: 0.4rem;">
-              <button onclick={abrirCrearOperador} class="vectorizacion-action-btn">➕ Nuevo operador</button>
-              <button onclick={cargarOperadores} class="vectorizacion-action-btn" disabled={cargandoOperadores}>↻ Recargar</button>
-            </div>
-          </div>
-
-          <p style="color: var(--fg-soft); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
-            Quienes entran a este panel con su propia cuenta. No confundir con el subtab <strong>Usuarios</strong> de cada proyecto:
-            esos son los usuarios finales de los widgets, que no tienen login y solo sirven para atribuir consultas.
-            El <strong>email es la credencial</strong> y no se puede cambiar; si alguien necesita otro, se crea una cuenta nueva.
-          </p>
-
-          {#if mensajeOperadores}
-            <p style="margin: 0 0 1rem; font-size: 0.88rem; color: {mensajeOperadores.startsWith('❌') ? 'var(--danger-fg)' : 'var(--ok)'};">
-              {mensajeOperadores}
-            </p>
-          {/if}
-
-          {#if operadorFormAbierto}
-            <div class="crear-contexto-form" style="flex-direction: column; align-items: stretch; max-width: 560px; margin-bottom: 1.25rem;">
-              <h4 style="margin: 0 0 0.25rem 0; color: var(--fg);">
-                {operadorEditandoId ? 'Editar operador' : 'Nuevo operador'}
-              </h4>
-              <div class="form-field">
-                <label for="op-email">Email</label>
-                <input
-                  id="op-email"
-                  type="email"
-                  class="contexto-input"
-                  bind:value={operadorFormEmail}
-                  disabled={guardandoOperador || !!operadorEditandoId}
-                  placeholder="persona@buzzword.mx"
-                  autocomplete="off"
-                />
-                {#if operadorEditandoId}
-                  <small style="font-size: 0.75rem; color: var(--fg-muted); display: block; margin-top: 0.25rem;">
-                    El email no se puede cambiar: es la credencial con la que entra.
-                  </small>
-                {/if}
-              </div>
-              <div class="form-field">
-                <label for="op-nombre">Nombre</label>
-                <input
-                  id="op-nombre"
-                  type="text"
-                  class="contexto-input"
-                  bind:value={operadorFormNombre}
-                  disabled={guardandoOperador}
-                  maxlength="120"
-                  placeholder="Nombre y apellido"
-                />
-              </div>
-              {#if !operadorEditandoId}
-                <div class="form-field">
-                  <label for="op-password">Contraseña inicial</label>
-                  <input
-                    id="op-password"
-                    type="password"
-                    class="contexto-input"
-                    bind:value={operadorFormPassword}
-                    disabled={guardandoOperador}
-                    autocomplete="new-password"
-                    placeholder="Mínimo 8 caracteres"
-                  />
-                  <small style="font-size: 0.75rem; color: var(--fg-muted); display: block; margin-top: 0.25rem;">
-                    Se la pasas tú por un canal seguro. Quien entre puede cambiarla después.
-                  </small>
-                </div>
-              {/if}
-              <div class="form-field">
-                <label for="op-rol">Rol</label>
-                <select id="op-rol" class="contexto-select" bind:value={operadorFormRol} disabled={guardandoOperador}>
-                  {#each rolesAsignables as r (r)}
-                    <option value={r}>{r}</option>
-                  {/each}
-                </select>
-                <small style="font-size: 0.75rem; color: var(--fg-muted); display: block; margin-top: 0.25rem;">
-                  <strong>admin</strong> opera el panel. <strong>superadmin</strong> además administra operadores.
-                </small>
-              </div>
-
-              {#if errorFormOperador}
-                <p class="mensaje-contexto">❌ {errorFormOperador}</p>
-              {/if}
-
-              <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
-                <button onclick={cerrarFormOperador} disabled={guardandoOperador} class="crear-contexto-btn" style="background: var(--muted); color: var(--fg);">
-                  Cancelar
-                </button>
-                <button onclick={guardarOperador} disabled={guardandoOperador} class="crear-contexto-btn">
-                  {guardandoOperador ? '⟳ Guardando...' : '✓ Guardar'}
-                </button>
-              </div>
-            </div>
-          {/if}
-
-          {#if cargandoOperadores && operadores.length === 0}
-            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando operadores...</p>
-          {:else if errorOperadores}
-            <p style="color: var(--danger-fg); font-size: 0.9rem; padding: 1rem; background: var(--danger-bg); border: 1px solid var(--danger-border); border-radius: 8px; line-height: 1.5;">
-              ❌ {errorOperadores}
-            </p>
-          {:else if operadores.length === 0}
-            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">No hay operadores todavía.</p>
-          {:else}
-            <table class="consumo-tabla">
-              <thead>
-                <tr>
-                  <th>Nombre</th>
-                  <th>Email</th>
-                  <th>Rol</th>
-                  <th>Estado</th>
-                  <th style="text-align: right;">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {#each operadores as o (o.id)}
-                  {@const soyYo = identidad?.operador?.id === o.id}
-                  <tr style="opacity: {o.activo ? 1 : 0.55};">
-                    <td>
-                      <strong>{o.nombre}</strong>
-                      {#if soyYo}<span class="operador-yo">tú</span>{/if}
-                    </td>
-                    <td><code style="font-size: 0.78rem;">{o.email}</code></td>
-                    <td>
-                      <span class="rol-badge" class:rol-badge--super={o.rol === 'superadmin'}>{o.rol}</span>
-                    </td>
-                    <td>
-                      {#if o.activo}
-                        <span style="color: var(--ok);">● activo</span>
-                      {:else}
-                        <span style="color: var(--fg-muted);">○ inactivo</span>
-                      {/if}
-                    </td>
-                    <td style="text-align: right; white-space: nowrap;">
-                      <button class="op-btn" title="Editar nombre y rol" onclick={() => abrirEditarOperador(o)}><Icon name="editar" size={15} /></button>
-                      <button class="op-btn" title="Restablecer su contraseña" onclick={() => abrirPasswordOperador(o)}><Icon name="accesos" size={15} /></button>
-                      {#if !soyYo}
-                        <button
-                          class="op-btn"
-                          title={o.activo ? 'Desactivar (cierra sus sesiones)' : 'Reactivar'}
-                          onclick={() => alternarActivoOperador(o)}
-                        ><Icon name={o.activo ? 'desactivar' : 'reactivar'} size={15} /></button>
-                        <button class="op-btn op-btn--danger" title="Borrar" onclick={() => { operadorABorrar = o; }}><Icon name="borrar" size={15} /></button>
-                      {/if}
-                    </td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-
-            <p style="color: var(--fg-muted); font-size: 0.75rem; margin-top: 1rem; line-height: 1.45;">
-              💡 Sobre tu propia fila solo puedes editar nombre y contraseña: desactivarte o borrarte te dejaría fuera.
-              Tampoco se puede quitar al último superadmin activo.
-              Desactivar o restablecer una contraseña cierra las sesiones de esa persona al instante.
-            </p>
-          {/if}
-        </div>
-        {/if}
-
-        <!-- Bitácora de administración -->
-        {#if adminTab === 'auditoria' && esSuperadmin}
-        <div class="modelos-wrap">
-          <div class="seccion-header">
-            <h3><Icon name="bitacora" size={16} /> Bitácora</h3>
-            <button onclick={cargarAuditoria} class="vectorizacion-action-btn" disabled={cargandoAuditoria}>↻ Recargar</button>
-          </div>
-
-          <p style="color: var(--fg-soft); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
-            Quién hizo qué y cuándo. Se escribe sola con cada cambio hecho desde el panel y <strong>no se puede editar ni borrar</strong>.
-            Esto no son las consultas al chatbot — esas viven en <strong>Registros</strong>.
-          </p>
-
-          <!-- Filtros -->
-          <div style="display: flex; gap: 0.75rem; align-items: end; margin-bottom: 1.25rem; flex-wrap: wrap;">
-            <div class="lightbot-field" style="margin: 0;">
-              <label for="audit-desde" style="display: block;">Desde</label>
-              <input id="audit-desde" type="date" bind:value={auditDesde} onchange={filtrarAuditoria} disabled={cargandoAuditoria} style="font-size: 1rem; padding: 0.6rem; min-width: 150px;" />
-            </div>
-            <div class="lightbot-field" style="margin: 0;">
-              <label for="audit-hasta" style="display: block;">Hasta</label>
-              <input id="audit-hasta" type="date" bind:value={auditHasta} onchange={filtrarAuditoria} disabled={cargandoAuditoria} style="font-size: 1rem; padding: 0.6rem; min-width: 150px;" />
-            </div>
-            <div class="lightbot-field" style="margin: 0;">
-              <label for="audit-operador" style="display: block;">Quién</label>
-              <select id="audit-operador" class="contexto-select" bind:value={auditOperador} onchange={filtrarAuditoria} disabled={cargandoAuditoria} style="padding: 0.55rem 0.75rem; min-width: 200px;">
-                <option value="">(todos)</option>
-                {#each auditOperadores as o (o)}
-                  <option value={o}>{o}</option>
-                {/each}
-              </select>
-            </div>
-            <div class="lightbot-field" style="margin: 0;">
-              <label for="audit-entidad" style="display: block;">Sobre qué</label>
-              <select id="audit-entidad" class="contexto-select" bind:value={auditEntidad} onchange={filtrarAuditoria} disabled={cargandoAuditoria} style="padding: 0.55rem 0.75rem; min-width: 150px;">
-                <option value="">(todo)</option>
-                {#each auditEntidades as e (e)}
-                  <option value={e}>{e}</option>
-                {/each}
-              </select>
-            </div>
-            <div class="lightbot-field" style="margin: 0;">
-              <label for="audit-accion" style="display: block;">Acción</label>
-              <select id="audit-accion" class="contexto-select" bind:value={auditAccion} onchange={filtrarAuditoria} disabled={cargandoAuditoria} style="padding: 0.55rem 0.75rem; min-width: 150px;">
-                <option value="">(todas)</option>
-                {#each auditAcciones as a (a)}
-                  <option value={a}>{a}</option>
-                {/each}
-              </select>
-            </div>
-            <button onclick={limpiarFiltrosAuditoria} class="vectorizacion-action-btn" disabled={cargandoAuditoria}>Limpiar</button>
-          </div>
-
-          {#if cargandoAuditoria && !auditoria}
-            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando bitácora...</p>
-          {:else if errorAuditoria}
-            <p style="color: var(--danger-fg); font-size: 0.9rem; padding: 1rem; background: var(--danger-bg); border: 1px solid var(--danger-border); border-radius: 8px; line-height: 1.5;">
-              ❌ {errorAuditoria}
-            </p>
-          {:else if !auditoria || auditoria.items.length === 0}
-            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">
-              Sin movimientos para estos filtros.
-            </p>
-          {:else}
-            <table class="consumo-tabla">
-              <thead>
-                <tr>
-                  <th>Cuándo</th>
-                  <th>Quién</th>
-                  <th>Qué hizo</th>
-                  <th>Sobre</th>
-                </tr>
-              </thead>
-              <tbody>
-                {#each auditoria.items as a (a.id)}
-                  {@const det = detalleLegible(a.detalle)}
-                  <tr>
-                    <td><code style="font-size: 0.78rem;">{formatTimestamp(a.fecha)}</code></td>
-                    <td>
-                      {#if a.credencial === 'legacy'}
-                        <span class="registro-badge-respaldo" title="Se usó el ADMIN_PASSWORD compartido: el servidor no puede saber quién fue">token compartido</span>
-                      {:else}
-                        {a.operador_nombre || a.operador_email || '—'}
-                        {#if a.operador_nombre}
-                          <div style="font-size: 0.72rem; color: var(--fg-muted);">{a.operador_email}</div>
-                        {/if}
-                      {/if}
-                    </td>
-                    <td>
-                      <span class="audit-icono"><Icon name={ICONO_ACCION[a.accion] ?? 'info'} size={14} /></span> {a.resumen}
-                      {#if det}
-                        <div style="font-size: 0.72rem; color: var(--fg-muted);">{det}</div>
-                      {/if}
-                    </td>
-                    <td><span class="rol-badge">{a.entidad}</span></td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-
-            <!-- Paginación -->
-            {@const hasta = Math.min(auditOffset + auditoria.items.length, auditoria.total)}
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; flex-wrap: wrap; gap: 0.75rem;">
-              <span style="color: var(--fg-soft); font-size: 0.85rem;">
-                Mostrando {formatNumero(auditOffset + 1)}–{formatNumero(hasta)} de {formatNumero(auditoria.total)}
-              </span>
-              <div style="display: flex; gap: 0.4rem;">
-                <button
-                  onclick={() => { auditOffset = Math.max(0, auditOffset - AUDIT_LIMIT); cargarAuditoria(); }}
-                  class="vectorizacion-action-btn"
-                  disabled={cargandoAuditoria || auditOffset === 0}
-                >← Anterior</button>
-                <button
-                  onclick={() => { auditOffset += AUDIT_LIMIT; cargarAuditoria(); }}
-                  class="vectorizacion-action-btn"
-                  disabled={cargandoAuditoria || hasta >= auditoria.total}
-                >Siguiente →</button>
-              </div>
-            </div>
-          {/if}
-
-          <p style="color: var(--fg-muted); font-size: 0.75rem; margin-top: 1rem; line-height: 1.45;">
-            💡 Solo aparece lo que pasa por un endpoint con credencial. Crear o borrar <strong>asistentes</strong> y
-            <strong>bases de conocimiento</strong> hoy es público, así que esas acciones no se registran — no porque nadie
-            las haga, sino porque el servidor no sabe quién fue. Las contraseñas nunca se guardan aquí: en una edición solo
-            se anota <em>qué campos</em> cambiaron.
-          </p>
         </div>
         {/if}
 
@@ -8257,117 +7352,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         </div>
         {/if}
 
-        <!-- Accesos -->
-        {#if adminTab === 'accesos'}
-        <div class="modelos-wrap">
-          <div class="seccion-header">
-            <h3><Icon name="accesos" size={16} /> Accesos</h3>
-            <button onclick={cargarProyectos} class="vectorizacion-action-btn" disabled={cargandoProyectos}>
-              ↻ Recargar
-            </button>
-          </div>
-
-          <p style="color: var(--fg-soft); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
-            Administra los passwords de activación de cada proyecto. Tú (admin) puedes activar cualquier proyecto sin password; los demás usuarios deberán tipear el password cuando hagan clic en el ⚡ del proyecto.
-          </p>
-
-          {#if cargandoProyectos}
-            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando proyectos...</p>
-          {:else if proyectos.length === 0}
-            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">No hay proyectos creados todavía.</p>
-          {:else}
-            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-              {#each proyectos as p (p.id)}
-                {@const tienePass = p.requires_password === true}
-                {@const visible = !!accesosVisible[p.id]}
-                {@const cargando = !!accesosCargando[p.id]}
-                {@const mensaje = accesosMensaje[p.id] || ''}
-                <div style="background: var(--muted); border-radius: 8px; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem;">
-                  <!-- Encabezado de la fila -->
-                  <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
-                    <strong style="color: var(--fg); font-size: 1rem;">{p.nombre}</strong>
-                    <code style="background: var(--muted); padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; color: var(--fg-soft);">{p.slug}</code>
-                    {#if tienePass}
-                      <span style="display: inline-flex; align-items: center; gap: 0.3rem; color: var(--ok); font-size: 0.8rem; font-weight: 600;">
-                        🔒 Con password
-                      </span>
-                    {:else}
-                      <span style="display: inline-flex; align-items: center; gap: 0.3rem; color: var(--fg-muted); font-size: 0.8rem;">
-                        🔓 Sin password (abierto)
-                      </span>
-                    {/if}
-                  </div>
-
-                  <!-- Zona de acción -->
-                  {#if !visible}
-                    <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-                      <button
-                        onclick={() => { accesosVisible[p.id] = true; if (accesosBorrador[p.id] == null) accesosBorrador[p.id] = ''; accesosMensaje[p.id] = ''; }}
-                        class="vectorizacion-action-btn"
-                        disabled={cargando}
-                      >
-                        {tienePass ? '✏️ Cambiar password' : '➕ Agregar password'}
-                      </button>
-                      {#if tienePass}
-                        <button
-                          onclick={() => quitarPasswordAcceso(p)}
-                          class="vectorizacion-action-btn"
-                          disabled={cargando}
-                          style="background: var(--danger); border-color: rgba(200,40,40,0.7);"
-                          title="Eliminar el password (el proyecto quedará abierto a cualquier usuario)"
-                        >
-                          🗑️ Quitar password
-                        </button>
-                      {/if}
-                    </div>
-                  {:else}
-                    <form
-                      onsubmit={(e) => { e.preventDefault(); guardarPasswordAcceso(p); }}
-                      style="display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center;"
-                    >
-                      <input
-                        type="text"
-                        bind:value={accesosBorrador[p.id]}
-                        placeholder={tienePass ? 'Nuevo password (reemplaza el actual)' : 'Password de activación'}
-                        disabled={cargando}
-                        style="flex: 1; min-width: 220px; padding: 0.55rem 0.75rem; font-size: 0.95rem; border-radius: 6px; border: 1px solid var(--border); background: var(--card); color: var(--fg);"
-                      />
-                      <button
-                        type="submit"
-                        class="crear-contexto-btn"
-                        disabled={cargando}
-                        style="padding: 0.55rem 0.95rem;"
-                      >
-                        {cargando ? '⟳ Guardando...' : '💾 Guardar'}
-                      </button>
-                      <button
-                        type="button"
-                        onclick={() => { accesosVisible[p.id] = false; accesosBorrador[p.id] = ''; accesosMensaje[p.id] = ''; }}
-                        class="vectorizacion-action-btn"
-                        disabled={cargando}
-                      >
-                        Cancelar
-                      </button>
-                    </form>
-                  {/if}
-
-                  <!-- Mensaje de feedback -->
-                  {#if mensaje}
-                    <p style="margin: 0; font-size: 0.85rem; color: {mensaje.startsWith('❌') ? 'var(--danger-fg)' : (mensaje.startsWith('⚠️') ? 'var(--warn)' : 'var(--ok)')};">
-                      {mensaje}
-                    </p>
-                  {/if}
-                </div>
-              {/each}
-            </div>
-
-            <p style="color: var(--fg-muted); font-size: 0.75rem; margin-top: 1rem; line-height: 1.4;">
-              💡 El password se almacena en el servidor por proyecto. Quitar el password deja el proyecto abierto — cualquier usuario podrá activarlo con ⚡ sin prompt.
-            </p>
-          {/if}
-        </div>
-        {/if}
-
         <!-- Registros -->
         {#if adminTab === 'registros'}
         <div class="modelos-wrap">
@@ -8386,7 +7370,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
           </div>
 
           <p style="color: var(--fg-soft); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
-            Bitácora de interacciones con los asistentes. El proyecto identifica quién opera el asistente (quien tiene su password); la columna Usuario, cuando existe, identifica a la persona final que escribió — ver subtab Usuarios de cada proyecto.
+            Bitácora de interacciones con los asistentes. El proyecto identifica quién opera el asistente; la columna Usuario, cuando existe, identifica a la persona final que escribió — ver subtab Usuarios de cada proyecto.
             Los hitos (🏁) marcan cuándo entró en vigor un cambio que buscaba ahorrar tiempo o tokens — solo se ven cuando la tabla está ordenada por Timestamp.
             La etiqueta <span class="registro-badge-respaldo">respaldo</span> junto a los tokens marca las consultas que respondió la key de respaldo de OpenAI (ver subtab API keys).
           </p>
@@ -8948,6 +7932,504 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       </div>
     </main>
   {/if}
+
+  <!-- Superadmin section: lo que SOLO puede hacer un superadmin -->
+  {#if activeTab === 'superadmin' && verSuperadmin}
+    <main class="vectorizacion-body">
+      <div class="vectorizacion-container">
+        <div class="superadmin-encabezado">
+          <h2><Icon name="superadmin" size={20} /> Superadmin</h2>
+          <p>
+            Solo la ven las cuentas con rol <strong>superadmin</strong>. Aquí está lo único que un <strong>admin</strong> no puede hacer:
+            administrar los proyectos, decidir quién entra al panel y revisar la bitácora. Lo demás está en <strong>Configuración</strong>.
+          </p>
+        </div>
+
+        <!-- Sub-tab bar -->
+        <div class="vectorizacion-subtabs">
+          <button
+            class="vectorizacion-subtab-btn"
+            class:active={superTab === 'operadores'}
+            onclick={() => { superTab = 'operadores'; cargarOperadores(); }}
+          >
+            <Icon name="operadores" size={15} /> Operadores
+          </button>
+          <button
+            class="vectorizacion-subtab-btn"
+            class:active={superTab === 'proyectos'}
+            onclick={() => { superTab = 'proyectos'; cargarProyectos(); }}
+          >
+            <Icon name="proyecto" size={15} /> Proyectos
+          </button>
+          <button
+            class="vectorizacion-subtab-btn"
+            class:active={superTab === 'auditoria'}
+            onclick={() => { superTab = 'auditoria'; cargarAuditoria(); }}
+          >
+            <Icon name="bitacora" size={15} /> Bitácora
+          </button>
+        </div>
+
+        <!-- Operadores -->
+        {#if superTab === 'operadores'}
+        <div class="modelos-wrap">
+          <div class="seccion-header">
+            <h3><Icon name="operadores" size={16} /> Operadores</h3>
+            <div style="display: flex; gap: 0.4rem;">
+              <button onclick={abrirCrearOperador} class="vectorizacion-action-btn">➕ Nuevo operador</button>
+            </div>
+          </div>
+
+          <p style="color: var(--fg-soft); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
+            Quienes entran a este panel con su propia cuenta. No confundir con el subtab <strong>Usuarios</strong> de cada proyecto:
+            esos son los usuarios finales de los widgets, que no tienen login y solo sirven para atribuir consultas.
+            El <strong>email es la credencial</strong> con la que entran; si alguien necesita otro, se le cambia al editar su cuenta.
+          </p>
+
+          {#if mensajeOperadores}
+            <p style="margin: 0 0 1rem; font-size: 0.88rem; color: {mensajeOperadores.startsWith('❌') ? 'var(--danger-fg)' : 'var(--ok)'};">
+              {mensajeOperadores}
+            </p>
+          {/if}
+
+          {#if operadorFormAbierto}
+            <div class="crear-contexto-form" style="flex-direction: column; align-items: stretch; max-width: 560px; margin-bottom: 1.25rem;">
+              <h4 style="margin: 0 0 0.25rem 0; color: var(--fg);">
+                {operadorEditandoId ? 'Editar operador' : 'Nuevo operador'}
+              </h4>
+              <div class="form-field">
+                <label for="op-email">Email</label>
+                <input
+                  id="op-email"
+                  type="email"
+                  class="contexto-input"
+                  bind:value={operadorFormEmail}
+                  disabled={guardandoOperador}
+                  placeholder="usuario@grupocsi.com"
+                  autocomplete="off"
+                />
+                {#if operadorEditandoId}
+                  <small style="font-size: 0.75rem; color: var(--fg-muted); display: block; margin-top: 0.25rem;">
+                    Es con lo que entra. Si lo cambias, esa persona entra con el nuevo desde ya;
+                    conserva su contraseña, su rol, sus proyectos y su historial en la bitácora.
+                  </small>
+                {/if}
+              </div>
+              <div class="form-field">
+                <label for="op-nombre">Nombre</label>
+                <input
+                  id="op-nombre"
+                  type="text"
+                  class="contexto-input"
+                  bind:value={operadorFormNombre}
+                  disabled={guardandoOperador}
+                  maxlength="120"
+                  placeholder="Nombre y apellido"
+                />
+              </div>
+              {#if !operadorEditandoId}
+                <div class="form-field">
+                  <label for="op-password">Contraseña inicial</label>
+                  <input
+                    id="op-password"
+                    type="password"
+                    class="contexto-input"
+                    bind:value={operadorFormPassword}
+                    disabled={guardandoOperador}
+                    autocomplete="new-password"
+                    placeholder="Mínimo 8 caracteres"
+                  />
+                  <small style="font-size: 0.75rem; color: var(--fg-muted); display: block; margin-top: 0.25rem;">
+                    Se la pasas tú por un canal seguro. Quien entre puede cambiarla después.
+                  </small>
+                </div>
+              {/if}
+              <div class="form-field">
+                <label for="op-rol">Rol</label>
+                <select id="op-rol" class="contexto-select" bind:value={operadorFormRol} disabled={guardandoOperador}>
+                  {#each rolesAsignables as r (r)}
+                    <option value={r}>{r}</option>
+                  {/each}
+                </select>
+                <small style="font-size: 0.75rem; color: var(--fg-muted); display: block; margin-top: 0.25rem;">
+                  <strong>admin</strong> opera el panel completo. <strong>superadmin</strong> además administra operadores.
+                  <strong>cliente</strong> solo ve y trabaja los proyectos que le asignes.
+                </small>
+              </div>
+              {#if operadorFormRol === 'cliente'}
+                <div class="form-field">
+                  <span class="operador-proyectos-titulo">Proyectos a los que puede entrar</span>
+                  {#if proyectos.length === 0}
+                    <p style="margin: 0; font-size: 0.82rem; color: var(--fg-muted);">Todavía no hay proyectos. Crea uno en Construcción.</p>
+                  {:else}
+                    <ul class="fuente-ops" style="margin: 0;">
+                      {#each proyectos as p (p.id)}
+                        <li class="fuente-op" class:elegida={operadorFormProyectos.has(p.id)}>
+                          <label class="fuente-op-label">
+                            <input type="checkbox" checked={operadorFormProyectos.has(p.id)} onchange={() => alternarProyectoOperador(p.id)} disabled={guardandoOperador} />
+                            <span class="fuente-op-cuerpo">
+                              <span class="fuente-op-ruta"><strong>{p.nombre}</strong> <span class="fuente-op-resumen">{p.slug}</span></span>
+                            </span>
+                          </label>
+                        </li>
+                      {/each}
+                    </ul>
+                  {/if}
+                  <small style="font-size: 0.75rem; color: var(--fg-muted); display: block; margin-top: 0.25rem;">
+                    Dentro de ellos arma bases de conocimiento, asistentes y usuarios finales. No entra a Configuración,
+                    no crea proyectos y no toca fuentes de datos.
+                  </small>
+                </div>
+              {/if}
+
+              {#if errorFormOperador}
+                <p class="mensaje-contexto">❌ {errorFormOperador}</p>
+              {/if}
+
+              <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                <button onclick={cerrarFormOperador} disabled={guardandoOperador} class="crear-contexto-btn" style="background: var(--muted); color: var(--fg);">
+                  Cancelar
+                </button>
+                <button onclick={guardarOperador} disabled={guardandoOperador} class="crear-contexto-btn">
+                  {guardandoOperador ? '⟳ Guardando...' : '✓ Guardar'}
+                </button>
+              </div>
+            </div>
+          {/if}
+
+          {#if cargandoOperadores && operadores.length === 0}
+            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando operadores...</p>
+          {:else if errorOperadores}
+            <p style="color: var(--danger-fg); font-size: 0.9rem; padding: 1rem; background: var(--danger-bg); border: 1px solid var(--danger-border); border-radius: 8px; line-height: 1.5;">
+              ❌ {errorOperadores}
+            </p>
+          {:else if operadores.length === 0}
+            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">No hay operadores todavía.</p>
+          {:else}
+            <table class="consumo-tabla">
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Email</th>
+                  <th>Rol</th>
+                  <th>Estado</th>
+                  <th style="text-align: right;">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each operadores as o (o.id)}
+                  {@const soyYo = identidad?.operador?.id === o.id}
+                  <tr style="opacity: {o.activo ? 1 : 0.55};">
+                    <td>
+                      <strong>{o.nombre}</strong>
+                      {#if soyYo}<span class="operador-yo">tú</span>{/if}
+                    </td>
+                    <td><code style="font-size: 0.78rem;">{o.email}</code></td>
+                    <td>
+                      <span class="rol-badge" class:rol-badge--super={o.rol === 'superadmin'}>{o.rol}</span>
+                      {#if o.rol === 'cliente'}
+                        <div style="font-size: 0.75rem; color: var(--fg-muted); margin-top: 0.2rem;">
+                          {(o.proyectos ?? []).length ? o.proyectos.map(nombreProyectoPorId).join(', ') : 'sin proyectos'}
+                        </div>
+                      {/if}
+                    </td>
+                    <td>
+                      {#if o.activo}
+                        <span style="color: var(--ok);">● activo</span>
+                      {:else}
+                        <span style="color: var(--fg-muted);">○ inactivo</span>
+                      {/if}
+                    </td>
+                    <td style="text-align: right; white-space: nowrap;">
+                      <button class="op-btn" title="Editar email, nombre, rol y proyectos" onclick={() => abrirEditarOperador(o)}><Icon name="editar" size={15} /></button>
+                      <button class="op-btn" title="Restablecer su contraseña" onclick={() => abrirPasswordOperador(o)}><Icon name="accesos" size={15} /></button>
+                      {#if !soyYo}
+                        <button
+                          class="op-btn"
+                          title={o.activo ? 'Desactivar (cierra sus sesiones)' : 'Reactivar'}
+                          onclick={() => alternarActivoOperador(o)}
+                        ><Icon name={o.activo ? 'desactivar' : 'reactivar'} size={15} /></button>
+                        <button class="op-btn op-btn--danger" title="Borrar" onclick={() => { operadorABorrar = o; }}><Icon name="borrar" size={15} /></button>
+                      {/if}
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+
+            <p style="color: var(--fg-muted); font-size: 0.75rem; margin-top: 1rem; line-height: 1.45;">
+              💡 Sobre tu propia fila solo puedes editar nombre y contraseña: desactivarte o borrarte te dejaría fuera.
+              Tampoco se puede quitar al último superadmin activo.
+              Desactivar o restablecer una contraseña cierra las sesiones de esa persona al instante.
+            </p>
+          {/if}
+        </div>
+        {/if}
+
+        <!-- Proyectos: crear, editar y borrar (solo superadmin) -->
+        {#if superTab === 'proyectos'}
+        <div class="modelos-wrap">
+          <div class="seccion-header">
+            <h3><Icon name="proyecto" size={16} /> Proyectos</h3>
+            <div style="display: flex; gap: 0.4rem;">
+              <button onclick={abrirFormCrearProyecto} class="vectorizacion-action-btn" disabled={cargandoGuardarProyecto}>➕ Nuevo proyecto</button>
+            </div>
+          </div>
+
+          <p style="color: var(--fg-soft); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
+            Aquí se crean, se editan y se borran. Para trabajar <em>dentro</em> de un proyecto (bases de conocimiento,
+            asistentes, usuarios) actívalo en <strong>Construcción → Proyectos</strong>. Uno recién creado se activa solo y te lleva ahí.
+          </p>
+
+          {#if proyectoFormAbierto}
+            <div class="crear-contexto-form" style="flex-direction: column; align-items: stretch; max-width: 720px; margin-bottom: 1.25rem;">
+              <h4 style="margin: 0 0 0.25rem 0; color: var(--fg);">
+                {proyectoEditandoId ? 'Editar proyecto' : 'Nuevo proyecto'}
+              </h4>
+              <div class="form-field">
+                <label for="proyecto-slug">Slug {proyectoEditandoId ? '(no modificable)' : ''}</label>
+                <input
+                  id="proyecto-slug"
+                  type="text"
+                  placeholder="ej: banfondesa"
+                  bind:value={proyectoFormSlug}
+                  disabled={cargandoGuardarProyecto || !!proyectoEditandoId}
+                  class="contexto-input"
+                />
+                <small style="font-size: 0.75rem; color: var(--fg-muted); line-height: 1.3; display: block; margin-top: 0.25rem;">
+                  Identidad estable cross-ambiente. Lowercase, dígitos y guiones, 2-64 chars.
+                </small>
+              </div>
+              <div class="form-field">
+                <label for="proyecto-nombre">Nombre</label>
+                <input
+                  id="proyecto-nombre"
+                  type="text"
+                  placeholder="ej: Banfondesa"
+                  bind:value={proyectoFormNombre}
+                  disabled={cargandoGuardarProyecto}
+                  maxlength="80"
+                  class="contexto-input"
+                />
+              </div>
+              <div class="form-field">
+                <label for="proyecto-descripcion">Descripción (opcional)</label>
+                <textarea
+                  id="proyecto-descripcion"
+                  bind:value={proyectoFormDescripcion}
+                  disabled={cargandoGuardarProyecto}
+                  rows="3"
+                  maxlength="500"
+                  class="contexto-input"
+                  style="font-family: inherit; resize: vertical;"
+                  placeholder="Para qué sirve este proyecto, qué agrupa..."
+                ></textarea>
+              </div>
+              <div style="display: flex; gap: 0.5rem;">
+                <button
+                  onclick={guardarProyecto}
+                  disabled={cargandoGuardarProyecto}
+                  class="crear-contexto-btn"
+                >
+                  {cargandoGuardarProyecto ? '⟳ Guardando...' : (proyectoEditandoId ? '✓ Actualizar' : '✓ Crear')}
+                </button>
+                <button
+                  onclick={cerrarFormProyecto}
+                  disabled={cargandoGuardarProyecto}
+                  class="crear-contexto-btn"
+                  style="background: var(--muted); color: var(--fg);"
+                >
+                  Cancelar
+                </button>
+              </div>
+              {#if mensajeProyecto}
+                <p class="mensaje-contexto" class:success={mensajeProyecto.includes('✅')}>
+                  {mensajeProyecto}
+                </p>
+              {/if}
+            </div>
+          {/if}
+
+          {#if errorCargarProyectos}
+            <p class="mensaje-contexto">❌ {errorCargarProyectos}</p>
+          {:else if cargandoProyectos && proyectos.length === 0}
+            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando proyectos...</p>
+          {:else if proyectos.length === 0}
+            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">No hay proyectos todavía.</p>
+          {:else}
+            <table class="consumo-tabla">
+              <thead>
+                <tr>
+                  <th>Proyecto</th>
+                  <th>Slug</th>
+                  <th style="text-align: right;">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each proyectos as p (p.id)}
+                  <tr>
+                    <td>
+                      <strong>{p.nombre}</strong>
+                      {#if p.id === proyectoActivoId}<span class="operador-yo">activo</span>{/if}
+                      {#if p.descripcion}
+                        <div style="font-size: 0.78rem; color: var(--fg-muted); margin-top: 0.2rem; line-height: 1.4;">{p.descripcion}</div>
+                      {/if}
+                    </td>
+                    <td><code style="font-size: 0.78rem;">{p.slug}</code></td>
+                    <td style="text-align: right; white-space: nowrap;">
+                      <button class="op-btn" title="Editar nombre y descripción de {p.nombre}" aria-label="Editar proyecto {p.nombre}" onclick={() => abrirFormEditarProyecto(p)} disabled={cargandoGuardarProyecto}><Icon name="editar" size={15} /></button>
+                      <button class="op-btn op-btn--danger" title="Borrar {p.nombre}" aria-label="Borrar proyecto {p.nombre}" onclick={() => pedirConfirmacionBorrarProyecto(p)}><Icon name="borrar" size={15} /></button>
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+            <p style="color: var(--fg-muted); font-size: 0.78rem; margin-top: 0.75rem; line-height: 1.45;">
+              El slug no se puede cambiar: lo usan las URLs de los widgets. Un proyecto solo se puede borrar cuando ya no
+              tiene asistentes ni bases de conocimiento.
+            </p>
+          {/if}
+        </div>
+        {/if}
+
+        <!-- Bitácora de administración -->
+        {#if superTab === 'auditoria'}
+        <div class="modelos-wrap">
+          <div class="seccion-header">
+            <h3><Icon name="bitacora" size={16} /> Bitácora</h3>
+          </div>
+
+          <p style="color: var(--fg-soft); font-size: 0.88rem; margin-bottom: 1rem; line-height: 1.5;">
+            Quién hizo qué y cuándo. Se escribe sola con cada cambio hecho desde el panel y <strong>no se puede editar ni borrar</strong>.
+            Esto no son las consultas al chatbot — esas viven en <strong>Registros</strong>.
+          </p>
+
+          <!-- Filtros -->
+          <div style="display: flex; gap: 0.75rem; align-items: end; margin-bottom: 1.25rem; flex-wrap: wrap;">
+            <div class="lightbot-field" style="margin: 0;">
+              <label for="audit-desde" style="display: block;">Desde</label>
+              <input id="audit-desde" type="date" bind:value={auditDesde} onchange={filtrarAuditoria} disabled={cargandoAuditoria} style="font-size: 1rem; padding: 0.6rem; min-width: 150px;" />
+            </div>
+            <div class="lightbot-field" style="margin: 0;">
+              <label for="audit-hasta" style="display: block;">Hasta</label>
+              <input id="audit-hasta" type="date" bind:value={auditHasta} onchange={filtrarAuditoria} disabled={cargandoAuditoria} style="font-size: 1rem; padding: 0.6rem; min-width: 150px;" />
+            </div>
+            <div class="lightbot-field" style="margin: 0;">
+              <label for="audit-operador" style="display: block;">Quién</label>
+              <select id="audit-operador" class="contexto-select" bind:value={auditOperador} onchange={filtrarAuditoria} disabled={cargandoAuditoria} style="padding: 0.55rem 0.75rem; min-width: 200px;">
+                <option value="">(todos)</option>
+                {#if auditCuentas}
+                  {#each auditCuentas as c (c.id)}
+                    <option value={c.id}>{c.nombre || c.email} · {c.email}{c.existe ? '' : ' (cuenta borrada)'}</option>
+                  {/each}
+                {:else}
+                  {#each auditOperadores as o (o)}
+                    <option value={o}>{o}</option>
+                  {/each}
+                {/if}
+              </select>
+            </div>
+            <div class="lightbot-field" style="margin: 0;">
+              <label for="audit-entidad" style="display: block;">Sobre qué</label>
+              <select id="audit-entidad" class="contexto-select" bind:value={auditEntidad} onchange={filtrarAuditoria} disabled={cargandoAuditoria} style="padding: 0.55rem 0.75rem; min-width: 150px;">
+                <option value="">(todo)</option>
+                {#each auditEntidades as e (e)}
+                  <option value={e}>{e}</option>
+                {/each}
+              </select>
+            </div>
+            <div class="lightbot-field" style="margin: 0;">
+              <label for="audit-accion" style="display: block;">Acción</label>
+              <select id="audit-accion" class="contexto-select" bind:value={auditAccion} onchange={filtrarAuditoria} disabled={cargandoAuditoria} style="padding: 0.55rem 0.75rem; min-width: 150px;">
+                <option value="">(todas)</option>
+                {#each auditAcciones as a (a)}
+                  <option value={a}>{a}</option>
+                {/each}
+              </select>
+            </div>
+            <button onclick={limpiarFiltrosAuditoria} class="vectorizacion-action-btn" disabled={cargandoAuditoria}>Limpiar</button>
+          </div>
+
+          {#if cargandoAuditoria && !auditoria}
+            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">⟳ Cargando bitácora...</p>
+          {:else if errorAuditoria}
+            <p style="color: var(--danger-fg); font-size: 0.9rem; padding: 1rem; background: var(--danger-bg); border: 1px solid var(--danger-border); border-radius: 8px; line-height: 1.5;">
+              ❌ {errorAuditoria}
+            </p>
+          {:else if !auditoria || auditoria.items.length === 0}
+            <p style="color: var(--fg-soft); font-size: 0.9rem; padding: 1rem 0;">
+              Sin movimientos para estos filtros.
+            </p>
+          {:else}
+            <table class="consumo-tabla">
+              <thead>
+                <tr>
+                  <th>Cuándo</th>
+                  <th>Quién</th>
+                  <th>Qué hizo</th>
+                  <th>Sobre</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each auditoria.items as a (a.id)}
+                  {@const det = detalleLegible(a.detalle)}
+                  <tr>
+                    <td><code style="font-size: 0.78rem;">{formatTimestamp(a.fecha)}</code></td>
+                    <td>
+                      {#if a.credencial === 'legacy'}
+                        <span class="registro-badge-respaldo" title="Se usó el ADMIN_PASSWORD compartido: el servidor no puede saber quién fue">token compartido</span>
+                      {:else}
+                        {a.operador_nombre || a.operador_email || '—'}
+                        {#if a.operador_nombre}
+                          <div style="font-size: 0.72rem; color: var(--fg-muted);">{a.operador_email}</div>
+                        {/if}
+                      {/if}
+                    </td>
+                    <td>
+                      <span class="audit-icono"><Icon name={ICONO_ACCION[a.accion] ?? 'info'} size={14} /></span> {a.resumen}
+                      {#if det}
+                        <div style="font-size: 0.72rem; color: var(--fg-muted);">{det}</div>
+                      {/if}
+                    </td>
+                    <td><span class="rol-badge">{a.entidad}</span></td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+
+            <!-- Paginación -->
+            {@const hasta = Math.min(auditOffset + auditoria.items.length, auditoria.total)}
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; flex-wrap: wrap; gap: 0.75rem;">
+              <span style="color: var(--fg-soft); font-size: 0.85rem;">
+                Mostrando {formatNumero(auditOffset + 1)}–{formatNumero(hasta)} de {formatNumero(auditoria.total)}
+              </span>
+              <div style="display: flex; gap: 0.4rem;">
+                <button
+                  onclick={() => { auditOffset = Math.max(0, auditOffset - AUDIT_LIMIT); cargarAuditoria(); }}
+                  class="vectorizacion-action-btn"
+                  disabled={cargandoAuditoria || auditOffset === 0}
+                >← Anterior</button>
+                <button
+                  onclick={() => { auditOffset += AUDIT_LIMIT; cargarAuditoria(); }}
+                  class="vectorizacion-action-btn"
+                  disabled={cargandoAuditoria || hasta >= auditoria.total}
+                >Siguiente →</button>
+              </div>
+            </div>
+          {/if}
+
+          <p style="color: var(--fg-muted); font-size: 0.75rem; margin-top: 1rem; line-height: 1.45;">
+            💡 Solo aparece lo que pasa por un endpoint con credencial. Subir o quitar <strong>documentos</strong> de una
+            base de conocimiento hoy no la pide (lo usa el widget MiniAdmin sin cuenta), así que esas acciones no se
+            registran — no porque nadie las haga, sino porque el servidor no sabe quién fue. Las contraseñas nunca se
+            guardan aquí: en una edición solo se anota <em>qué campos</em> cambiaron.
+          </p>
+        </div>
+        {/if}
+      </div>
+    </main>
+  {/if}
+{/if}
 </div>
 
 <style>
@@ -9018,24 +8500,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   .subtab-arrow-indicator {
     display: inline-flex;
     align-items: center;
@@ -9097,46 +8561,18 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
 
-
-
-
-
-
-
-
-
-
   /* Construcción tab - navy blue text throughout */
 
 
-
-
-
   /* Documentos subtab - same color scheme as Contextos */
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
   /* ── Header ─────────────────────────────────────── */
   .header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 1.5rem;
+    justify-content: flex-start;
+    gap: 0.25rem;
     height: 64px;
     padding: 0 1.5rem;
     background: var(--card);
@@ -9148,6 +8584,11 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     display: flex;
     align-items: center;
     gap: 1.25rem;
+    /* Puede encogerse (lo absorbe el título con puntos suspensivos), pero es lo
+       último en ceder: antes cede el chip de la cuenta, ver .header-cuenta. */
+    flex: 0 1 auto;
+    min-width: 0;
+    margin-right: 1.25rem;
   }
 
   .avatar {
@@ -9170,6 +8611,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     display: flex;
     flex-direction: column;
     gap: 2px;
+    min-width: 0;
   }
 
   .header-title {
@@ -9177,6 +8619,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     font-weight: 600;
     color: var(--fg);
     letter-spacing: -0.005em;
+    /* Nunca se parte en dos renglones: si falta ancho, se recorta con "…". */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .header-version {
@@ -9201,6 +8647,19 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   .header-status:hover {
     background: var(--card);
+  }
+
+  /* La versión y el estado nunca se parten en dos renglones: si no caben
+     (teléfono angosto con la etiqueta de ambiente al lado) se cortan con "…". */
+  .header-version { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .header-version-corta { display: none; }
+  .header-status { min-width: 0; max-width: 100%; }
+  .status-dot { flex-shrink: 0; }
+  .header-status-texto {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .status-dot {
@@ -9250,6 +8709,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   .ambiente-indicador {
     display: inline-flex;
     align-items: center;
+    flex-shrink: 0;
     gap: 0.45rem;
     padding: 0.3rem 0.6rem;
     background: var(--surface-2);
@@ -9288,6 +8748,76 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     font-family: 'Consolas', 'Courier New', monospace;
   }
 
+  /* Etiqueta de ambiente (PROD / DEV / ...): sólida y con el color del ambiente
+     para distinguir de un vistazo en qué panel se está. Mismos tonos que las
+     pestañas de webhook-central, en su versión oscura para que el texto blanco
+     tenga contraste AA (≥ 4.5:1). */
+  .ambiente-etiqueta {
+    --ambiente: #475569;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    flex-shrink: 0;
+    padding: 0.5rem 0.9rem;
+    border-radius: 8px;
+    background: var(--ambiente);
+    color: #fff;
+    font-size: 0.9rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    line-height: 1;
+    white-space: nowrap;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.25);
+    user-select: none;
+  }
+
+  .ambiente-etiqueta-punto {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+    align-self: center;
+  }
+
+  .ambiente-etiqueta-pre {
+    font-size: 0.66rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    opacity: 0.85;
+  }
+
+  .ambiente-etiqueta-corta { display: none; }
+
+  /* Franja de lado a lado arriba del header: el ambiente se nota aunque no se
+     lea la etiqueta. Producción va lisa; los demás, a rayas ("no es prod"). */
+  .header { position: relative; }
+  .ambiente-franja {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 5px;
+    background: var(--ambiente);
+    pointer-events: none;
+  }
+  .ambiente-franja:not(.ambiente-etiqueta--prod) {
+    background: repeating-linear-gradient(
+      -45deg,
+      var(--ambiente) 0 12px,
+      color-mix(in srgb, var(--ambiente) 30%, #fff) 12px 24px
+    );
+  }
+
+  /* Tonos oscuros para que el texto blanco tenga contraste AA. Dev es un azul
+     petróleo, distinto del azul de los botones para no confundirse con uno. */
+  .ambiente-etiqueta--prod { --ambiente: #047857; }
+  .ambiente-etiqueta--staging { --ambiente: #b45309; }
+  .ambiente-etiqueta--dev { --ambiente: #0369a1; }
+  .ambiente-etiqueta--local { --ambiente: #475569; }
+  .ambiente-etiqueta--otro { --ambiente: #6d28d9; }
+
+
   .ambiente-btn {
     width: auto;
     height: auto;
@@ -9318,155 +8848,25 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   /* ── Chat body ───────────────────────────────────── */
-  .chat-body {
-    flex: 1;
-    overflow-y: auto;
-    padding: 1.5rem 1rem;
-    scroll-behavior: smooth;
-  }
 
-  .chat-body::-webkit-scrollbar {
-    width: 5px;
-  }
-
-  .chat-body::-webkit-scrollbar-thumb {
-    background: var(--muted);
-    border-radius: 10px;
-  }
-
-  .messages {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    max-width: 780px;
-    margin: 0 auto;
-  }
 
   /* ── Message rows ────────────────────────────────── */
-  .message-row {
-    display: flex;
-    align-items: flex-end;
-    gap: 0.5rem;
-    animation: fadeUp 0.3s ease;
-  }
+
 
   @keyframes fadeUp {
     from { opacity: 0; transform: translateY(10px); }
     to   { opacity: 1; transform: translateY(0); }
   }
 
-  .message-row.user {
-    flex-direction: row-reverse;
-  }
-
-  .bot-avatar {
-    width: 34px;
-    height: 34px;
-    border-radius: 50%;
-    background: var(--muted);
-    border: 1.5px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    color: var(--fg);
-  }
-
-  .bot-avatar svg {
-    width: 18px;
-    height: 18px;
-  }
-
-  .bubble-wrap {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    max-width: 72%;
-  }
-
-  .message-row.user .bubble-wrap {
-    align-items: flex-end;
-  }
-
-  .bubble {
-    padding: 0.75rem 1rem;
-    border-radius: 18px;
-    font-size: 0.9375rem;
-    line-height: 1.55;
-    word-break: break-word;
-    white-space: pre-wrap;
-  }
 
   /* Bot bubble */
-  .message-row.bot .bubble {
-    background: var(--muted);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    color: var(--fg);
-    border-bottom-left-radius: 4px;
-    border: 1px solid var(--border);
-  }
+
 
   /* User bubble */
-  .message-row.user .bubble {
-    background: var(--card);
-    color: var(--danger-fg);
-    font-weight: 500;
-    border-bottom-right-radius: 4px;
-    box-shadow: 0 2px 12px rgba(15, 23, 42, 0.05);
-  }
 
-  .message-row.error .bubble {
-    background: var(--muted);
-    border-color: var(--danger-border);
-    color: var(--danger-fg);
-  }
-
-  .bubble-link {
-    color: var(--primary);
-    text-decoration: underline;
-    word-break: break-all;
-  }
-  .bubble-link:hover {
-    color: var(--primary);
-  }
-  .message-row.user .bubble-link {
-    color: var(--primary);
-  }
-  .message-row.user .bubble-link:hover {
-    color: var(--primary);
-  }
-  .message-row.error .bubble-link {
-    color: var(--danger-fg);
-  }
-
-  .time {
-    font-size: 0.7rem;
-    color: var(--fg-muted);
-    padding: 0 4px;
-  }
 
   /* ── Typing indicator ─────────────────────────────── */
-  .bubble.typing {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    padding: 0.9rem 1.1rem;
-    min-width: 60px;
-  }
 
-  .bubble.typing span {
-    display: block;
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--muted);
-    animation: bounce 1.2s ease-in-out infinite;
-  }
-
-  .bubble.typing span:nth-child(1) { animation-delay: 0s; }
-  .bubble.typing span:nth-child(2) { animation-delay: 0.2s; }
-  .bubble.typing span:nth-child(3) { animation-delay: 0.4s; }
 
   @keyframes bounce {
     0%, 60%, 100% { transform: translateY(0); }
@@ -9474,64 +8874,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   /* ── Input area ──────────────────────────────────── */
-  .input-container button {
-    width: 38px;
-    height: 38px;
-    border-radius: 50%;
-    border: none;
-    background: var(--muted);
-    color: var(--fg);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    transition: background 0.2s ease, opacity 0.2s;
-  }
 
-  .input-container button:disabled {
-    opacity: 0.35;
-    cursor: not-allowed;
-  }
-
-  .input-container button:not(:disabled):hover {
-    background: var(--muted);
-  }
-
-  .reset-btn {
-    background: var(--card) !important;
-  }
-
-  .reset-btn:not(:disabled):hover {
-    background: var(--danger-bg) !important;
-  }
-
-  .input-area {
-    padding: 1rem 1rem 1.25rem;
-    background: var(--muted);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-top: 1px solid var(--border);
-    flex-shrink: 0;
-  }
-
-  .input-container {
-    display: flex;
-    align-items: flex-end;
-    gap: 0.625rem;
-    max-width: 780px;
-    margin: 0 auto;
-    background: var(--card);
-    border: 1.5px solid var(--border);
-    border-radius: 24px;
-    padding: 0.5rem 0.5rem 0.5rem 1.25rem;
-    transition: border-color 0.2s, background 0.2s;
-  }
-
-  .input-container:focus-within {
-    border-color: var(--border-strong);
-    background: var(--muted);
-  }
 
   textarea {
     flex: 1;
@@ -9561,35 +8904,6 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     cursor: not-allowed;
   }
 
-  .input-container button {
-    width: 42px;
-    height: 42px;
-    border-radius: 50%;
-    border: none;
-    background: var(--card);
-    color: var(--danger-fg);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    transition: transform 0.15s, opacity 0.15s, background 0.15s;
-    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.07);
-  }
-
-  .input-container button svg {
-    width: 20px;
-    height: 20px;
-  }
-
-  .input-container button:hover:not(:disabled) {
-    transform: scale(1.08);
-    background: var(--card);
-  }
-
-  .input-container button:active:not(:disabled) {
-    transform: scale(0.95);
-  }
 
   button:disabled {
     opacity: 0.4;
@@ -9605,84 +8919,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
 
   /* ── Footer controls (contexto + disclaimer) ─────── */
-  .context-select-wrap {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
 
-  .context-select-wrap label {
-    font-size: 0.65rem;
-    font-weight: 700;
-    color: var(--fg-muted);
-    letter-spacing: 0.05em;
-    white-space: nowrap;
-    text-transform: uppercase;
-  }
-
-  .context-select-wrap select {
-    background: var(--muted);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    color: var(--fg);
-    font-family: inherit;
-    font-size: 0.75rem;
-    font-weight: 500;
-    padding: 4px 24px 4px 10px;
-    cursor: pointer;
-    outline: none;
-    appearance: none;
-    -webkit-appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M6 9l6 6 6-6' stroke='rgba(255,255,255,0.5)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 8px center;
-    transition: border-color 0.2s, background 0.2s;
-    max-width: 180px;
-  }
-
-  .context-select-wrap select:hover {
-    background-color: var(--card);
-    border-color: var(--border);
-  }
-
-  .context-select-wrap select:focus {
-    border-color: var(--border-strong);
-    background-color: var(--muted);
-  }
-
-  .context-select-wrap select option {
-    background: var(--danger);
-    color: #fff;
-  }
-
-  .ctx-loading {
-    font-size: 0.75rem;
-    color: var(--fg-muted);
-    font-style: italic;
-  }
-
-  .clear-chat-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 0.9rem;
-    line-height: 1;
-    padding: 2px 4px;
-    border-radius: 6px;
-    opacity: 0.5;
-    transition: opacity 0.2s, background 0.2s;
-    color: var(--fg);
-  }
-
-  .clear-chat-btn:not(:disabled):hover {
-    opacity: 1;
-    background: var(--danger-bg);
-  }
-
-  .clear-chat-btn:disabled {
-    opacity: 0.2;
-    cursor: not-allowed;
-  }
 
   /* ── Tabs toggle ────────────────────────────────── */
   .tabs-toggle {
@@ -9690,16 +8927,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     gap: 0.25rem;
     margin-left: auto;
     align-items: center;
-  }
-
-  .admin-gear-btn {
-    padding: 0.55rem 0.65rem;
-    line-height: 1;
-  }
-
-  .admin-gear-btn.active {
-    background: var(--primary);
-    color: var(--primary-fg);
+    flex-shrink: 0;
   }
 
   .tab-btn {
@@ -9723,23 +8951,12 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     background: var(--muted);
   }
 
-  .tab-btn.active:not(.admin-gear-btn) {
+  .tab-btn.active {
     background: var(--primary);
     color: var(--primary-fg);
   }
 
-  /* ── Chat sub-nav ───────────────────────────────── */
-  .chat-subnav {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 1.25rem;
-    flex-wrap: wrap;
-    padding: 0.5rem 1.5rem;
-    background: var(--muted);
-    border-bottom: 1px solid var(--border);
-    backdrop-filter: blur(8px);
-  }
+
 
   /* ── Admin Body ──────────────────────────────────── */
   .vectorizacion-body {
@@ -11133,7 +10350,9 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   /* ── Admin toast ────────────────────── */
   .admin-toast {
     position: fixed;
-    top: 1rem;
+    /* Debajo del header (64px): arriba a la derecha ahora están la cuenta y
+       Cerrar sesión, y el aviso los tapaba mientras duraba. */
+    top: calc(64px + 0.75rem);
     right: 1rem;
     background: rgba(15, 23, 42, 0.45);
     color: var(--fg);
@@ -11850,8 +11069,8 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   /* ── Responsive ──────────────────────────────────── */
   @media (max-width: 480px) {
     .header { padding: 0.875rem 1rem; }
-    .chat-body { padding: 1rem 0.75rem; }
-    .bubble-wrap { max-width: 85%; }
+
+
     .header-logo { display: none; }
   }
 
@@ -11943,9 +11162,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   .url-action-btn,
   .contextos-recargar-btn,
   .banner-dismiss-btn,
-  .bc-detalle-volver-btn,
-  .reset-btn,
-  .clear-chat-btn {
+  .bc-detalle-volver-btn {
     background: var(--card);
     color: var(--fg);
     border: 1px solid var(--border);
@@ -11961,9 +11178,7 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   .url-action-btn:hover:not(:disabled),
   .contextos-recargar-btn:hover:not(:disabled),
   .banner-dismiss-btn:hover,
-  .bc-detalle-volver-btn:hover,
-  .reset-btn:hover:not(:disabled),
-  .clear-chat-btn:hover:not(:disabled) {
+  .bc-detalle-volver-btn:hover {
     background: var(--muted);
     border-color: var(--border-strong);
     color: var(--fg);
@@ -12183,61 +11398,25 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   }
   .keys-modo-desc { color: var(--fg-muted); }
 
-  /* Chat: burbuja del usuario en el acento, la del asistente neutra;
-     Enviar es el botón primario y Reiniciar el secundario. */
-  .message-row.user .bubble {
-    background: var(--primary);
-    color: var(--primary-fg);
-    box-shadow: var(--shadow-sm);
-  }
-  .message-row.user .bubble-link,
-  .message-row.user .bubble-link:hover {
-    color: var(--primary-fg);
-  }
-  .message-row.error .bubble {
-    background: var(--danger-bg);
-    border: 1px solid var(--danger-border);
-    color: var(--danger-fg);
-  }
-  .input-container button:not(.reset-btn) {
-    background: var(--primary);
-    color: var(--primary-fg);
-  }
-  .input-container button:not(.reset-btn):hover:not(:disabled) {
-    background: var(--primary-hover);
-  }
-  .input-container button:not(.reset-btn):disabled {
-    background: var(--muted);
-    color: var(--fg-muted);
-  }
-  .input-container .reset-btn {
-    background: var(--card);
-    color: var(--fg-soft);
-    border: 1px solid var(--border);
-  }
-  .input-container .reset-btn:not(:disabled):hover {
-    background: var(--muted) !important;
-    color: var(--fg);
+
+
+  /* Pantallas angostas: el encabezado se compacta. Lo que se va escondiendo
+     antes de llegar aquí está en las etapas del header, al final del <style>. */
+  @media (max-width: 760px) {
+    .header { padding: 0 0.75rem; }
+    .header-left { gap: 0.6rem; margin-right: 0.5rem; }
+    /* la etiqueta de ambiente se queda, más compacta */
+    .ambiente-etiqueta { padding: 0.4rem 0.6rem; font-size: 0.78rem; letter-spacing: 0.06em; gap: 0.35rem; }
+    .header-title { font-size: 0.85rem; }
   }
 
-  /* Pantallas angostas: el encabezado no cabe completo. Se esconde el
-     indicador de host y las pestañas principales quedan sólo con ícono
-     (font-size 0 oculta el texto; el <Icon> tiene tamaño propio). */
-  @media (max-width: 760px) {
-    .header { padding: 0 0.75rem; gap: 0.75rem; }
-    .header-left { gap: 0.6rem; min-width: 0; }
-    .ambiente-indicador { display: none; }
-    .header-info { min-width: 0; }
-    .header-title {
-      font-size: 0.85rem;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .tabs-toggle { flex-shrink: 0; }
-    .tab-btn { font-size: 0; gap: 0; padding: 0.55rem; }
-    /* el ojo de "vista usuario" es un emoji de texto, no un <Icon>: sin esto desaparece */
-    .tab-btn.vista-usuario-toggle { font-size: 1rem; }
+  /* Teléfonos muy angostos: la etiqueta pierde el punto para dejarle algo de
+     ancho al título y al estado. */
+  @media (max-width: 400px) {
+    .ambiente-etiqueta { padding: 0.35rem 0.45rem; font-size: 0.72rem; letter-spacing: 0.04em; }
+    .ambiente-etiqueta-punto { display: none; }
+    .header-version-larga { display: none; }
+    .header-version-corta { display: inline; }
   }
 
   /* ── Teléfono: filas y encabezados que no caben ────────────────────────
@@ -12421,5 +11600,170 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       align-items: center;
       justify-content: center;
     }
+  }
+
+  /* ─── Pantalla de login ─── */
+  .login-pantalla {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem 1rem;
+    background: var(--surface-2);
+    overflow-y: auto;
+  }
+
+  .login-tarjeta {
+    width: 100%;
+    max-width: 400px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-md);
+    padding: 1.75rem 1.5rem 1.5rem;
+  }
+
+  .login-marca {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .login-titulo {
+    margin: 0 0 0.3rem;
+    font-size: 1.05rem;
+    font-weight: 700;
+    line-height: 1.25;
+    color: var(--fg);
+  }
+
+  .login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+
+  .login-form .contexto-input {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .login-enviar {
+    width: 100%;
+    margin-top: 0.5rem;
+    padding: 0.65rem 1rem;
+  }
+
+  .login-estado {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--fg-muted);
+  }
+
+  .header-salir-btn {
+    flex-shrink: 0;
+    white-space: nowrap;
+    margin-left: 0.25rem;
+  }
+
+  .header-cuenta {
+    max-width: 260px;
+    /* Es lo primero que cede cuando el header aprieta: su texto se recorta con
+       "…" hasta dejar unas letras del nombre. El factor es enorme a propósito:
+       .header-left tiene factor 1, y con una proporción "normal" (p. ej. 1000)
+       al título le tocaban décimas de píxel del recorte, suficientes para que
+       apareciera su "…" antes de tiempo. Con 1e8 su parte redondea a cero. */
+    flex: 0 100000000 auto;
+    min-width: 6.5rem;
+  }
+
+  .header-cuenta :global(iconify-icon) {
+    flex-shrink: 0;
+  }
+
+  .header-cuenta-nombre {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .operador-proyectos-titulo {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--fg-muted);
+    margin-bottom: 0.4rem;
+  }
+
+  /* El header cede por etapas conforme se angosta la ventana, de lo menos a lo
+     más importante. Entre etapa y etapa lo que falte lo absorbe primero el chip
+     de la cuenta y después el título, los dos con "…".
+       1460  se esconde el indicador de host
+       1180  "Cerrar sesión" queda solo con ícono
+       1090  la cuenta queda solo con ícono
+        880  las pestañas (Construcción, Configuración, Superadmin) quedan solo con ícono
+        760  todo más compacto (ver el bloque de "Pantallas angostas")
+        480  la cuenta se esconde: ahí ya era un ícono sin acción, y en pantallas
+             táctiles ni siquiera se alcanza a leer su descripción */
+  @media (max-width: 1460px) {
+    .ambiente-indicador { display: none; }
+  }
+
+  @media (max-width: 1180px) {
+    .header-salir-texto { display: none; }
+  }
+
+  /* La etiqueta de ambiente se acorta: primero pierde "Ambiente" y luego queda
+     solo la sigla (DEV, PROD). Lo largo se esconde solo a la vista: el lector
+     de pantalla sigue diciendo "Ambiente Desarrollo". */
+  @media (max-width: 1280px) {
+    .header .ambiente-etiqueta-pre {
+      position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+    }
+  }
+
+  @media (max-width: 980px) {
+    .header .ambiente-etiqueta-nombre {
+      position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+    }
+    .header .ambiente-etiqueta-corta { display: inline; }
+  }
+
+  @media (max-width: 1090px) {
+    .header-cuenta-nombre { display: none; }
+    /* Ya es solo el ícono: deja de ceder (si no, se aplasta y el ícono se sale
+       de su píldora). De aquí en adelante lo que cede es el título. */
+    .header-cuenta { flex: 0 0 auto; min-width: 0; }
+  }
+
+  @media (max-width: 880px) {
+    /* font-size 0 oculta el texto; el <Icon> tiene tamaño propio */
+    .tab-btn { font-size: 0; gap: 0; padding: 0.55rem; }
+    /* el ojo de "vista cliente" es un emoji de texto, no un <Icon>: sin esto desaparece */
+    .tab-btn.vista-usuario-toggle { font-size: 1rem; }
+  }
+
+  @media (max-width: 480px) {
+    .header-cuenta { display: none; }
+  }
+
+  /* ─── Sección Superadmin ─── */
+  .superadmin-encabezado {
+    margin-bottom: 1.5rem;
+  }
+
+  .superadmin-encabezado h2 {
+    color: var(--fg);
+    margin: 0 0 0.5rem;
+  }
+
+  .superadmin-encabezado p {
+    margin: 0;
+    font-size: 0.88rem;
+    line-height: 1.5;
+    color: var(--fg-soft);
   }
 </style>
