@@ -19,10 +19,10 @@
   // rama de git con la que se construyó (ver vite.config.js). Colores iguales a
   // las pestañas de webhook-central: dev azul, staging ámbar, prod verde.
   const AMBIENTES = {
-    prod: { etiqueta: 'PROD', titulo: 'Producción' },
-    staging: { etiqueta: 'STAGING', titulo: 'Staging' },
-    dev: { etiqueta: 'DEV', titulo: 'Desarrollo' },
-    local: { etiqueta: 'LOCAL', titulo: 'Tu máquina (servidor de desarrollo de Vite)' },
+    prod: { etiqueta: 'PROD', nombre: 'Producción', titulo: 'Producción' },
+    staging: { etiqueta: 'STAGING', nombre: 'Staging', titulo: 'Staging' },
+    dev: { etiqueta: 'DEV', nombre: 'Desarrollo', titulo: 'Desarrollo' },
+    local: { etiqueta: 'LOCAL', nombre: 'Local', titulo: 'Tu máquina (servidor de desarrollo de Vite)' },
   };
   const RAMA_GIT = typeof __RAMA_GIT__ === 'string' ? __RAMA_GIT__ : '';
   const AMBIENTE = (() => {
@@ -31,7 +31,9 @@
     if (import.meta.env.DEV) return 'local';
     return { main: 'prod', master: 'prod', staging: 'staging', dev: 'dev', develop: 'dev' }[RAMA_GIT] ?? '';
   })();
-  const ambienteInfo = AMBIENTES[AMBIENTE] ?? (AMBIENTE ? { etiqueta: AMBIENTE.toUpperCase(), titulo: AMBIENTE } : null);
+  const ambienteInfo = AMBIENTES[AMBIENTE] ?? (AMBIENTE ? { etiqueta: AMBIENTE.toUpperCase(), nombre: AMBIENTE, titulo: AMBIENTE } : null);
+  // Clase de color de la etiqueta y de la franja del header (un ambiente desconocido va en morado).
+  const ambienteClase = AMBIENTES[AMBIENTE] ? AMBIENTE : 'otro';
   if (ambienteInfo && typeof document !== 'undefined' && !document.title.startsWith(ambienteInfo.etiqueta + ' · ')) {
     document.title = `${ambienteInfo.etiqueta} · ${document.title}`;
   }
@@ -4091,10 +4093,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
         <div>
           <h1 class="login-titulo">Constructor de Asistentes Buzzword</h1>
           {#if ambienteInfo}
-            <span class="ambiente-etiqueta ambiente-etiqueta--{AMBIENTES[AMBIENTE] ? AMBIENTE : 'otro'}">
+            <span class="ambiente-etiqueta ambiente-etiqueta--{ambienteClase}">
               <span class="ambiente-etiqueta-punto" aria-hidden="true"></span>
-              <span class="sr-only">Ambiente:</span>
-              {ambienteInfo.etiqueta}
+              <span class="ambiente-etiqueta-pre">Ambiente</span>
+              <span class="ambiente-etiqueta-nombre">{ambienteInfo.nombre}</span>
             </span>
           {/if}
         </div>
@@ -4156,6 +4158,10 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   {/if}
   <!-- Header -->
   <header class="header">
+    {#if ambienteInfo}
+      <!-- Franja de lado a lado con el color del ambiente; a rayas si no es producción. -->
+      <div class="ambiente-franja ambiente-etiqueta--{ambienteClase}" aria-hidden="true"></div>
+    {/if}
     <div class="header-left">
       <div class="avatar">
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -4180,12 +4186,13 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
       </div>
       {#if ambienteInfo}
         <span
-          class="ambiente-etiqueta ambiente-etiqueta--{AMBIENTES[AMBIENTE] ? AMBIENTE : 'otro'}"
+          class="ambiente-etiqueta ambiente-etiqueta--{ambienteClase}"
           title={`Ambiente: ${ambienteInfo.titulo}${RAMA_GIT && AMBIENTE !== 'local' ? ` (rama ${RAMA_GIT})` : ''}`}
         >
           <span class="ambiente-etiqueta-punto" aria-hidden="true"></span>
-          <span class="sr-only">Ambiente:</span>
-          {ambienteInfo.etiqueta}
+          <span class="ambiente-etiqueta-pre">Ambiente</span>
+          <span class="ambiente-etiqueta-nombre">{ambienteInfo.nombre}</span>
+          <span class="ambiente-etiqueta-corta" aria-hidden="true">{ambienteInfo.etiqueta}</span>
         </span>
       {/if}
       <button
@@ -8748,45 +8755,68 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
   .ambiente-etiqueta {
     --ambiente: #475569;
     display: inline-flex;
-    align-items: center;
-    gap: 0.45rem;
+    align-items: baseline;
+    gap: 0.5rem;
     flex-shrink: 0;
-    padding: 0.4rem 0.75rem;
+    padding: 0.5rem 0.9rem;
     border-radius: 8px;
     background: var(--ambiente);
     color: #fff;
-    font-size: 0.8rem;
-    font-weight: 700;
-    letter-spacing: 0.1em;
+    font-size: 0.9rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
     line-height: 1;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.15);
+    white-space: nowrap;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.25);
     user-select: none;
   }
 
   .ambiente-etiqueta-punto {
-    width: 7px;
-    height: 7px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
     background: currentColor;
+    align-self: center;
   }
 
+  .ambiente-etiqueta-pre {
+    font-size: 0.66rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    opacity: 0.85;
+  }
+
+  .ambiente-etiqueta-corta { display: none; }
+
+  /* Franja de lado a lado arriba del header: el ambiente se nota aunque no se
+     lea la etiqueta. Producción va lisa; los demás, a rayas ("no es prod"). */
+  .header { position: relative; }
+  .ambiente-franja {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 5px;
+    background: var(--ambiente);
+    pointer-events: none;
+  }
+  .ambiente-franja:not(.ambiente-etiqueta--prod) {
+    background: repeating-linear-gradient(
+      -45deg,
+      var(--ambiente) 0 12px,
+      color-mix(in srgb, var(--ambiente) 30%, #fff) 12px 24px
+    );
+  }
+
+  /* Tonos oscuros para que el texto blanco tenga contraste AA. Dev es un azul
+     petróleo, distinto del azul de los botones para no confundirse con uno. */
   .ambiente-etiqueta--prod { --ambiente: #047857; }
   .ambiente-etiqueta--staging { --ambiente: #b45309; }
-  .ambiente-etiqueta--dev { --ambiente: var(--primary-hover); }
+  .ambiente-etiqueta--dev { --ambiente: #0369a1; }
   .ambiente-etiqueta--local { --ambiente: #475569; }
   .ambiente-etiqueta--otro { --ambiente: #6d28d9; }
 
-  .sr-only {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
-  }
 
   .ambiente-btn {
     width: auto;
@@ -11376,14 +11406,14 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
     .header { padding: 0 0.75rem; }
     .header-left { gap: 0.6rem; margin-right: 0.5rem; }
     /* la etiqueta de ambiente se queda, más compacta */
-    .ambiente-etiqueta { padding: 0.35rem 0.55rem; font-size: 0.72rem; letter-spacing: 0.06em; gap: 0.35rem; }
+    .ambiente-etiqueta { padding: 0.4rem 0.6rem; font-size: 0.78rem; letter-spacing: 0.06em; gap: 0.35rem; }
     .header-title { font-size: 0.85rem; }
   }
 
   /* Teléfonos muy angostos: la etiqueta pierde el punto para dejarle algo de
      ancho al título y al estado. */
   @media (max-width: 400px) {
-    .ambiente-etiqueta { padding: 0.35rem 0.45rem; letter-spacing: 0.04em; }
+    .ambiente-etiqueta { padding: 0.35rem 0.45rem; font-size: 0.72rem; letter-spacing: 0.04em; }
     .ambiente-etiqueta-punto { display: none; }
     .header-version-larga { display: none; }
     .header-version-corta { display: inline; }
@@ -11684,6 +11714,22 @@ Eres un asistente experto en [tu dominio]. Solo respondes sobre temas relacionad
 
   @media (max-width: 1180px) {
     .header-salir-texto { display: none; }
+  }
+
+  /* La etiqueta de ambiente se acorta: primero pierde "Ambiente" y luego queda
+     solo la sigla (DEV, PROD). Lo largo se esconde solo a la vista: el lector
+     de pantalla sigue diciendo "Ambiente Desarrollo". */
+  @media (max-width: 1280px) {
+    .header .ambiente-etiqueta-pre {
+      position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+    }
+  }
+
+  @media (max-width: 980px) {
+    .header .ambiente-etiqueta-nombre {
+      position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+    }
+    .header .ambiente-etiqueta-corta { display: inline; }
   }
 
   @media (max-width: 1090px) {
